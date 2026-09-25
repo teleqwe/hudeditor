@@ -57,6 +57,13 @@ Not in custom: a folder there with full vanilla files would cover every HUD that
 ## Server browser (checked in game)
 - Its tabs read servers/InternetGamesPage.res (CustomGamesPage.res for Internet) from platform_misc.vpk, but a copy in
   a custom folder wins. Read when the game starts. The Filters button is the "Filter" block.
+- The list of servers ("gamelist", CGameListPanel) gets its font from code: ListSmall if the scheme has it, else
+  DefaultSmall. A "font" in the .res doesn't reach it.
+
+## MOTD (resource/UI/TextWindow.res)
+- The frame ("info") is 640 wide in 480-line units from x 0, i.e. 4:3 from the screen's left edge, so on a wide
+  screen the message sits left of centre (at 1440p: x 228 to 1668 of 2560). "xpos" "c-320" centres it.
+- The message is TextMessage for a text MOTD, HTMLMessage for a web page one; MessageTitle is the title.
 
 ## Chat layout (checked in game)
 - resource/UI/BaseChat.res (the game has none) is applied on every scheme reload: blocks HudChatHistory,

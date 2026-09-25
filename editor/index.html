@@ -274,6 +274,9 @@ const CONTROL_FONTS = { Label: [['Text', 'Default']], Button: [['Text', 'Default
   RadioButton: [['Text', 'Default']], MenuItem: [['Text', 'Default']], Menu: [['Items', 'Default']], TextEntry: [['Text', 'Default']],
   RichText: [['Text', 'Default']], PropertySheet: [['Tabs', 'Default']], ListPanel: [['Rows', 'Default'], ['Column headers', 'DefaultSmall']],
   SectionedListPanel: [['Rows and headers', 'DefaultVerySmall']], Slider: [['Captions', 'DefaultVerySmall']], BuyMouseOverPanelButton: [['Text', 'Default']] };
+// Controls whose fonts the game's code sets over their type's defaults ("A|B": A if the scheme has it, else B): the
+// server browser's list of servers (CBaseGamesPage). A "font" in the .res doesn't reach them.
+const CODE_FONTS = { gamelist: [['Servers', 'ListSmall|DefaultSmall'], ['Column headers', 'DefaultSmall']] };
 // Windows whose fonts the game picks itself: [scheme, what, font ("A|B": A if the scheme has it, else B)].
 const WINDOW_FONTS = { gamemenu: [[S, 'Menu items', 'MainMenuFont|MenuLarge'], [C, 'Logo', 'ClientTitleFont']],
   gameconsole: [[S, 'Console text', 'ConsoleText']] };
@@ -714,10 +717,13 @@ async function uiFile(path) {
 // so a part is hidden by moving it off screen, its position kept in "xpos_hudeditor" as for HUD parts. The
 // spectator bars are sized by the game from the file instead: the top bar keeps its height (0 hides it) and the
 // bottom bar reaches from its y position to the bottom of the screen (r0 hides it).
-const WINDOW_PARTS = { specgui: [['Top bar', 'topbar', 'tall', '0'], ['Bottom bar', 'bottombarblank', 'ypos', 'r0']] };
+// The MOTD's message is text (TextMessage) or a web page (HTMLMessage), depending on the server: with both hidden,
+// only OK is left.
+const WINDOW_PARTS = { specgui: [['Top bar', 'topbar', 'tall', '0'], ['Bottom bar', 'bottombarblank', 'ypos', 'r0']],
+  info: [['Title', 'MessageTitle'], ['Text message', 'TextMessage'], ['Web page message', 'HTMLMessage']] };
 const hideHow = block => {
   const part = Object.values(WINDOW_PARTS).flat().find(([, b]) => b === block);
-  return part ? part.slice(2) : ['xpos', '9999'];
+  return part && part.length > 2 ? part.slice(2) : ['xpos', '9999'];
 };
 const partHidden = (f, block) => `${hideHow(block)[0]}_hudeditor` in layoutProps(f, block);
 // Moves a part off screen (keeping where it was in key_hudeditor) or back. Values are worked out when written: edits
@@ -1346,7 +1352,7 @@ function resRows(f, block, defaults, schemeFile, ctl) {
     if ('fillcolor' in p) own('fillcolor', 'Fill', null);
     // which font this one control draws with: any font in its scheme (the game reads "font" from the .res)
     const deflt = CONTROL_FONTS[ctl] && CONTROL_FONTS[ctl][0][1];
-    if (p.font || deflt) rows.push(inputRow('Font', p.font || deflt, v => save(f, 'font', v, block),
+    if (!CODE_FONTS[block.toLowerCase()] && (p.font || deflt)) rows.push(inputRow('Font', p.font || deflt, v => save(f, 'font', v, block),
       { list: fontList(schemeFile), title: `Just this one; any font in ${schemeFile}` }));
   }
   for (const [k, label] of POS) if (k in p || k.endsWith('pos')) rows.push(numRow(f, block, k, label, p[k]));
@@ -1382,8 +1388,9 @@ function fontsOf(sel) {
   const own = sel.res && sel.node && ownBlock(sel), ownFont = own && layoutProps(sel.res, own.block).font;
   if (ownFont) add(file, ownFont, 'this one');
   if (sel.control) {
-    const ctl = controlIn(sel.control, sel.thing);
-    for (const [what, font] of (ctl && CONTROL_FONTS[ctl[0]] || []).slice(ownFont ? 1 : 0)) add(file, font, what.toLowerCase());
+    const ctl = controlIn(sel.control, sel.thing), code = CODE_FONTS[sel.control.key];
+    for (const [what, font] of code || (ctl && CONTROL_FONTS[ctl[0]] || []).slice(ownFont ? 1 : 0))
+      add(file, font.split('|').find(n => hasFont(file, n)), what.toLowerCase());
     return out;
   }
   if (sel.info.file === S && sel.info.id !== 'gamemenu') add(S, resolveString(S, 'FrameTitleBar.Font') || 'Default', 'title');
@@ -1438,7 +1445,7 @@ function allFonts() {
     apply.dataset.q = 'every font all fonts';
     d.append(el('div', { className: 'sub', textContent: 'Every text font at once' }),
       inputRow('Font', '', v => { face = v; }, { list: 'fontfaces', title: 'Left empty: faces stay as they are' }),
-      inputRow('Weight', '', v => { weight = v; }, { type: 'number', step: 100, min: 100, max: 900, title: 'Left empty: weights stay' }),
+      inputRow('Weight', '', v => { weight = v; }, { type: 'number', step: 100, min: 0, title: 'Left empty: weights stay' }),
       noteRow('Icon and symbol fonts (weapon icons, the logo, arrows) are left alone. Every screen size is changed.'), apply);
     for (const [file, where] of FONT_FILES) {
       const names = fontNames(file);
@@ -1529,7 +1536,7 @@ function fontRows(file, font) {
   const rows = [
     inputRow('Font', p.name || '', val => put('name', val), { list: 'fontfaces', title: 'Installed or in the HUD' }),
     inputRow('Size', p.tall || '', val => put('tall', val), { type: 'number', step: 1 }),
-    inputRow('Weight', p.weight || '400', val => put('weight', val), { type: 'number', step: 100, min: 100, max: 900 }),
+    inputRow('Weight', p.weight || '400', val => put('weight', val), { type: 'number', step: 100, min: 0 }),
     inputRow('Blur', p.blur || '0', val => put('blur', val), { type: 'number', step: 1, min: 0 }),
     ...checks,
   ];
@@ -1592,7 +1599,7 @@ function scrollWideRow(file) {
   const f = F(file), v = f && tables(f).base.get('scrollbar.wide');
   if (!f) return null;
   const row = inputRow('Scroll bar width', v ? v.value : '17', w => save(f, 'ScrollBar.Wide', w, ['BaseSettings']),
-    { type: 'number', min: 2, max: 40, step: 1, title: `${file === CH ? 'The chat' : file === C ? 'In-game windows' : 'Menus'}; the game's is 17` });
+    { type: 'number', min: 0, max: 40, step: 1, title: `${file === CH ? 'The chat' : file === C ? 'In-game windows' : 'Menus'}; the game's is 17` });
   row.dataset.q = 'scroll bar width thin scrollbar';
   return row;
 }
@@ -1768,6 +1775,12 @@ function selectionSections(sel) {
     }
     if (EXTRA[info.id]) add('colour', `Colours: ${info.name.toLowerCase()}`, schemeRows(S, EXTRA[info.id]).concat(info.file === C ? schemeRows(C, EXTRA[info.id]) : []));
     add('other', `${info.name}: show or hide parts`, windowPartRows(sel));
+    // the game's MOTD is 4:3 wide from the screen's left edge, so it sits left of centre on wide screens
+    if (info.id === 'info' && sel.res) {
+      const p = layoutProps(sel.res, 'info');
+      add('other', `${info.name}: position`, [checkRow('Centred on the screen', /^c/.test(p.xpos || ''),
+        on => { save(sel.res, 'xpos', on ? `c-${(+p.wide || 640) / 2}` : '0', 'info'); refreshSoon(); })]);
+    }
     if (info.id === 'scores') for (const [t, r] of scoreboardSections(sel, fonts.map(([, n]) => n))) add(/fonts$/.test(t) ? 'font' : 'colour', t, r);
     if (info.id === 'gamemenu') for (const [t, r] of mainMenuSections()) add(/logo$/.test(t) ? 'colour' : 'other', t, r);
     if (/serverbrowser/.test(info.id)) add('other', 'Server browser: buttons', serverBrowserRows());
@@ -2053,7 +2066,9 @@ let pendingRender = false, captured = false, autoTried = false;
 let keepScores = false, scoresSent = 0;
 async function poll() {
   // capture as soon as the game's window exists (capture picks it by title; earlier than that it would ask instead)
-  if (!captured && !autoTried && await call('gamewindow').then(() => true, () => false)) { autoTried = true; await sleep(1500); capture(true); }
+  // only once the plugin answers: a game started some other way (fullscreen from Steam) is left alone, as restoring
+  // and capturing it could hang both, and the editor can't use it anyway
+  if (live && !captured && !autoTried) { autoTried = true; await sleep(1500); capture(true); }
   const raw = await call('panels').catch(() => '');
   if (raw === liveRaw) return;
   liveRaw = raw;
@@ -2084,8 +2099,11 @@ function renderOnScreenOnly() {
 
 async function capture(auto) {
   try {
-    // restores the game if it's minimised: capture only offers windows that are up, and picks the game by title
-    if (await call('gamewindow').then(() => true, () => false)) await sleep(300);
+    // restores the game if it's minimised: capture only offers windows that are up, and picks the game by title (a
+    // minimised one leaves the "Choose what to share" dialog empty). Automatic capture waits until it's up
+    const up = await call('gamewindow').then(() => true, () => false);
+    if (auto && !up) { autoTried = false; return; }
+    if (up) await sleep(300);
     const stream = await navigator.mediaDevices.getDisplayMedia({ video: { displaySurface: 'window', frameRate: 60 }, audio: false });
     const v = $('video');
     v.srcObject = stream;
@@ -2451,6 +2469,10 @@ if (host && location.hash === '#hosttest') (async () => {
     check(menuFonts === `${S}:MenuLarge,${C}:ClientTitleFont` && btnFonts.length === 1 && btnFonts[0][1] === 'Default' && fontNames(C).length > 50
       && resRows(sb, 'MapName', [], C, 'Label').some(r => r.dataset.q === 'font') && allFonts().ontoggle,
       `fonts for everything: the main menu's own, a control type's default, a per-control font picker (${menuFonts})`);
+    const listFonts = fontsOf({ info: { kind: 'window', id: 'cserverbrowserdialog', file: S }, thing: { key: 'cserverbrowserdialog' }, control: { cls: 'CGameListPanel', key: 'gamelist' } })
+      .map(([, n, w]) => `${n}:${w}`).join();
+    check(listFonts === 'DefaultSmall:servers, column headers' && hideHow('TextMessage').join() === 'xpos,9999',
+      `the server list's font is the one the game's code picks (${listFonts}); MOTD parts hide off screen`);
     const boxTick = sbSections[0][1][1].querySelector('input'); // "Colour box behind the scoreboard" (not in the page, so no click events)
     boxTick.checked = true;
     boxTick.onchange({ target: boxTick });

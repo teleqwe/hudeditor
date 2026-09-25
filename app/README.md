@@ -68,7 +68,10 @@ packed inside it. Needs Windows 10 or 11 (it uses the WebView2 runtime that ship
        **Buttons** (`resource/GameMenu.res`): remove, reorder, put back any of the game's own buttons, or add one that
        joins a server (type the IP:port). Also read at startup only.
      - **Server browser:** show or hide the Filters button (`servers/InternetGamesPage.res`, `CustomGamesPage.res`;
-       read at startup).
+       read at startup). Its list of servers uses ListSmall (DefaultSmall when the scheme has none), set by
+       the game.
+     - **MOTD:** centre it on the screen (the game puts it 4:3 wide from the left edge), and show or hide its title,
+       text and web page message, leaving only OK. Read at startup.
      - **Chat:** click its parts in the preview to move or hide them (`resource/UI/BaseChat.res`, e.g. the Filters
        button), and set the padding inside it. Hidden parts are listed under "Chat: hidden parts" to bring back.
      - **Scroll bar width** (`ScrollBar.Wide`) shows with scroll bar colours, or search "scroll", for in-game windows,
@@ -135,7 +138,7 @@ SourceScheme, HudLayout, the window `.res` files, and font files.
 - The test server switches off the idle kick (`mp_autokick 0`), so you can edit for as long as you like.
 - A font "name" must be a real font face. If it isn't installed or in the HUD, the game quietly uses Tahoma.
 - If the game was started some other way, the editor asks you to quit it and click **Launch game**: the plugin only
-  loads when the editor starts the game.
+  loads when the editor starts the game. The editor leaves such a game alone (no capture) until then.
 
 ## Building
 `build.bat` (needs Visual Studio 2022 Build Tools). It packs:
