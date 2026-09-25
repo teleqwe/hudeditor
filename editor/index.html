@@ -1627,7 +1627,11 @@ function menuRows() {
     setMenu(quit < 0 ? [...items, it] : [...items.slice(0, quit), it, ...items.slice(quit)]);
   } }));
   add.dataset.q = 'menu button connect server ip add';
-  return [...rows, add, noteRow('The game reads these when it starts: restart it to see changes.')];
+  // an empty button is an empty line (the game's own list has one, in game only)
+  const gap = el('div', { className: 'row check' });
+  gap.append(el('span'), el('button', { textContent: 'Add a gap', title: 'An empty line; move it into place with the arrows', onclick: () => setMenu([...items, [['label', ''], ['command', '']]]) }));
+  gap.dataset.q = 'menu button gap space empty';
+  return [...rows, add, gap,noteRow('The game reads these when it starts: restart it to see changes.')];
 }
 
 // The main menu background: the game stretches materials/console/background01 (4:3 screens) or
@@ -2390,7 +2394,7 @@ if (host && location.hash === '#hosttest') (async () => {
     await writing;
     check(/"?HudEditorBackground"?\s*\{[^}]*"zpos"\s+"-1"[^}]*"paintbackgroundtype"\s+"2"/.test(sb.text), 'scoreboard colour box added to a copy of the game\'s scoreboard.res');
     const mm = mainMenuSections().map(([title, rows]) => `${title}:${rows.length}`).join();
-    check(mm === 'Main menu: logo:3,Main menu: buttons:13,Main menu: background:2,Main menu: items:1', `main menu: logo on/off and colours, buttons, background import, item height (${mm})`);
+    check(mm === 'Main menu: logo:3,Main menu: buttons:14,Main menu: background:2,Main menu: items:1', `main menu: logo on/off and colours, buttons, background import, item height (${mm})`);
     await setAllFonts('Arial', '600');
     const cf = F(C), marlett = fontVariants(cf, 'Marlett'), dflt = fontVariants(cf, 'Default');
     check([...dflt.values()].every(p => p.name === 'Arial' && p.weight === '600') && [...marlett.values()].every(p => p.name === 'Marlett'),
