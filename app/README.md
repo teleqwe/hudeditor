@@ -129,6 +129,8 @@ packed inside it. Needs Windows 10 or 11 (it uses the WebView2 runtime that ship
      - **Player rows:** their colours are game settings (`cl_scoreboard_*_color_*`), so the HUD carries them as
        `cfg/hudeditor_colours.cfg`, run at startup by the HUD's `cfg/valve.rc` (the game's own plus that one line,
        before `autoexec.cfg`). They change in game straight away and are part of Undo, Save and discarding.
+     - **MVP star:** Change picture... swaps the star beside MVPs' names and on the round-end panel for a picture of
+       yours (a GIF animates); The game's star puts it back. Both show straight away.
      - **Fonts:** all eleven. They live in ClientScheme (not SourceScheme). The game picks ScoreboardBody_1, then _2 and
        _3 for names too long to fit, and ScoreboardMVP for the MVP stars.
    - **Chat** reads ChatScheme: its background while typing (the game sets how see-through it is), typing text, "Say :"

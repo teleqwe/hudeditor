@@ -35,7 +35,9 @@ Each step is committed on its own, so work can stop after any of them.
    `Main.Title3` weren't found drawing anything, so they stay under All other colours.
 8. [x] **Fewer restarts**: a new menu background picture shows straight away (and opening or discarding a HUD shows its own).
    The buy menu going live moved to step 15, which needs the same look at how its pages are made.
-9. [ ] **MVP star picture** (e.g. a flower): `hud/scoreboard_mvp` and the round-end panel's star. Needs testing.
+9. [x] **MVP star picture** (e.g. a flower): `hud/scoreboard_mvp` and the round-end panel's star, live. Checked in game
+   with both materials on screen (flower, then the game's star back). Not yet seen on a real scoreboard row: the test
+   server can't give MVPs yet.
 10. [ ] **Loading screen** (`resource/LoadingDialog.res`): position, progress bar, hide lines. Tested by reloading the map.
 11. [ ] **HUD check-up**: fonts not installed or not in the HUD, missing images and font files, duplicate blocks,
     settings old HUDs are missing; one-click fixes.
