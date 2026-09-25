@@ -1,0 +1,12 @@
+# Third-party SDKs, fetched separately (see README)
+hudreload/sdk/
+app/webview2/
+
+# Build output; the exe goes up as a release download instead
+hudreload/build/
+app/build/
+app/CSSHudEditor.exe
+*.tmp
+
+# Working notes
+PLAN.md

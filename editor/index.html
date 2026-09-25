@@ -1,0 +1,2127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HUD Editor</title>
+<style>
+  :root { --bg: #16181c; --panel: #1f2228; --line: #2c3038; --text: #e6e6e6; --dim: #8b919c; --accent: #ffb000; --sel: #4da3ff; }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; height: 100vh; display: grid; grid-template-columns: 1fr 440px; background: var(--bg); color: var(--text); font: 13px/1.4 system-ui, sans-serif; }
+  #preview { display: flex; align-items: center; justify-content: center; background: #000; min-width: 0; min-height: 0; padding: 8px; }
+  #stage { position: relative; max-width: 100%; max-height: 100%; }
+  #stage.schematic { width: min(100%, calc((100vh - 16px) * var(--aspect, 1.7778))); aspect-ratio: var(--aspect, 1.7778); background: #0d0e11; border: 1px solid var(--line); }
+  video { display: block; max-width: 100%; max-height: calc(100vh - 16px); }
+  #boxes { position: absolute; inset: 0; cursor: crosshair; overflow: hidden; } /* a part moved off screen mustn't widen the page */
+  .box { position: absolute; border: 1px dashed rgba(255, 176, 0, .45); opacity: 0; transition: opacity .1s; pointer-events: none; }
+  .box span { position: absolute; left: -1px; bottom: 100%; display: none; padding: 0 4px; font-size: 11px; white-space: nowrap; background: rgba(0, 0, 0, .8); color: var(--accent); }
+  .box.thing { opacity: 0; }
+  #stage:hover .box.thing, .schematic .box.thing { opacity: 1; }
+  .box.hover { opacity: 1; border: 2px solid var(--accent); background: rgba(255, 176, 0, .12); }
+  .box.sel { opacity: 1; border: 2px solid var(--sel); background: rgba(77, 163, 255, .15); }
+  .box.sel span { color: var(--sel); }
+  .box.hover span, .box.sel span { display: block; }
+  #empty { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 16px; color: var(--dim); text-align: center; pointer-events: none; }
+  #empty p { max-width: 420px; margin: 4px 0; }
+  #empty b { color: var(--text); }
+  aside { display: flex; flex-direction: column; min-height: 0; background: var(--panel); border-left: 1px solid var(--line); }
+  .bar { display: flex; gap: 8px; flex-wrap: wrap; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+  button { background: #2c3038; color: var(--text); border: 1px solid #3a3f49; border-radius: 4px; padding: 6px 10px; cursor: pointer; font: inherit; }
+  button:hover { border-color: var(--accent); }
+  button:disabled { opacity: .45; cursor: default; border-color: #3a3f49; }
+  button.primary { border-color: var(--accent); color: var(--accent); }
+  #texts button[aria-pressed="false"] { opacity: .5; text-decoration: line-through; }
+  button[aria-pressed="true"] { border-color: var(--accent); }
+  #hudbtn { flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  input[type=search], input[type=number], .row input:not([type]) { min-width: 0; background: #16181c; color: var(--text); border: 1px solid #3a3f49; border-radius: 4px; padding: 6px 8px; font: inherit; }
+  input[type=search] { flex: 1; }
+  #status { padding: 6px 12px; color: var(--dim); border-bottom: 1px solid var(--line); min-height: calc(2.8em + 12px); box-sizing: border-box; } /* two lines, so the list below doesn't jump when the message changes */
+  #list { flex: 1; overflow: auto; }
+  h3 { margin: 0; padding: 14px 12px 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--accent); border-bottom: 1px solid var(--line); }
+  .crumbs { padding: 8px 12px; font-weight: 600; font-size: 14px; border-bottom: 1px solid var(--line); }
+  .crumbs .meta { font-weight: 400; }
+  .crumbs .done { float: right; padding: 2px 10px; font-size: 12px; font-weight: 400; }
+  .sub { padding: 8px 12px 4px; font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: .04em; }
+  .thing-btn { display: flex; justify-content: space-between; width: 100%; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; padding: 8px 12px; background: none; text-align: left; }
+  .thing-btn.sel { color: var(--sel); background: rgba(77, 163, 255, .08); }
+  .thing-btn { align-items: center; gap: 8px; }
+  .thing-btn .name { flex: 1; }
+  .thing-btn.hidden .name { color: var(--dim); text-decoration: line-through; }
+  .thing-btn .eye { padding: 1px 8px; border: 1px solid #3a3f49; border-radius: 4px; font-size: 11px; color: var(--dim); }
+  .thing-btn .eye:hover { border-color: var(--accent); color: var(--text); }
+  .row.note { display: block; }
+  .row .reset { margin-left: 8px; padding: 0 6px; font-size: 11px; color: var(--dim); }
+  .row.pick { grid-template-columns: 1fr minmax(0, 190px); }
+  .row.pick .meta { grid-column: 2; }
+  select { min-width: 0; background: #16181c; color: var(--text); border: 1px solid #3a3f49; border-radius: 4px; padding: 5px 6px; font: inherit; }
+  details { border-bottom: 1px solid var(--line); }
+  summary { padding: 9px 12px; cursor: pointer; font-weight: 600; }
+  .fold summary { font-weight: 400; border-top: 1px solid var(--line); }
+  .row { display: grid; grid-template-columns: 40px 1fr 72px; gap: 10px; align-items: center; padding: 6px 12px; border-top: 1px solid var(--line); }
+  .row.num { grid-template-columns: 1fr 84px 110px; }
+  .row.check { grid-template-columns: 40px 1fr; cursor: pointer; }
+  .row input[type=color] { width: 40px; height: 26px; padding: 0; border: 1px solid #3a3f49; border-radius: 4px; background: none; cursor: pointer; }
+  .row input[type=range] { width: 72px; }
+  .row input[type=checkbox] { justify-self: center; }
+  .key { font-family: ui-monospace, Consolas, monospace; overflow-wrap: anywhere; }
+  .meta { font-size: 11px; color: var(--dim); }
+  .setting { display: block; font-family: ui-monospace, Consolas, monospace; font-size: 10px; opacity: .55; }
+  #picker { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, .6); z-index: 10; }
+  #picker > div { width: min(520px, 92vw); max-height: 80vh; overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; }
+  #picker h2 { margin: 0 0 4px; font-size: 16px; }
+  #picker .hud { display: block; width: 100%; margin: 6px 0; text-align: left; }
+  #newform { display: flex; gap: 8px; margin: 6px 0; }
+  #newform[hidden] { display: none; }
+  #newform input { flex: 1; min-width: 0; background: #16181c; color: var(--text); border: 1px solid #3a3f49; border-radius: 4px; padding: 6px 8px; font: inherit; }
+  #picker .hud .meta { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  @media (max-width: 860px) { body { grid-template-columns: 1fr; grid-template-rows: 45vh 1fr; } aside { border-left: 0; border-top: 1px solid var(--line); } }
+</style>
+</head>
+<body>
+<main id="preview">
+  <div id="stage" class="schematic">
+    <video id="video" autoplay muted playsinline hidden></video>
+    <div id="empty"><p><b>Starting...</b></p></div>
+    <div id="boxes"></div>
+  </div>
+</main>
+<aside>
+  <div class="bar">
+    <button id="hudbtn" title="Pick which HUD to edit">No HUD open</button>
+    <button id="save" class="primary" disabled>Save HUD</button>
+    <button id="undo" disabled title="Undo the last change (Ctrl+Z)">Undo</button>
+    <button id="explore" title="Open the HUD's folder">Folder</button>
+  </div>
+  <div class="bar">
+    <button id="testserver" title="Offline game with a frozen bot and bhop/surf-style timer texts on screen">Test server</button>
+    <button id="scores" aria-pressed="false" title="Keep the scoreboard open to edit it. Click again (or press Tab in the game) to close it.">Scoreboard</button>
+    <button id="capture" hidden>Capture game</button>
+    <button id="launch" hidden>Launch game</button>
+  </div>
+  <div class="bar" id="texts">
+    <button data-bit="1" title="Timer box (font HudHintText) and right-side text (HudHintTextSmall)">Timer</button>
+    <button data-bit="2" title="Centre print speed (font Trebuchet24, SourceScheme)">1 Speed</button>
+    <button data-bit="4" title="jhud under it (font CenterPrintText, ClientScheme)">2 jhud</button>
+    <button data-bit="8" title="Record times in the top left corner (font CenterPrintText, ClientScheme)">3 Top left</button>
+    <button data-bit="16" title="A chat line every few seconds (font ChatFont, ChatScheme)">Chat</button>
+  </div>
+  <div class="bar"><input type="search" id="search" placeholder="Search everything, e.g. health, timer, button"></div>
+  <div id="status">Starting...</div>
+  <div id="list"></div>
+</aside>
+<datalist id="fontfaces"></datalist>
+<div id="picker" hidden><div>
+  <h2>Which HUD do you want to edit?</h2>
+  <p class="meta">Changes show in game straight away. They are kept when you click Done or Save HUD.</p>
+  <div id="hudlist"></div>
+  <button id="browse" class="hud">Browse for a HUD folder...<span class="meta">Any folder with resource/ or scripts/ inside</span></button>
+  <button id="newhud" class="hud">Start a new HUD<span class="meta">From the default look, in your custom folder</span></button>
+  <form id="newform" hidden><input id="newname" placeholder="Name it, e.g. Pink Surf" maxlength="60" aria-label="Name for the new HUD"><button class="primary">Create</button></form>
+  <p id="newerr" class="meta"></p>
+  <button id="pickclose" hidden>Cancel</button>
+</div></div>
+<script>
+// The HUD is edited in place and the game shows it live (the exe puts back what wasn't saved); these are its files.
+// The list shows them as one set of settings and sorts every edit into the right file.
+const C = 'ClientScheme.res', S = 'SourceScheme.res', L = 'HudLayout.res', CH = 'ChatScheme.res';
+const PATHS = { [C]: 'resource/ClientScheme.res', [S]: 'resource/SourceScheme.res', [L]: 'scripts/HudLayout.res', [CH]: 'resource/ChatScheme.res' };
+// A HUD without one of these starts from a stub that #bases the game's file, [base file, root block]; both are
+// written on the first change.
+const STUBS = { [L]: ['hudlayout_default.res', 'Resource/HudLayout.res'], [CH]: ['chatscheme_default.res', 'Scheme'] };
+const stubText = ([base, root]) => `#base "${base}"\n\n// Your changes go here. Anything not listed comes from ${base}.\n"${root}"\n{\n}\n`;
+
+// ---------- what things are: HUD parts, windows, and the colours each VGUI control reads ----------
+// Scheme colours: [label, keys ('|' = set together), note]. These three are shared by several HUD parts.
+const NUMBERS = ['Numbers and icons', 'Panel.FgColor|OrangeDim', 'Shared with health, armor, ammo, money and the timer'];
+const WARN = ['Warning flash', 'HudIcon_Red', 'Shared: getting hurt, spending money, low time, the bomb icon'];
+const HIGHLIGHT = ['Highlight', 'HudIcon_Green', 'Shared: money gained and the buy zone, bomb and defuser icons'];
+
+// HUD parts, keyed by panel name (= HudLayout block). layoutColours are colours set in that HudLayout block;
+// hit = clickable area (HudLayout units) for panels much bigger than what they draw.
+const HUD = {
+  HudHealth: { name: 'Health', colours: [NUMBERS, WARN] },
+  HudArmor: { name: 'Armor', colours: [NUMBERS] },
+  HudAmmo: { name: 'Ammo', colours: [NUMBERS] },
+  HudAccount: { name: 'Money', colours: [NUMBERS, HIGHLIGHT, WARN] },
+  HudRoundTimer: { name: 'Round timer', colours: [NUMBERS, WARN] },
+  HudRadar: { name: 'Radar' },
+  HudLocation: { name: 'Location name' },
+  overview: { name: 'Map overview' },
+  HudShoppingCart: { name: 'Buy zone icon', colours: [HIGHLIGHT] },
+  HudC4: { name: 'Bomb icon', colours: [HIGHLIGHT, WARN] },
+  HudDefuser: { name: 'Defuse kit icon', colours: [HIGHLIGHT] },
+  HudHostageRescueZone: { name: 'Rescue zone icon', colours: [HIGHLIGHT, WARN] },
+  HudScenarioIcon: { name: 'Objective icon', colours: [['Icon', 'Hostage_Yellow', 'Bomb site / hostage icon by the timer']] },
+  HudWeaponSelection: { name: 'Weapon selection', hit: ['r640', '16', '640', '100'], colours: [
+    ['Weapon icons', 'FgColor', ''], ['Weapon names', 'SelectionTextFg', ''], ['Slot numbers', 'SelectionNumberFg', ''],
+    ['Slot background', 'SelectionBoxBg|SelectionEmptyBoxBg', ''], ['Highlighted slot', 'SelectionSelectedBoxBg', ''] ],
+    // its own colour settings take the scheme colour once, at startup; named in HudLayout they're looked up again on a reload
+    // ("SelectedBoxClor" is spelt that way in the game)
+    links: { NumberColor: 'SelectionNumberFg', BoxColor: 'SelectionBoxBg', EmptyBoxColor: 'SelectionEmptyBoxBg', SelectedBoxClor: 'SelectionSelectedBoxBg' }, rounded: true },
+  HudDeathNotice: { name: 'Kill feed', hit: ['r260', '12', '248', '100'], layoutColours: [['CT names', 'CTTextColor', 'CT_Blue'], ['T names', 'TerroristTextColor', 'T_Red']] },
+  // the chat reads ChatScheme; its message colours (names in team colours, yellow server lines) are the game's own
+  HudChat: { name: 'Chat', scheme: CH, rounded: true, colours: [['Background', 'DullWhite', 'Behind the chat while typing; the game sets how see-through it is'],
+    ['Typing text', 'Chat.TypingText', ''], ['"Say :" text', 'Label.TextColor', ''], ['Typing box', 'TextEntry.BgColor', '']] },
+  HudHintDisplay: { name: 'Timer / hint text', fit: true, rounded: true, note: 'Font HudHintText', colours: [['Text', 'HintMessageFg', 'Also the right-side text'], ['Background', 'HintMessageBg', '']] },
+  HudHintKeyDisplay: { name: 'Right-side text', fit: true, note: 'Font HudHintTextSmall', colours: [['Text', 'HintMessageFg', 'Shared with the timer text (the game ignores HudLayout "TextColor" here)']] },
+  CCenterStringLabel: { name: 'Centre print text', fixed: 'The game always draws this text white, so no HUD can recolour it. Its font (below) can change.', note: 'PrintCenterText from server plugins; font Trebuchet24' },
+  HudMessage: { name: 'Server HUD text (jhud, top left)', fixed: 'Its colour and position come from the server plugin, not the HUD. Its font (below) can change.', note: 'ShowHudText / game_text from server plugins and maps; font CenterPrintText',
+    hit: [['c-60', '178', '120', '30'], ['4', '2', '230', '60']] },
+  TargetID: { name: 'Player name when aiming', quiet: true, colours: [['Counter-Terrorists', 'CT_Blue', 'Also kill feed names unless set there'], ['Terrorists', 'T_Red', 'Also kill feed names unless set there'], ['Hostages', 'Hostage_Yellow', ''] ] },
+  HudMenu: { name: 'Radio and server menus', hit: ['0', 'c-100', '220', '200'], colours: [
+    ['Title', 'MenuColor', ''], ['Options', 'ItemColor', 'The numbered choices'], ['Background', 'MenuBoxBg', ''] ] },
+  HudProgressBar: { name: 'Plant / defuse bar', colours: [['Bar', 'ProgressBarFg', '']] },
+  HudHistoryResource: { name: 'Pickup history', hit: ['r160', '250', '150', '130'], colours: [['Items', 'Yellowish', ''], ['Slot full', 'Caution', '']] },
+  HudVoiceStatus: { name: 'Voice chat list', quiet: true },
+  WinPanel_Round: { name: 'Round end panel' },
+  HudAchievementTracker: { name: 'Achievement tracker', quiet: true },
+};
+// Fullscreen overlays that draw little; never picked by clicking (still reachable from the list).
+const NO_CLICK = new Set(['hudweapon', 'hudcrosshair', 'hudzoom', 'hudclosecaption', 'targetid', 'hudflashbang', 'hudvoicestatus', 'hudachievementtracker', 'hudmenu', 'huddeathnotice', 'hudweaponselection', 'hudhistoryresource']);
+
+// Windows: panel name -> friendly name, plus window-wide colours per scheme.
+const WINDOWS = { info: 'Server message (MOTD)', team: 'Team select', class_ct: 'Class select', class_ter: 'Class select', buy: 'Buy menu',
+  buy_ct: 'Buy menu', buy_ter: 'Buy menu', scores: 'Scoreboard', specgui: 'Spectator bars', specmenu: 'Spectator menu',
+  gamemenu: 'Main menu', gameconsole: 'Console', optionsdialog: 'Options', cserverbrowserdialog: 'Server browser', serverbrowser: 'Server browser' };
+const WINDOW_COLOURS = {
+  [C]: [['Window background', 'Frame.BgColor', 'Also the spectator bars'], ['Backdrop', 'BgColor', 'Behind team select and the MOTD'], ['Title', 'FrameTitleBar.TextColor', ''],
+    ['Text', 'Label.TextColor', 'Shared by in-game windows and the buy menu'], ['Borders', 'Border.Bright|Border.Dark', '']],
+  [S]: [['Window background', 'Frame.BgColor', ''], ['Window background, not focused', 'Frame.OutOfFocusBgColor', ''],
+    ['Title', 'FrameTitleBar.TextColor', ''], ['Title bar', 'FrameTitleBar.BgColor', ''], ['Text', 'Label.TextColor', ''], ['Borders', 'Border.Bright|Border.Dark', '']],
+};
+const EXTRA = {
+  gamemenu: [['Menu text', 'MainMenu.TextColor', 'Resume Game, Find Servers, Options...'], ['Menu text (mouse over)', 'MainMenu.ArmedTextColor', ''],
+    ['Menu text (clicked)', 'MainMenu.DepressedTextColor', ''], ['Background dim', 'MainMenu.Backdrop', 'Darkens the game behind the menu']],
+  gameconsole: [['Console text', 'Console.TextColor', ''], ['Developer text', 'Console.DevTextColor', '']],
+  team: [['Map description', 'MapDescriptionText', '']],
+};
+
+// Colours each VGUI control type reads (from vgui_controls' ApplySchemeSettings). First match on the class name wins.
+const CONTROLS = [
+  ['ComboBoxButton', 'Drop-down arrow', [['Arrow', 'ComboBoxButton.ArrowColor'], ['Arrow (mouse over)', 'ComboBoxButton.ArmedArrowColor'], ['Background', 'ComboBoxButton.BgColor']]],
+  ['ScrollBarSlider', 'Scroll bar', [['Slider', 'ScrollBarSlider.FgColor'], ['Track', 'ScrollBarSlider.BgColor']]],
+  ['ScrollBar', 'Scroll bar', [['Arrows', 'ScrollBarButton.FgColor'], ['Arrow buttons', 'ScrollBarButton.BgColor'], ['Slider', 'ScrollBarSlider.FgColor'], ['Track', 'ScrollBarSlider.BgColor']]],
+  ['CheckButton', 'Checkbox', [['Text', 'CheckButton.TextColor'], ['Tick', 'CheckButton.Check'], ['Box', 'CheckButton.BgColor']]],
+  ['RadioButton', 'Radio button', [['Text', 'RadioButton.TextColor'], ['Text (selected)', 'RadioButton.SelectedTextColor']]],
+  ['MenuItem', 'Menu item', [['Text', 'Menu.TextColor'], ['Background', 'Menu.BgColor'], ['Text (mouse over)', 'Menu.ArmedTextColor'], ['Background (mouse over)', 'Menu.ArmedBgColor']]],
+  ['Button', 'Button', [['Text', 'Button.TextColor'], ['Background', 'Button.BgColor'], ['Text (mouse over)', 'Button.ArmedTextColor'],
+    ['Background (mouse over)', 'Button.ArmedBgColor'], ['Text (clicked)', 'Button.DepressedTextColor'], ['Background (clicked)', 'Button.DepressedBgColor']]],
+  ['SectionedListPanel', 'Grouped list', [['Text', 'SectionedListPanel.TextColor'], ['Bright text', 'SectionedListPanel.BrightTextColor'], ['Headers', 'SectionedListPanel.HeaderTextColor'],
+    ['Background', 'SectionedListPanel.BgColor'], ['Selected text', 'SectionedListPanel.SelectedTextColor'], ['Selected row', 'SectionedListPanel.SelectedBgColor']]],
+  ['ListPanel', 'List', [['Text', 'ListPanel.TextColor'], ['Background', 'ListPanel.BgColor'], ['Selected text', 'ListPanel.SelectedTextColor'], ['Selected row', 'ListPanel.SelectedBgColor']]],
+  ['RichText', 'Text box', [['Text', 'RichText.TextColor'], ['Background', 'RichText.BgColor'], ['Selected text', 'RichText.SelectedTextColor'], ['Selection', 'RichText.SelectedBgColor']]],
+  ['TextEntry', 'Text field', [['Text', 'TextEntry.TextColor'], ['Background', 'TextEntry.BgColor'], ['Cursor', 'TextEntry.CursorColor'],
+    ['Selected text', 'TextEntry.SelectedTextColor'], ['Selection', 'TextEntry.SelectedBgColor'], ['Read-only text', 'TextEntry.DisabledTextColor']]],
+  ['PropertySheet', 'Tabs', [['Tab text', 'PropertySheet.TextColor'], ['Selected tab text', 'PropertySheet.SelectedTextColor']]],
+  ['ProgressBar', 'Progress bar', [['Bar', 'ProgressBar.FgColor'], ['Background', 'ProgressBar.BgColor']]],
+  ['Slider', 'Slider', [['Knob', 'Slider.NobColor'], ['Text', 'Slider.TextColor'], ['Track', 'Slider.TrackColor']]],
+  ['Menu', 'Menu', [['Text', 'Menu.TextColor'], ['Background', 'Menu.BgColor'], ['Text (mouse over)', 'Menu.ArmedTextColor'], ['Background (mouse over)', 'Menu.ArmedBgColor']]],
+  ['Label', 'Text', [['Text', 'Label.TextColor'], ['Dim text', 'Label.TextDullColor'], ['Bright text', 'Label.TextBrightColor'], ['Background', 'Label.BgColor']]],
+];
+// Game subclasses of the VGUI controls. The buy menu's buttons draw their text with Label.TextColor (checked in telehud).
+const ALIAS = { CItemButton: 'SectionedListPanel', MouseOverButton: 'Button', MouseOverPanelButton: 'Button', CHudChatFilterButton: 'Button', CHudChatHistory: 'RichText', RichTextInterior: 'RichText' };
+CONTROLS.unshift(['BuyMouseOverPanelButton', 'Buy menu button', [['Text', 'Label.TextColor'], ['Background', 'Button.BgColor'], ['Background (mouse over)', 'Button.ArmedBgColor']]]);
+// Fonts each control type draws with when neither its .res "font" nor the game's code picks one (vgui_controls'
+// ApplySchemeSettings). Symbol fonts (Marlett: arrows, ticks) are left out.
+const CONTROL_FONTS = { Label: [['Text', 'Default']], Button: [['Text', 'Default']], CheckButton: [['Text', 'Default']],
+  RadioButton: [['Text', 'Default']], MenuItem: [['Text', 'Default']], Menu: [['Items', 'Default']], TextEntry: [['Text', 'Default']],
+  RichText: [['Text', 'Default']], PropertySheet: [['Tabs', 'Default']], ListPanel: [['Rows', 'Default'], ['Column headers', 'DefaultSmall']],
+  SectionedListPanel: [['Rows and headers', 'DefaultVerySmall']], Slider: [['Captions', 'DefaultVerySmall']], BuyMouseOverPanelButton: [['Text', 'Default']] };
+// Windows whose fonts the game picks itself: [scheme, what, font ("A|B": A if the scheme has it, else B)].
+const WINDOW_FONTS = { gamemenu: [[S, 'Menu items', 'MainMenuFont|MenuLarge'], [C, 'Logo', 'ClientTitleFont']],
+  gameconsole: [[S, 'Console text', 'ConsoleText']] };
+// Exact class, then a known subclass, then any class ending in a control's name (CCvarSlider -> Slider).
+const controlOf = cls => CONTROLS.find(([k]) => cls === k) || CONTROLS.find(([k]) => ALIAS[cls] === k) || CONTROLS.find(([k]) => cls.endsWith(k));
+// The scheme file a panel draws with. The plugin reports it (the centre print is a client panel on SourceScheme);
+// otherwise go by module: client panels use ClientScheme, menus SourceScheme.
+const schemeOf = p => ({ SourceScheme: S, ClientScheme: C, ChatScheme: CH })[p && p.scheme] || (p && p.module && p.module !== 'ClientDLL' ? S : C);
+
+// Every scheme key some entry above covers, so "All other colours" can leave them out.
+const LISTED = new Set([
+  `${C}:main.title1.color`, `${C}:main.title2.color`, // the main menu logo
+  ...Object.values(HUD).flatMap(h => (h.colours || []).flatMap(([, k]) => k.split('|').map(x => `${h.scheme || C}:${x.toLowerCase()}`))),
+  ...Object.entries(WINDOW_COLOURS).flatMap(([f, list]) => list.flatMap(([, k]) => k.split('|').map(x => `${f}:${x.toLowerCase()}`))),
+  ...Object.values(EXTRA).flatMap(list => list.flatMap(([, k]) => k.split('|').flatMap(x => [`${C}:${x.toLowerCase()}`, `${S}:${x.toLowerCase()}`]))),
+  ...CONTROLS.flatMap(([, , list]) => list.flatMap(([, k]) => [`${C}:${k.toLowerCase()}`, `${S}:${k.toLowerCase()}`])),
+]);
+
+// ---------- KeyValues parsing: just enough for .res files, keeping text offsets so edits touch one line ----------
+function evalCond(c) {
+  const expr = c.slice(1, -1).replace(/\$(WIN32|WINDOWS)\b/g, '1').replace(/\$\w+/g, '0');
+  return /^[01!&|() ]*$/.test(expr) ? !!Function('return ' + expr)() : true;
+}
+
+function tokenize(text) {
+  const out = [];
+  let i = 0;
+  while (i < text.length) {
+    const c = text[i];
+    if (/\s/.test(c)) { i++; continue; }
+    if (c === '/' && text[i + 1] === '/') { const j = text.indexOf('\n', i); i = j < 0 ? text.length : j; continue; }
+    if (c === '{' || c === '}') { out.push({ t: c, start: i }); i++; continue; }
+    if (c === '[') { const j = text.indexOf(']', i); if (j < 0) break; out.push({ t: 'cond', s: text.slice(i, j + 1) }); i = j + 1; continue; }
+    if (c === '"') { const j = text.indexOf('"', i + 1); if (j < 0) break; out.push({ t: 'str', s: text.slice(i + 1, j), start: i + 1, end: j, q: true }); i = j + 1; continue; }
+    let j = i;
+    while (j < text.length && !/[\s{}"]/.test(text[j])) j++;
+    out.push({ t: 'str', s: text.slice(i, j), start: i, end: j, q: false });
+    i = j;
+  }
+  return out;
+}
+
+function parse(text) {
+  const tk = tokenize(text), entries = [], sections = [], bases = [];
+  let k = 0;
+  function block(path) {
+    while (k < tk.length) {
+      const a = tk[k];
+      if (a.t === '}') return a.start;
+      if (a.t !== 'str') { k++; continue; }
+      if (a.s === '#base' || a.s === '#include') { if (tk[k + 1]) bases.push(tk[k + 1].s); k += 2; continue; }
+      let b = tk[k + 1], cond = null;
+      if (b && b.t === 'cond' && tk[k + 2] && tk[k + 2].t === '{') cond = b.s, b = tk[++k + 1]; // "1" [$WIN32] { ... }
+      k += 2;
+      if (b && b.t === '{') {
+        const e0 = entries.length, s0 = sections.length;
+        const close = block([...path, a.s]);
+        sections.push({ path: [...path, a.s], close, kstart: a.q ? a.start - 1 : a.start });
+        if (cond && !evalCond(cond)) entries.length = e0, sections.length = s0; // a block for another platform
+        k++;
+      } else if (b && b.t === 'str') {
+        let ok = true;
+        if (tk[k] && tk[k].t === 'cond') ok = evalCond(tk[k++].s);
+        if (ok) entries.push({ path, key: a.s, value: b.s, start: b.start, end: b.end, q: b.q, kstart: a.q ? a.start - 1 : a.start });
+      }
+    }
+    return text.length;
+  }
+  block([]);
+  return { entries, sections, bases };
+}
+
+// ---------- model ----------
+const isColor = v => /^\s*-?\d+\s+-?\d+\s+-?\d+(\s+-?\d+)?\s*$/.test(v || '');
+const sectionOf = e => (e.path[1] || '').toLowerCase();
+
+// Scheme Colors and BaseSettings merged over the #base files, keyed lowercase (KeyValues is case-insensitive).
+function tables(f) {
+  const colors = new Map(), base = new Map();
+  for (const p of [...f.bases, f.parsed]) {
+    for (const e of p.entries) {
+      const t = sectionOf(e) === 'colors' ? colors : sectionOf(e) === 'basesettings' ? base : null;
+      if (t) t.set(e.key.toLowerCase(), { name: e.key, value: e.value });
+    }
+  }
+  return { colors, base };
+}
+const EMPTY_TABLES = { colors: new Map(), base: new Map() };
+
+// Same lookup order as the game: literal colour, then Colors (not followed further), then BaseSettings.
+function resolve(t, v, depth = 0) {
+  if (isColor(v)) return v;
+  if (depth > 16 || !v) return null;
+  const c = t.colors.get(v.toLowerCase());
+  if (c) return isColor(c.value) ? c.value : null;
+  const b = t.base.get(v.toLowerCase());
+  return b ? resolve(t, b.value, depth + 1) : null;
+}
+
+// One HudLayout block's settings (own file over #base), keyed lowercase.
+function layoutProps(f, id) {
+  const props = {};
+  if (f) for (const p of [...f.bases, f.parsed]) for (const e of p.entries)
+    if (e.path.length === 2 && e.path[1].toLowerCase() === id.toLowerCase()) props[e.key.toLowerCase()] = e.value;
+  return props;
+}
+
+// HudLayout position/size to screen pixels. Values are in 640x480 units scaled by screen height;
+// "r" = from the right/bottom, "c" = from the centre, "f" (sizes) = full minus.
+function coord(v, full, scale, isPos) {
+  const m = /^\s*([rcf]?)\s*(-?[\d.]+)\s*$/i.exec(v || '0');
+  if (!m) return 0;
+  const n = +m[2] * scale, p = m[1].toLowerCase();
+  if (isPos) return p === 'r' ? full - n : p === 'c' ? full / 2 + n : n;
+  return p === 'f' ? full - n : n;
+}
+function rectOf(props, W, H, hit) {
+  if (hit && Array.isArray(hit[0])) hit = hit[0]; // several click areas: the first (see clickRects)
+  const s = H / 480, [x, y, w, h] = hit || [props.xpos, props.ypos, props.wide, props.tall];
+  return { x: coord(x, W, s, true), y: coord(y, H, s, true), w: coord(w, W, s), h: coord(h, H, s) };
+}
+
+const toRgba = v => { const n = v.trim().split(/\s+/).map(Number); return [n[0], n[1], n[2], n.length > 3 ? n[3] : 255]; };
+const toHex = ([r, g, b]) => '#' + [r, g, b].map(x => Math.max(0, Math.min(255, x)).toString(16).padStart(2, '0')).join('');
+const fromHex = (hex, a) => [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16)).concat(a).join(' ');
+
+// Returns f.text with `key` set inside the top-level block `section` (BaseSettings, or HudHealth in HudLayout):
+// edited in place if this file has it, otherwise added to that block, which is created if needed.
+const setIn = (f, section, key, value) => setAt(f, [section], key, value);
+
+// Same, for any depth below the top-level block: sub = ['Fonts', 'HudNumbers', '1'] sets a font entry's key.
+// Missing blocks are created (with #base, a block holding one key still merges with the base's full block).
+function setAt(f, sub, key, value) {
+  const same = (a, b) => a.length === b.length && a.every((x, i) => x.toLowerCase() === b[i].toLowerCase());
+  const text = f.text, k = key.toLowerCase();
+  const e = f.parsed.entries.find(e => same(e.path.slice(1), sub) && e.key.toLowerCase() === k);
+  if (e) return text.slice(0, e.start) + (e.q ? value : `"${value}"`) + text.slice(e.end);
+  for (let n = sub.length; n >= 0; n--) {
+    const s = f.parsed.sections.find(s => s.path.length === n + 1 && same(s.path.slice(1), sub.slice(0, n)));
+    if (!s) continue;
+    // s.close is its "}", already indented n tabs: new lines go in front of it at depth n + 1
+    const tab = d => '\t'.repeat(d), name = x => /^[A-Za-z_][\w.]*$/.test(x) ? x : `"${x}"`;
+    let ins = '', d = n + 1;
+    for (const block of sub.slice(n)) { ins += `${tab(d)}${name(block)}\n${tab(d)}{\n`; d++; }
+    ins += `${tab(d)}"${key}"\t\t"${value}"\n`;
+    while (d > n + 1) ins += `${tab(--d)}}\n`;
+    return text.slice(0, s.close) + ins.slice(n) + tab(n) + text.slice(s.close);
+  }
+  throw new Error(`${f.name} has no top-level { } block`);
+}
+
+const samePath = (a, b) => a.length === b.length && a.every((x, i) => x.toLowerCase() === b[i].toLowerCase());
+
+// Replaces the whole block `name` under sub in f's own file (or a one-line `name "other"` there), else adds it.
+// body: [key, value] pairs; a value that is itself a list of pairs is a nested block.
+function setBlock(f, sub, name, body) {
+  const text = f.text, tab = d => '\t'.repeat(d), q = x => /^[A-Za-z_][\w.]*$/.test(x) ? x : `"${x}"`;
+  const write = (pairs, d) => pairs.map(([k, v]) => Array.isArray(v)
+    ? `${tab(d)}${q(k)}\n${tab(d)}{\n${write(v, d + 1)}${tab(d)}}\n` : `${tab(d)}"${k}"\t"${v}"\n`).join('');
+  const lineStart = i => text.lastIndexOf('\n', i - 1) + 1, lineEnd = i => { const n = text.indexOf('\n', i); return n < 0 ? text.length : n + 1; };
+  const blk = f.parsed.sections.find(s => samePath(s.path.slice(1), [...sub, name]));
+  const alias = !blk && f.parsed.entries.find(e => samePath(e.path.slice(1), sub) && e.key.toLowerCase() === name.toLowerCase());
+  const at = blk ? [blk.kstart, blk.close] : alias ? [alias.kstart, alias.end] : null;
+  if (at) return text.slice(0, lineStart(at[0])) + write([[name, body]], sub.length + 1) + text.slice(lineEnd(at[1]));
+  for (let n = sub.length; n >= 0; n--) {
+    const s = f.parsed.sections.find(s => s.path.length === n + 1 && samePath(s.path.slice(1), sub.slice(0, n)));
+    if (!s) continue;
+    let pairs = [[name, body]];
+    for (let i = sub.length - 1; i >= n; i--) pairs = [[sub[i], pairs]];
+    return text.slice(0, s.close) + write(pairs, n + 1).slice(n) + tab(n) + text.slice(s.close);
+  }
+  throw new Error(`${f.name} has no top-level { } block`);
+}
+
+// Takes key out of sub in f's own file: the whole line when nothing else is on it.
+function dropKey(f, sub, key) {
+  const text = f.text, e = f.parsed.entries.find(e => samePath(e.path.slice(1), sub) && e.key.toLowerCase() === key.toLowerCase());
+  if (!e) return text;
+  const a = text.lastIndexOf('\n', e.kstart - 1) + 1, after = e.end + (e.q ? 1 : 0), nl = text.indexOf('\n', after), end = nl < 0 ? text.length : nl + 1;
+  if (!text.slice(a, e.kstart).trim() && !text.slice(after, end).replace(/\/\/.*/, '').trim()) return text.slice(0, a) + text.slice(end);
+  return text.slice(0, e.kstart) + text.slice(after);
+}
+
+// A font's entries ("1", "2"... each for a range of screen heights), own file over #base, keys lowercase.
+function fontVariants(f, font) {
+  const vars = new Map();
+  for (const p of [...f.bases, f.parsed]) for (const e of p.entries) {
+    if (e.path.length !== 4 || e.path[1].toLowerCase() !== 'fonts' || e.path[2].toLowerCase() !== font.toLowerCase()) continue;
+    if (!vars.has(e.path[3])) vars.set(e.path[3], {});
+    vars.get(e.path[3])[e.key.toLowerCase()] = e.value;
+  }
+  return vars;
+}
+
+// The entry the game uses at this screen height: the first whose yres range contains it, else the first without one.
+function activeVariant(vars, H) {
+  for (const [k, p] of vars) {
+    const [a, b] = (p.yres || '').split(/\s+/).map(Number);
+    if (p.yres && H >= a && H <= b) return k;
+  }
+  return [...vars.keys()].find(k => !vars.get(k).yres) || [...vars.keys()][0];
+}
+
+// A scheme colour goes where the game reads it from: Colors if it is defined there, else BaseSettings.
+const withValue = (f, key, value) => setIn(f, tables(f).colors.has(key.toLowerCase()) ? 'Colors' : 'BaseSettings', key, value);
+
+// ---------- exe bridge: sends "id\nop\narg\nbody", the exe answers "id\n1\nresult" or "id\n0\nerror"; "!event" = from the exe ----------
+const host = window.chrome && window.chrome.webview;
+const pending = {};
+let seq = 0;
+if (host) host.addEventListener('message', e => {
+  const s = e.data;
+  if (s[0] === '!') return onHostEvent(s.slice(1));
+  const a = s.indexOf('\n'), id = s.slice(0, a), p = pending[id];
+  delete pending[id];
+  if (s[a + 1] === '1') p.res(s.slice(a + 3)); else p.rej(new Error(s.slice(a + 3)));
+});
+const call = (op, arg = '', body = '') => new Promise((res, rej) => {
+  const id = ++seq;
+  pending[id] = { res, rej };
+  host.postMessage(`${id}\n${op}\n${arg}\n${body}`);
+});
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// ---------- files ----------
+let hudName = null, files = [], writing = Promise.resolve(), dirty = false;
+const $ = id => document.getElementById(id);
+const F = name => files.find(f => f.name === name);
+let statusAt = 0;
+const status = msg => { $('status').textContent = msg; statusAt = Date.now(); };
+const readHud = path => call('read', path).catch(() => null);
+
+async function loadFile(name) {
+  const path = PATHS[name], dir = path.slice(0, path.lastIndexOf('/') + 1);
+  let text = await readHud(path), defaultText = null;
+  if (text == null) {
+    if (!STUBS[name] || !host) return null;
+    text = stubText(STUBS[name]); // show the game's file, create both on the first edit
+    defaultText = await (name === L ? call('defaultlayout') : call('vanilla', STUBS[name][0].replace('_default', '')));
+  }
+  const parsed = parse(text), bases = [];
+  // ponytail: follows one level of #base in the same folder; nested or cross-folder bases just show fewer settings
+  for (const b of parsed.bases) {
+    const t = defaultText ?? await readHud(dir + b.split(/[\\/]/).pop());
+    if (t != null) bases.push(parse(t));
+  }
+  return { name, path, text, parsed, bases, defaultText };
+}
+
+async function loadAll() {
+  files = (await Promise.all([C, S, L, CH].map(loadFile))).filter(Boolean);
+  squareAll = (await readHud(CORNER_VMT(1)) || '').includes('vgui/white');
+  render();
+  drawBoxes();
+}
+
+// ---------- undo: each step is a file's text from before a change ----------
+const undoSteps = [];
+// Values HudLayout no longer sets stay in a running game, so they are first put back to what the game falls back to.
+const LAYOUT_FALLBACK = { alpha: '255', roundedcorners: '15', texture1: 'vgui/hud/8x800corner1', texture2: 'vgui/hud/8x800corner2',
+  texture3: 'vgui/hud/8x800corner3', texture4: 'vgui/hud/8x800corner4' };
+
+async function undo() {
+  const step = undoSteps.pop();
+  $('undo').disabled = !undoSteps.length;
+  if (!step) return status('Nothing to undo.');
+  await writing;
+  const { f, text } = step, before = parse(text);
+  writing = writing.then(async () => {
+    try {
+      if (f.name === L) {
+        let reset = { ...f, text, parsed: before };
+        for (const e of f.parsed.entries) {
+          if (e.path.length !== 2 || before.entries.some(b => samePath(b.path, e.path) && b.key.toLowerCase() === e.key.toLowerCase())) continue;
+          const v = layoutProps({ bases: f.bases, parsed: { entries: [] } }, e.path[1])[e.key.toLowerCase()] ?? LAYOUT_FALLBACK[e.key.toLowerCase()];
+          if (v !== undefined) reset = { ...reset, text: setAt(reset, [e.path[1]], e.key, v) }, reset.parsed = parse(reset.text);
+        }
+        if (reset.text !== text) { await call('write', f.path, reset.text); await sleep(1200); } // let the game take it
+      }
+      await call('write', f.path, text);
+      Object.assign(f, { text, parsed: before });
+      setDirty(true);
+      status('Undone.');
+    } catch (err) {
+      status(`Couldn't undo: ${err.message}`);
+    }
+  });
+  await writing;
+  render();
+  drawBoxes();
+}
+
+function setDirty(d) {
+  dirty = d;
+  $('save').disabled = !d;
+  $('save').textContent = d ? 'Save HUD *' : 'Save HUD';
+}
+
+// Every edit goes through here. section = HudLayout block for layout settings; scheme colours are sorted into Colors/BaseSettings.
+const timers = {};
+function save(f, key, value, section = null) {
+  const id = `${f.name}/${section}/${key}`;
+  clearTimeout(timers[id]);
+  timers[id] = setTimeout(() => {
+    const sub = Array.isArray(section) ? section : section ? [section] : null;
+    // a function value is worked out when it's written, from the file as it is then (blocks built from what's there)
+    commit(f, id, () => {
+      const v = typeof value === 'function' ? value() : value;
+      return Array.isArray(v) ? setBlock(f, sub, key, v) : v === null ? dropKey(f, sub, key) : sub ? setAt(f, sub, key, v) : withValue(f, key, v);
+    });
+  }, 250);
+}
+
+// Writes a file's new text (made by edit() from its current text) as one undo step, once earlier writes are done.
+function commit(f, id, edit) {
+  writing = writing.then(async () => {
+    try {
+      const next = edit();
+      if (f.defaultText) {
+        await call('write', f.path.replace(/[^/]+$/, STUBS[f.name][0]), f.defaultText);
+        f.defaultText = null;
+      }
+      // one undo step per setting; a slider dragged or a number typed within 1.5 s is still that step
+      const last = undoSteps[undoSteps.length - 1], now = Date.now();
+      if (!last || last.id !== id || now - last.at > 1500) undoSteps.push({ f, id, text: f.text });
+      if (undoSteps.length > 200) undoSteps.shift();
+      undoSteps[undoSteps.length - 1].at = now;
+      $('undo').disabled = false;
+      await call('write', f.path, next);
+      Object.assign(f, { text: next, parsed: parse(next) });
+      setDirty(true);
+      status('Changed in game. Click Done or Save HUD to keep it.');
+      drawBoxes();
+    } catch (err) {
+      status(`Couldn't apply: ${err.message}`);
+    }
+  });
+}
+
+// ---------- what's on screen: the plugin lists visible game panels (tree order, with depth and class) ----------
+let live = null, liveRaw = null;
+const CONTAINERS = new Set(['staticpanel', 'staticclientdllpanel', 'counterstrike root panel', 'cbaseviewport', 'gameui panel', 'basegameuipanel',
+  'staticclientdlltoolspanel', 'engine tools', 'focusoverlaypanel', 'cconpanel']);
+
+function parsePanels(raw) {
+  const [head, ...lines] = raw.trim().split('\n');
+  const [, W, H] = head.split('\t');
+  const stack = [], panels = [];
+  for (const l of lines) {
+    const [d, module, name, x, y, w, h, cls, scheme] = l.split('\t');
+    const p = { depth: +d, module, name: name || '', key: (name || '').toLowerCase(), x: +x, y: +y, w: +w, h: +h, cls: cls || '', scheme };
+    stack.length = p.depth - 1;
+    p.parent = stack[p.depth - 2] || null;
+    stack[p.depth - 1] = p;
+    p.frame = false;
+    if (p.key === 'frame_caption' && p.parent) p.parent.frame = true; // a window (Frame) has a title bar child
+    panels.push(p);
+  }
+  for (const p of panels) p.thing = thingOf(p);
+  return { W: +W, H: +H, panels };
+}
+
+// The HUD part or window a panel belongs to: the nearest ancestor-or-self sitting directly in a container.
+function thingOf(p) {
+  for (let q = p; q; q = q.parent) {
+    if (CONTAINERS.has(q.key)) return null;
+    if (!q.parent || CONTAINERS.has(q.parent.key) || q.frame) return q;
+  }
+  return null;
+}
+
+function thingInfo(t) {
+  const hud = HUD[t.name] || Object.entries(HUD).find(([k]) => k.toLowerCase() === t.key)?.[1];
+  if (hud) return { kind: 'hud', id: t.name, name: hud.name, hud };
+  const win = WINDOWS[t.key];
+  if (win || t.frame) return { kind: 'window', id: t.key, name: win || prettify(t.name), file: schemeOf(t) };
+  return null;
+}
+const prettify = n => n.replace(/^Hud/, '').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/_/g, ' ').trim() || n;
+
+// ---------- selection ----------
+let selected = null; // { thing: panel-like, info, control: panel|null }
+
+// A window's own .res file, where single controls get their own colours and positions.
+const UI_RES = { scores: 'resource/UI/scoreboard.res', specgui: 'resource/UI/spectator.res', specmenu: 'resource/UI/bottomspectator.res',
+  team: 'resource/UI/TeamMenu.res', class_ct: 'resource/UI/ClassMenu_CT.res', class_ter: 'resource/UI/ClassMenu_TER.res', info: 'resource/UI/TextWindow.res',
+  buy_ct: 'resource/UI/BuyMenu.res', buy_ter: 'resource/UI/BuyMenu.res' };
+// A HUD without the file starts from the game's own copy (written into the HUD on the first change).
+async function uiFile(path) {
+  if (!path) return null;
+  const have = F(path);
+  if (have) return have;
+  const text = (await readHud(path)) ?? (host ? await call('vanilla', path.split('/').pop()).catch(() => null) : null);
+  if (text == null) return null;
+  const f = { name: path, path, text, parsed: parse(text), bases: [] };
+  files.push(f);
+  return f;
+}
+
+// ---------- hiding window parts ----------
+// Windows set their parts' visibility themselves (the spectator bars show their labels whatever "visible" says),
+// so a part is hidden by moving it off screen, its position kept in "xpos_hudeditor" as for HUD parts. The
+// spectator bars are sized by the game from the file instead: the top bar keeps its height (0 hides it) and the
+// bottom bar reaches from its y position to the bottom of the screen (r0 hides it).
+const WINDOW_PARTS = { specgui: [['Top bar', 'topbar', 'tall', '0'], ['Bottom bar', 'bottombarblank', 'ypos', 'r0']] };
+const hideHow = block => {
+  const part = Object.values(WINDOW_PARTS).flat().find(([, b]) => b === block);
+  return part ? part.slice(2) : ['xpos', '9999'];
+};
+const partHidden = (f, block) => `${hideHow(block)[0]}_hudeditor` in layoutProps(f, block);
+function setPartHidden(f, block, hide) {
+  const [key, off] = hideHow(block), p = layoutProps(f, block);
+  if (hide === partHidden(f, block)) return;
+  if (hide) { save(f, `${key}_hudeditor`, p[key] || '0', block); save(f, key, off, block); }
+  else { save(f, key, p[`${key}_hudeditor`], block); save(f, `${key}_hudeditor`, null, block); }
+}
+const showRow = (f, block, label) => checkRow(label, !partHidden(f, block), on => { setPartHidden(f, block, !on); refreshSoon(); });
+// The window's own bars, plus every part hidden here (they can't be clicked in the preview any more).
+function windowPartRows(sel) {
+  const f = sel.res, parts = (WINDOW_PARTS[sel.info.id] || []).map(([label, block]) => [label.toLowerCase(), block]);
+  if (!f) return [];
+  for (const s of f.parsed.sections)
+    if (s.path.length === 2 && !parts.some(([, b]) => b === s.path[1]) && partHidden(f, s.path[1])) parts.push([prettify(s.path[1]), s.path[1]]);
+  return parts.map(([label, block]) => showRow(f, block, `Show ${label}`));
+}
+
+// ---------- scoreboard: everything it draws, in one place ----------
+// Its fonts are ClientScheme's: the .res names most of them, the game picks ScoreboardBody_1-3 for player rows
+// (the smaller ones for long names) and ScoreboardMVP.
+const SCOREBOARD_TEXT = [
+  ['Map, server, stats and clock', ['MapName', 'ServerNameLabel', 'StatsStatus', 'WinConditionLabel', 'Icon_Clock']],
+  ['CT name, score and players alive', ['CT_Label', 'CTTeamScore', 'CTPlayersAlive', 'CTPlayersAliveSuffix']],
+  ['T name, score and players alive', ['T_Label', 'TTeamScore', 'TPlayersAlive', 'TPlayersAliveSuffix']],
+  ['CT column titles', ['CTClanLabel', 'CTPlayerLabel', 'CTPlayerScoreLabel', 'CTPlayerDeathsLabel', 'CTPlayerLatencyLabel']],
+  ['T column titles', ['TClanLabel', 'TPlayerLabel', 'TPlayerScoreLabel', 'TPlayerDeathsLabel', 'TPlayerLatencyLabel']],
+  ['Spectators and SourceTV', ['Spectators', 'SourceTV']],
+];
+const SCOREBOARD_FONTS = [['ScoreboardHeader', 'map, server, stats, time'], ['IconsSmall', 'clock icon'], ['ScoreboardTeamName', 'team names'],
+  ['ScoreboardScore', 'team scores'], ['ScoreboardPlayersAlive', 'players alive count'], ['ScoreboardPlayersAliveSuffix', '"Players Alive"'],
+  ['ScoreboardColumns', 'column titles'], ['ScoreboardBody_1', 'player rows, spectators'], ['ScoreboardBody_2', 'names too long for Body_1'],
+  ['ScoreboardBody_3', 'names too long for Body_2'], ['ScoreboardMVP', 'MVP star count']];
+// Player rows ignore the .res: their colours are the player's own game settings (cl_scoreboard_*_color_red/green/blue,
+// kept in config.cfg), checked in game. [label, cvar prefix, the game's default]
+const SCOREBOARD_CVARS = [['CT players', 'cl_scoreboard_ct_color', '150 200 255'], ['T players', 'cl_scoreboard_t_color', '240 90 90'],
+  ['Dead players', 'cl_scoreboard_dead_color', '125 125 125'], ['CT clan tags', 'cl_scoreboard_clan_ct_color', '150 200 255'],
+  ['T clan tags', 'cl_scoreboard_clan_t_color', '240 90 90'], ['Dead clan tags', 'cl_scoreboard_dead_clan_color', '125 125 125']];
+// The .res only has the first row of each team, as a template the game copies for every player.
+const PLAYER_ROW = /^(CT|T)Player(Avatar|Clan|Name|Status|Score|Deaths|Latency)0$/i;
+let cvarValues = null; // from config.cfg (it only lists values that aren't the default) and what the editor set since
+async function loadCvars() {
+  if (cvarValues) return;
+  const cfg = await call('config').catch(() => '');
+  cvarValues = {};
+  for (const m of cfg.matchAll(/^\s*(cl_scoreboard_\w+)\s+"?(\d+)/gm)) cvarValues[m[1].toLowerCase()] = m[2];
+}
+const RGB = ['red', 'green', 'blue'];
+const cvarColour = (prefix, def) => RGB.map((c, i) => (cvarValues || {})[`${prefix}_${c}`] ?? def.split(' ')[i]).join(' ') + ' 255';
+function setCvarColour(prefix, rgba) {
+  const rgb = rgba.split(' ');
+  RGB.forEach((c, i) => { cvarValues[`${prefix}_${c}`] = rgb[i]; });
+  call('cmd', '', RGB.map((c, i) => `${prefix}_${c} ${rgb[i]}`).join('; '));
+}
+
+// The game's background is a picture (materials/vgui/scoreboard/panel-scoreboard). The editor can add a box of its own
+// behind everything instead (zpos -1): any colour, square or rounded.
+const SB_BOX = 'HudEditorBackground';
+
+// Your own row's highlight: the game draws the image vgui/scoreboard/scoreboard-select (an orange frame) behind it. A
+// HUD can have its own material of that name; this one is a flat see-through colour (vgui/white, tinted), reloaded live.
+const SB_SELECT = 'materials/vgui/scoreboard/scoreboard-select.vmt';
+let sbSelect = null, sbTimer = null; // the HUD's material text (null: the game's own)
+async function loadSbSelect() { sbSelect = await readHud(SB_SELECT); }
+function sbSelectColour() {
+  const c = sbSelect && /"\$color"\s+"\[\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)\s*\]"/.exec(sbSelect), a = sbSelect && /"\$alpha"\s+"([\d.]+)"/.exec(sbSelect);
+  return c ? `${[1, 2, 3].map(i => Math.round(c[i] * 255)).join(' ')} ${Math.round((a ? +a[1] : 1) * 255)}` : null;
+}
+function setSbSelect(rgba) {
+  const [r, g, b, a] = toRgba(rgba), n = x => (x / 255).toFixed(3);
+  sbSelect = `// Your own row's highlight on the scoreboard, made by the HUD editor\nUnlitGeneric\n{\n\t"$basetexture"\t"vgui/white"\n`
+    + `\t"$color"\t"[${n(r)} ${n(g)} ${n(b)}]"\n\t"$alpha"\t"${n(a)}"\n\t"$translucent"\t"1"\n\t"$vertexcolor"\t"1"\n\t"$vertexalpha"\t"1"\n}\n`;
+  const text = sbSelect;
+  clearTimeout(sbTimer);
+  sbTimer = setTimeout(() => {
+    writing = writing.then(async () => {
+      try {
+        await call('write', SB_SELECT, text);
+        await call('cmd', '', 'mat_reloadmaterial scoreboard-select');
+        setDirty(true);
+      } catch (err) { status(`Couldn't apply: ${err.message}`); }
+    });
+  }, 250);
+}
+function scoreboardSections(sel, shownFonts) {
+  const f = sel.res, cs = F(C), t = cs ? tables(cs) : EMPTY_TABLES;
+  if (!f) return [];
+  const box = layoutProps(f, SB_BOX), hasBox = Object.keys(box).length > 0, boxOn = hasBox && box.visible !== '0';
+  const bg = layoutProps(f, 'ScoreboardBackground');
+  const background = [showRow(f, 'ScoreboardBackground', 'Show the game\'s background picture'),
+    checkRow('Colour box behind the scoreboard', boxOn, on => {
+      if (hasBox) save(f, 'visible', on ? '1' : '0', SB_BOX);
+      else save(f, SB_BOX, [['ControlName', 'EditablePanel'], ['fieldName', SB_BOX], ['xpos', bg.xpos_hudeditor || bg.xpos || 'c-300'], ['ypos', bg.ypos || 'c-186'],
+        ['zpos', '-1'], ['wide', bg.wide || '600'], ['tall', bg.tall || '372'], ['visible', '1'], ['enabled', '1'], ['paintbackground', '1'],
+        ['paintbackgroundtype', '2'], ['bgcolor_override', '0 0 0 200']], []);
+      refreshSoon();
+    })];
+  if (boxOn) {
+    background.push(colorRow('Box colour', 'The editor\'s own box (HudEditorBackground)', box.bgcolor_override || '0 0 0 200', v => save(f, 'bgcolor_override', v, SB_BOX), ['bgcolor_override']),
+      checkRow('Rounded corners', box.paintbackgroundtype === '2', on => save(f, 'paintbackgroundtype', on ? '2' : '0', SB_BOX)),
+      checkRow('Outline', box.paintborder === '1', on => setOutline(f, SB_BOX, on)));
+    if (box.paintborder === '1') background.push(...borderRows(C, OUTLINE));
+    for (const [k, label] of POS) background.push(numRow(f, SB_BOX, k, `Box ${label.toLowerCase()}`, box[k]));
+  }
+  const text = SCOREBOARD_TEXT.map(([label, blocks]) => {
+    const v = resolve(t, layoutProps(f, blocks[0]).fgcolor_override || '') || '255 255 255 255';
+    return colorRow(label, '', v, v2 => blocks.forEach(b => save(f, 'fgcolor_override', v2, b)), ['fgcolor_override']);
+  });
+  const rows = [colorRow('Your own row', 'The highlight behind your name (a material in the HUD)', sbSelectColour() || '255 160 0 255', setSbSelect, ['scoreboard-select']),
+    noteRow('The name colours below are your own game settings, not part of the HUD: the game keeps them in config.cfg.'),
+    ...SCOREBOARD_CVARS.map(([label, prefix, def]) => {
+      const now = cvarColour(prefix, def), reset = () => { setCvarColour(prefix, `${def} 255`); refreshSoon(); };
+      const r = colorRow(label, prefix, now, v => setCvarColour(prefix, v), [], now === `${def} 255` ? null : reset);
+      r.querySelector('input[type=range]').hidden = true; // no opacity
+      return r;
+    })];
+  const fonts = SCOREBOARD_FONTS.filter(([name]) => !shownFonts.includes(name) && hasFont(C, name)).map(([name, what]) => fontFold(C, name, what));
+  return [['Scoreboard: background', background], ['Scoreboard: text colours', text], ['Scoreboard: player rows', rows], ['Scoreboard: fonts', fonts]];
+}
+
+async function select(sel) {
+  // loaded before it becomes the selection: the panel poll copies the selection, and a copy made while this waited
+  // would never get the file
+  if (sel) sel.res = await uiFile(UI_RES[sel.thing.key]);
+  if (sel && sel.thing.key === 'scores') await Promise.all([loadCvars(), loadSbSelect()]);
+  selected = sel;
+  render();
+  drawBoxes();
+  $('list').scrollTop = 0;
+}
+
+// Where a HUD part can be clicked: its panel, or its "hit" areas (one, or a list) when the panel is bigger than what it
+// draws, or ("fit") the area its child panels cover: the hint box is a label sized to the text in a much larger panel.
+function clickRects(p, info, W, H) {
+  if (p !== p.thing || !info.hud) return [p];
+  if (info.hud.hit) return (Array.isArray(info.hud.hit[0]) ? info.hud.hit : [info.hud.hit]).map(h => rectOf({}, W, H, h));
+  const kids = info.hud.fit && live ? live.panels.filter(q => q.parent === p && q.w * q.h > 0) : [];
+  if (!kids.length) return [p];
+  const x = Math.min(...kids.map(q => q.x)), y = Math.min(...kids.map(q => q.y));
+  return [{ x, y, w: Math.max(...kids.map(q => q.x + q.w)) - x, h: Math.max(...kids.map(q => q.y + q.h)) - y }];
+}
+
+// Click in the preview: the smallest panel under the mouse, skipping containers and fullscreen overlays.
+function pickAt(fx, fy) {
+  if (!live) {
+    const b = boxList().boxes.filter(b => fx >= b.r.x / boxList().W && fx <= (b.r.x + b.r.w) / boxList().W && fy >= b.r.y / boxList().H && fy <= (b.r.y + b.r.h) / boxList().H)
+      .sort((a, b) => a.r.w * a.r.h - b.r.w * b.r.h)[0];
+    return b ? { thing: b.thing, info: b.info, control: null } : null;
+  }
+  const x = fx * live.W, y = fy * live.H;
+  let best = null;
+  for (const p of live.panels) {
+    if (!p.thing || CONTAINERS.has(p.key) || p.key.startsWith('frame_') && p.key.endsWith('grip')) continue;
+    const info = thingInfo(p.thing);
+    if (!info || (p === p.thing && NO_CLICK.has(p.key))) continue;
+    const r = clickRects(p, info, live.W, live.H).find(r => x >= r.x && y >= r.y && x <= r.x + r.w && y <= r.y + r.h);
+    if (!r) continue;
+    const area = r.w * r.h, layer = p.module === 'ClientDLL' ? 0 : 1; // menus and the console draw above the HUD
+    if (area > 0.9 * live.W * live.H && p !== p.thing) continue;
+    if (!best || layer > best.layer || (layer === best.layer && area < best.area)) best = { p, info, area, layer, r };
+  }
+  if (!best) return null;
+  // the control is the nearest panel (clicked one or a parent) that is a known control type; not inside HUD parts (but
+  // the chat: its filter button, scroll bar and history) or the main menu
+  let c = best.p;
+  while (c && c !== best.p.thing && !controlOf(c.cls)) c = c.parent;
+  const control = (best.info.kind === 'window' && best.info.id !== 'gamemenu' || best.info.id === 'HudChat') && c && c !== best.p.thing ? c : null;
+  return { thing: best.p.thing, info: best.info, control, node: best.p !== best.p.thing ? best.p : null, r: best.r };
+}
+
+// ---------- list ----------
+function colorRow(label, note, value, onChange, keys = [], onReset = null) {
+  const rgba = toRgba(value);
+  const row = document.createElement('div');
+  row.className = 'row';
+  row.innerHTML = `<input type="color" value="${toHex(rgba)}"><div><div></div><div class="meta"></div></div>
+    <input type="range" min="0" max="255" value="${rgba[3]}" title="Opacity">`;
+  const [color, alpha] = row.querySelectorAll('input');
+  color.setAttribute('aria-label', `${label} colour`);
+  alpha.setAttribute('aria-label', `${label} opacity`);
+  row.children[1].firstElementChild.textContent = label;
+  row.querySelector('.meta').textContent = note;
+  if (keys.length) row.querySelector('.meta').append(el('span', { className: 'setting', textContent: keys.join(' + ') }));
+  if (onReset) row.children[1].firstElementChild.append(el('button', { className: 'reset', textContent: 'Default', title: 'Back to the default colour', onclick: onReset }));
+  color.oninput = alpha.oninput = () => onChange(fromHex(color.value, +alpha.value));
+  row.dataset.q = `${label} ${note} ${keys.join(' ')}`.toLowerCase();
+  return row;
+}
+
+const ANCHOR = { xpos: { '': 'from the left', r: 'from the right', c: 'from the centre' }, ypos: { '': 'from the top', r: 'from the bottom', c: 'from the centre' },
+  wide: { '': '', f: 'less than full width' }, tall: { '': '', f: 'less than full height' } };
+
+function numRow(lay, id, key, label, raw) {
+  const m = /^\s*([rcf]?)\s*(-?[\d.]+)\s*$/i.exec(raw || '0') || [0, '', '0'];
+  const prefix = m[1].toLowerCase();
+  const row = document.createElement('div');
+  row.className = 'row num';
+  row.innerHTML = `<div></div><input type="number" step="1" value="${m[2]}"><div class="meta"></div>`;
+  row.firstElementChild.textContent = label;
+  row.lastElementChild.textContent = ANCHOR[key][prefix] || '';
+  const input = row.querySelector('input');
+  input.setAttribute('aria-label', label);
+  input.oninput = () => { if (input.value !== '') save(lay, key, prefix + input.value, id); };
+  row.dataset.q = `${label} position size`.toLowerCase();
+  return row;
+}
+
+function selectRow(label, options, value, onChange, keys = []) {
+  const row = el('div', { className: 'row pick' }), sel = el('select');
+  for (const [v, text] of options) sel.append(el('option', { value: v, textContent: text }));
+  sel.value = value;
+  sel.setAttribute('aria-label', label);
+  sel.onchange = () => onChange(sel.value);
+  row.append(el('div', { textContent: label }), sel, el('div', { className: 'meta' }));
+  if (keys.length) row.lastElementChild.append(el('span', { className: 'setting', textContent: keys.join(' + ') }));
+  row.dataset.q = `${label} ${keys.join(' ')}`.toLowerCase();
+  return row;
+}
+
+// 0-255 as a percentage slider.
+function rangeRow(label, value, onChange) {
+  const row = el('div', { className: 'row num' }), input = el('input', { type: 'range', min: 0, max: 255, value: +value || 0 });
+  const pct = el('div', { className: 'meta', textContent: `${Math.round(input.value / 2.55)}%` });
+  input.setAttribute('aria-label', label);
+  input.oninput = () => { pct.textContent = `${Math.round(input.value / 2.55)}%`; onChange(input.value); };
+  row.append(el('div', { textContent: label }), input, pct);
+  row.dataset.q = label.toLowerCase();
+  return row;
+}
+
+function noteRow(text) {
+  const row = el('div', { className: 'row note meta', textContent: text });
+  row.dataset.q = '';
+  return row;
+}
+
+function checkRow(label, checked, onChange) {
+  const row = document.createElement('label');
+  row.className = 'row check';
+  row.innerHTML = `<input type="checkbox"${checked ? ' checked' : ''}><div></div>`;
+  row.lastElementChild.textContent = label;
+  row.firstElementChild.onchange = e => onChange(e.target.checked);
+  row.dataset.q = label.toLowerCase();
+  return row;
+}
+
+// Rows for scheme colours [label, keys, note] in one scheme file.
+// What each scheme colour paints, in plain words (shown under its name when the list gives no note of its own).
+const DESCRIBE = {
+  'button.textcolor': 'Button text while nothing is happening to it',
+  'button.bgcolor': 'Button fill while nothing is happening to it',
+  'button.armedtextcolor': 'Button text while the mouse is over it',
+  'button.armedbgcolor': 'Button fill while the mouse is over it',
+  'button.depressedtextcolor': 'Button text while it is being clicked',
+  'button.depressedbgcolor': 'Button fill while it is being clicked',
+  'label.textcolor': 'Normal text: titles, descriptions, names',
+  'label.textdullcolor': 'Faded text (text set to "dulltext" in its .res)',
+  'label.textbrightcolor': 'Highlighted text (text set to "brighttext" in its .res)',
+  'label.bgcolor': 'Box behind text; usually left invisible',
+  'richtext.textcolor': 'Text in scrolling text boxes (MOTD, chat history)',
+  'richtext.bgcolor': 'Background of scrolling text boxes',
+  'richtext.selectedtextcolor': 'Text you have highlighted with the mouse',
+  'richtext.selectedbgcolor': 'Highlight behind text you have selected',
+  'textentry.textcolor': 'Text in boxes you can type in',
+  'textentry.bgcolor': 'Background of boxes you can type in',
+  'textentry.cursorcolor': 'The blinking typing cursor',
+  'textentry.selectedtextcolor': 'Text you have highlighted in a typing box',
+  'textentry.selectedbgcolor': 'Highlight behind selected typing-box text',
+  'textentry.disabledtextcolor': 'Text in boxes you can\'t type in (e.g. a plain-text MOTD)',
+  'listpanel.textcolor': 'Row text in lists like the server browser',
+  'listpanel.bgcolor': 'Background of lists',
+  'listpanel.selectedtextcolor': 'Text of the row you clicked',
+  'listpanel.selectedbgcolor': 'Highlight on the row you clicked',
+  'sectionedlistpanel.textcolor': 'Row text in grouped lists',
+  'sectionedlistpanel.brighttextcolor': 'Bright row text in grouped lists',
+  'sectionedlistpanel.headertextcolor': 'Group headings in grouped lists',
+  'sectionedlistpanel.bgcolor': 'Background of grouped lists',
+  'sectionedlistpanel.selectedtextcolor': 'Text of the selected row',
+  'sectionedlistpanel.selectedbgcolor': 'Highlight on the selected row',
+  'menu.textcolor': 'Items in drop-down and right-click menus',
+  'menu.bgcolor': 'Background of drop-down and right-click menus',
+  'menu.armedtextcolor': 'Menu item under the mouse',
+  'menu.armedbgcolor': 'Highlight on the menu item under the mouse',
+  'comboboxbutton.arrowcolor': 'Arrow on drop-down boxes',
+  'comboboxbutton.armedarrowcolor': 'Arrow on drop-down boxes while the mouse is over it',
+  'comboboxbutton.bgcolor': 'Box around the drop-down arrow',
+  'scrollbarbutton.fgcolor': 'Arrows at the ends of scroll bars',
+  'scrollbarbutton.bgcolor': 'Buttons at the ends of scroll bars',
+  'scrollbarslider.fgcolor': 'The part of the scroll bar you drag',
+  'scrollbarslider.bgcolor': 'The groove the scroll bar slides in',
+  'checkbutton.textcolor': 'Checkbox labels',
+  'checkbutton.check': 'The tick inside checkboxes',
+  'checkbutton.bgcolor': 'The checkbox square',
+  'radiobutton.textcolor': 'Option labels (pick-one lists)',
+  'radiobutton.selectedtextcolor': 'The chosen option\'s label',
+  'propertysheet.textcolor': 'Tab names',
+  'propertysheet.selectedtextcolor': 'The open tab\'s name',
+  'progressbar.fgcolor': 'Filled part of progress bars',
+  'progressbar.bgcolor': 'Empty part of progress bars',
+  'slider.nobcolor': 'The knob you drag on sliders',
+  'slider.textcolor': 'Numbers and labels on sliders',
+  'slider.trackcolor': 'The line sliders move along',
+  'frame.bgcolor': 'Background of the whole window',
+  'frame.outoffocusbgcolor': 'Window background while another window is in front of it',
+  'frametitlebar.textcolor': 'Window title text',
+  'frametitlebar.bgcolor': 'Strip behind the window title',
+  'border.bright': 'Outline around windows and buttons',
+  'bgcolor': 'Dark backdrop behind team select and the MOTD',
+};
+
+function schemeRows(file, list, after = null) {
+  const f = F(file);
+  if (!f) return [];
+  const t = tables(f);
+  return list.map(([label, keys, note = '']) => {
+    const ks = keys.split('|'), value = resolve(t, ks[0]);
+    // values the HUD sets itself can go back to the default one from its #base file
+    const own = f.parsed.entries.filter(e => e.path.length === 2 && /^(colors|basesettings)$/i.test(e.path[1]) && ks.some(k => k.toLowerCase() === e.key.toLowerCase()));
+    const reset = own.length && f.bases.length ? () => { own.forEach(e => save(f, e.key, null, [e.path[1]])); refreshSoon(); } : null;
+    return value && colorRow(label, note || DESCRIBE[ks[0].toLowerCase()] || '', value, v => { ks.forEach(k => save(f, k, v)); if (after) after(ks); }, ks, reset);
+  }).filter(Boolean);
+}
+
+// Rows for a HUD part: its colours, HudLayout colours, box and position/size.
+function hudRows(id, hud) {
+  // colours the part's own settings only take from the scheme at startup: name them in HudLayout so a reload looks again
+  const link = ks => {
+    const lay = F(L), p = lay ? layoutProps(lay, id) : {};
+    for (const [v, k] of Object.entries(hud.links || {})) if (ks.includes(k) && (p[v.toLowerCase()] || '').toLowerCase() !== k.toLowerCase()) save(lay, v, k, id);
+  };
+  const rows = [...(hud.fixed ? [noteRow(hud.fixed)] : []), ...schemeRows(hud.scheme || C, hud.colours || [], hud.links ? link : null)];
+  const lay = F(L), cs = F(C), t = cs ? tables(cs) : EMPTY_TABLES;
+  if (!lay) return rows;
+  const p = layoutProps(lay, id);
+  for (const [label, key, fallback] of hud.layoutColours || []) {
+    const v = resolve(t, p[key.toLowerCase()] || fallback);
+    if (v) rows.push(colorRow(label, ` for this part only`, v, v2 => save(lay, key, v2, id), [key]));
+  }
+  if (canHide(id)) rows.unshift(...visibilityRows(id));
+  // hud.rounded: the game draws the box itself, always rounded (the chat, the timer, weapon selection); only its corner
+  // textures change its look, and its colour is listed above. Those boxes don't fill their panel, so an outline (round
+  // the panel) isn't offered there, only shown to turn one off.
+  if ('paintbackgroundtype' in p || hud.rounded) rows.push(...boxRows(lay, id, p, t, !hud.rounded, hud.rounded), ...outlineRows(lay, id, p, !hud.rounded));
+  for (const [k, label] of [['xpos', 'X position'], ['ypos', 'Y position'], ['wide', 'Width'], ['tall', 'Height']])
+    if (k in p) rows.push(numRow(lay, id, k, label, p[k]));
+  return rows;
+}
+
+// ---------- hiding HUD parts ----------
+// "alpha" fades a part and everything in it (0 hides it). The game animates the alpha of these itself
+// (hudanimations.txt), so they are hidden by moving them off screen instead, keeping their position in
+// "xpos_hudeditor" (a key the game ignores). Values stay in a running game until set again, so showing a part
+// writes alpha 255 rather than removing the key.
+const SELF_FADING = new Set(['HudHintDisplay', 'HudHintKeyDisplay', 'HudWeaponSelection', 'HudMenu', 'HudHistoryResource']);
+const isHidden = id => { const p = layoutProps(F(L), id); return SELF_FADING.has(id) ? 'xpos_hudeditor' in p : p.alpha !== undefined && +p.alpha === 0; };
+// Only parts HudLayout sets up can be hidden this way (the centre print isn't one of them).
+const canHide = id => !!F(L) && Object.keys(layoutProps(F(L), id)).length > 0;
+
+function setHidden(id, hide) {
+  const lay = F(L), p = layoutProps(lay, id);
+  if (!SELF_FADING.has(id)) return save(lay, 'alpha', hide ? '0' : '255', id);
+  if (hide === 'xpos_hudeditor' in p) return;
+  if (hide) { save(lay, 'xpos_hudeditor', p.xpos || '0', id); save(lay, 'xpos', '9999', id); }
+  else { save(lay, 'xpos', p.xpos_hudeditor, id); save(lay, 'xpos_hudeditor', null, id); }
+}
+
+// After a change that alters which rows or tags show: redraw once it's written.
+const refreshSoon = async () => { await sleep(400); await writing; render(); drawBoxes(); };
+
+function visibilityRows(id) {
+  const lay = F(L), p = layoutProps(lay, id), rows = [checkRow('Show on screen', !isHidden(id), on => { setHidden(id, !on); refreshSoon(); })];
+  if (SELF_FADING.has(id)) rows.push(noteRow('The game fades this one in and out itself, so it can only be shown or hidden.'));
+  else rows.push(rangeRow('Opacity', p.alpha ?? '255', v => save(lay, 'alpha', v, id)));
+  return rows;
+}
+
+// ---------- box backgrounds ----------
+// PaintBackgroundType: 0 square, 2 rounded, 3 fading from solid on the left to clear on the right (1 stretches
+// Texture1 over the box). RoundedCorners picks the corners (1 top-left, 2 top-right, 4 bottom-left, 8 bottom-right).
+// Corners are drawn with Texture1-4 (top-left, top-right, bottom-right, bottom-left) at a fixed size, so other
+// textures change their shape; the editor makes those textures inside the HUD.
+const ROUND_CORNERS = 'vgui/hud/8x800corner';
+const CORNER_SHAPES = [['round', 'Round'], ['tight', 'Tighter curve'], ['bevel', 'Cut off (bevel)'], ['scoop', 'Scooped in'], ['square', 'Square (no curve)']];
+function cornerShape(p) {
+  const t = (p.texture1 || '').toLowerCase();
+  if (!t || t.startsWith(ROUND_CORNERS)) return 'round';
+  const m = /^vgui\/hudeditor\/(\w+)_corner1$/.exec(t);
+  return m && CORNER_SHAPES.some(([k]) => k === m[1]) ? m[1] : 'custom';
+}
+
+// Boxes the game rounds with its own corner image, vgui/hud/8x800corner1-4 (the timer's box, which HudLayout can't
+// reach, and every box left at the default corners), go square when the HUD has its own material of that name that
+// is plain white, tinted with the box colour like the real one. Off, it points back at the game's image.
+const CORNER_VMT = n => `materials/vgui/hud/8x800corner${n}.vmt`;
+let squareAll = false;
+function setSquareAll(on) {
+  squareAll = on;
+  writing = writing.then(async () => {
+    try {
+      for (let n = 1; n <= 4; n++) await call('write', CORNER_VMT(n), `"UnlitGeneric"\n{\n\t"$basetexture" "${on ? 'vgui/white' : `vgui/hud/8x800corner${n}`}"\n`
+        + '\t"$translucent" "1"\n\t"$vertexcolor" "1"\n\t"$vertexalpha" "1"\n\t"$ignorez" "1"\n\t"$no_fullbright" "1"\n}\n');
+      await call('cmd', '', 'mat_reloadmaterial 8x800corner');
+      setDirty(true);
+      status('Changed in game. Click Done or Save HUD to keep it.');
+    } catch (err) { status(`Couldn't apply: ${err.message}`); }
+  });
+}
+
+async function setCornerShape(lay, id, shape) {
+  try {
+    const base = shape === 'round' ? ROUND_CORNERS : await call('corners', shape);
+    for (let i = 1; i <= 4; i++) save(lay, `Texture${i}`, base + i, id);
+  } catch (err) {
+    status(err.message);
+  }
+}
+
+function boxRows(lay, id, p, t, withBg = true, rounded = false) {
+  const bg = (p.bgcolor_override && resolve(t, p.bgcolor_override)) || resolve(t, 'Panel.BgColor') || '0 0 0 0';
+  const shape = rounded ? '2' : p.paintbackgroundtype || '0', rows = withBg ? [colorRow('Box background', 'The box drawn behind this part only', bg, v => save(lay, 'bgcolor_override', v, id), ['bgcolor_override'])] : [];
+  const shapes = [['0', 'Square'], ['2', 'Rounded corners'], ['3', 'Fade (solid left, clear right)']];
+  if (!shapes.some(([k]) => k === shape)) shapes.push([shape, 'As the HUD has it']);
+  // rounded: the game's code sets the shape itself; its corners can still be made square with their textures
+  rows.push(rounded ? noteRow('The game always draws this box with rounded corners. "Square corners on every box" below makes them square.')
+    : selectRow('Box shape', shapes, shape, v => { save(lay, 'PaintBackgroundType', v, id); refreshSoon(); }, ['PaintBackgroundType']));
+  if (shape !== '2' && shape !== '3') return rows;
+  rows.push(checkRow('Square corners on every box in the HUD (the game\'s own corner image)', squareAll, setSquareAll));
+  let bits = p.roundedcorners !== undefined ? +p.roundedcorners : 15;
+  if (shape === '2') // the fade draws all four corners whatever RoundedCorners says
+    for (const [bit, label] of [[1, 'Top left'], [2, 'Top right'], [4, 'Bottom left'], [8, 'Bottom right']])
+      rows.push(checkRow(`${label} corner rounded`, bits & bit, on => { bits = on ? bits | bit : bits & ~bit; save(lay, 'RoundedCorners', String(bits), id); }));
+  const cs = cornerShape(p), opts = cs === 'custom' ? [...CORNER_SHAPES, ['custom', 'The HUD\'s own textures']] : CORNER_SHAPES;
+  rows.push(selectRow('Corner shape', opts, cs, v => { if (v !== 'custom') setCornerShape(lay, id, v); }, ['Texture1-4']));
+  return rows;
+}
+
+// An outline round a HUD part's box: HudLayout "border" names a ClientScheme border (every panel reads it from its
+// settings) and "paintborder" turns it on or off. One border, HudEditorOutline, is shared by every outlined part.
+// Borders are square, so they suit square boxes.
+const OUTLINE = 'HudEditorOutline';
+function outlineRows(lay, id, p, offer = true) {
+  const on = p.paintborder === '1' && (p.border || '').toLowerCase() === OUTLINE.toLowerCase();
+  if (!offer && !on) return [];
+  const rows = [checkRow('Outline', on, v => setOutline(lay, id, v))];
+  if (on && F(C)) rows.push(...borderRows(C, OUTLINE));
+  return rows;
+}
+// Turns the shared outline on or off for a block (a HudLayout part or a panel in a window .res), making the border
+// (a white line) the first time.
+function setOutline(f, block, on) {
+  if (on && borderOf(C, OUTLINE)?.name.toLowerCase() !== OUTLINE.toLowerCase())
+    save(F(C), OUTLINE, borderBody({ style: 'line', n: 1, light: '255 255 255 255', dark: '255 255 255 255' }, null), ['Borders']);
+  save(f, 'border', OUTLINE, block);
+  save(f, 'paintborder', on ? '1' : '0', block);
+  refreshSoon();
+}
+
+// ---------- borders ----------
+// Which borders each control asks its scheme for (vgui_controls sources), by CONTROLS key.
+const BORDER_USE = {
+  Button: [['Border', 'ButtonBorder'], ['Border while focused', 'ButtonKeyFocusBorder'], ['Border while pressed', 'ButtonDepressedBorder']],
+  TextEntry: [['Border', 'ButtonDepressedBorder']], ListPanel: [['Border', 'ButtonDepressedBorder']], SectionedListPanel: [['Border', 'ButtonDepressedBorder']],
+  ProgressBar: [['Border', 'ButtonDepressedBorder']], Menu: [['Border', 'MenuBorder']], MenuItem: [['Menu border', 'MenuBorder']],
+  ScrollBar: [['Arrow buttons', 'ScrollBarButtonBorder'], ['Arrow buttons while pressed', 'ScrollBarButtonDepressedBorder']],
+  ScrollBarSlider: [['Handle', 'ButtonBorder']], Slider: [['Knob', 'ButtonBorder'], ['Track', 'ButtonDepressedBorder']],
+  PropertySheet: [['Tabs', 'TabBorder'], ['Selected tab', 'TabActiveBorder'], ['Page', 'PropertySheetBorder']],
+  ComboBoxButton: [['Arrow button', 'ScrollBarButtonBorder']],
+};
+BORDER_USE.BuyMouseOverPanelButton = BORDER_USE.Button;
+// Everything else that asks for the same name, so it's clear what else an edit changes.
+const BORDER_SHARED = {
+  ButtonBorder: 'buttons, slider knobs, scroll bar handles', ButtonDepressedBorder: 'text fields, lists, progress bars, slider tracks',
+  ScrollBarButtonBorder: 'scroll bar arrows, drop-down arrows', MenuBorder: 'menus', FrameBorder: 'every window', HudEditorOutline: 'every HUD part with an outline',
+};
+const SIDES = ['Left', 'Top', 'Right', 'Bottom'];
+
+// What a border name comes to in a scheme file, as the game resolves it: the block it ends at (following names
+// that point at another border; undefined names fall back to BaseBorder), own file over #base.
+function borderOf(file, name) {
+  const f = F(file), low = s => s.toLowerCase();
+  if (!f) return null;
+  const isBlock = (p, n) => p.sections.some(s => s.path.length === 3 && low(s.path[1]) === 'borders' && low(s.path[2]) === low(n));
+  const aliasOf = (p, n) => p.entries.find(e => e.path.length === 2 && low(e.path[1]) === 'borders' && low(e.key) === low(n));
+  for (let n = name, hops = 0; hops < 8; hops++) {
+    let next = null;
+    for (const p of [f.parsed, ...f.bases]) {
+      if (isBlock(p, n)) return { name: n, ...readBorder(f, n) };
+      const a = aliasOf(p, n);
+      if (a) { next = a.value; break; }
+    }
+    if (!next && low(n) === 'baseborder') return null;
+    n = next || 'BaseBorder';
+  }
+  return null;
+}
+
+// A border block merged the way #base merges it: { props: {inset, backgroundtype...}, sides: {Left: [{color, offset}]...}, base: lines per side in #base }.
+function readBorder(f, n) {
+  const low = s => s.toLowerCase(), props = {}, sides = {}, base = {};
+  for (const s of SIDES) sides[s] = {}, base[s] = 0;
+  [...f.bases].reverse().concat([f.parsed]).forEach((p, i, all) => {
+    for (const e of p.entries) {
+      if (e.path.length < 3 || low(e.path[1]) !== 'borders' || low(e.path[2]) !== low(n)) continue;
+      if (e.path.length === 3) { props[low(e.key)] = e.value; continue; }
+      const side = SIDES.find(s => low(s) === low(e.path[3]));
+      if (e.path.length !== 5 || !side) continue;
+      (sides[side][e.path[4]] ||= {})[low(e.key)] = e.value;
+      if (i < all.length - 1) base[side] = Math.max(base[side], Object.keys(sides[side]).length);
+    }
+  });
+  for (const s of SIDES) sides[s] = Object.values(sides[s]);
+  return { props, sides, base };
+}
+
+// The border as a simple style: none, line (one colour all round), raised (light top-left, dark bottom-right) or
+// sunken (the other way round); custom when its lines follow none of these.
+function borderStyle(b, t) {
+  const col = l => resolve(t, l.color || '') || '0 0 0 0', lit = c => (c[0] * 299 + c[1] * 587 + c[2] * 114) / 1000;
+  const S = SIDES.map(s => (b ? b.sides[s] : []).filter(l => toRgba(col(l))[3] > 0));
+  const n = Math.max(0, ...S.map(s => s.length));
+  if (!n) return { style: 'none', n: 1, light: '255 255 255 255', dark: '0 0 0 255' };
+  const one = s => s.length === n && s.every(l => col(l) === col(s[0])) ? col(s[0]) : null;
+  const [l, t2, r, bot] = S.map(one);
+  if (l && l === t2 && r && r === bot) {
+    if (l === r) return { style: 'line', n, light: l, dark: l };
+    return lit(toRgba(l)) >= lit(toRgba(r)) ? { style: 'raised', n, light: l, dark: r } : { style: 'sunken', n, light: r, dark: l };
+  }
+  return { style: 'custom', n, light: l || t2 || '255 255 255 255', dark: r || bot || '0 0 0 255' };
+}
+
+// The block for a style. Lines #base has beyond the new thickness are written clear, or the merge would keep them.
+function borderBody(st, b) {
+  const n = st.style === 'none' ? 0 : Math.max(1, Math.min(8, +st.n || 1));
+  const colour = { Left: st.style === 'sunken' ? st.dark : st.light, Top: st.style === 'sunken' ? st.dark : st.light,
+    Right: st.style === 'raised' ? st.dark : st.light, Bottom: st.style === 'raised' ? st.dark : st.light };
+  const body = [['inset', `${n} ${n} ${n} ${n}`]];
+  if (b && b.props.backgroundtype) body.push(['backgroundtype', b.props.backgroundtype]);
+  for (const s of SIDES) {
+    const count = Math.max(n, b ? b.base[s] : 0);
+    if (count) body.push([s, Array.from({ length: count }, (_, i) => [String(i + 1), [['color', i < n ? colour[s] : '0 0 0 0'], ['offset', '0 0']]])]);
+  }
+  return body;
+}
+
+// The resolved border copied as-is, with some top-level values changed (e.g. backgroundtype).
+function copyBorder(b, change) {
+  const props = { ...(b ? b.props : {}), ...change };
+  const body = Object.entries(props).map(([k, v]) => [k, v]);
+  for (const s of SIDES) if (b && b.sides[s].length) body.push([s, b.sides[s].map((l, i) => [String(i + 1), Object.entries(l)])]);
+  return body;
+}
+
+function borderRows(file, name) {
+  const f = F(file), t = tables(f), b = borderOf(file, name), cur = borderStyle(b, t);
+  // the block as it is when written: another row (window corners) may have changed it since this list was drawn
+  const write = () => save(f, name, () => {
+    const now = borderOf(file, name);
+    return borderBody(cur, now && now.name.toLowerCase() === name.toLowerCase() ? now : { props: now ? now.props : {}, base: readBorder(f, name).base });
+  }, ['Borders']);
+  const styles = [['none', 'None'], ['line', 'Line'], ['raised', 'Raised (light top and left)'], ['sunken', 'Sunken (dark top and left)']];
+  if (cur.style === 'custom') styles.push(['custom', 'As the HUD has it']);
+  const shared = BORDER_SHARED[name] ? `Also changes ${BORDER_SHARED[name]}. ` : '';
+  const via = b && b.name.toLowerCase() !== name.toLowerCase() ? `Now the same as ${b.name}; changing it gives this its own. ` : '';
+  const rows = [selectRow('Style', styles, cur.style, v => { if (v === 'custom') return; cur.style = v; write(); refreshSoon(); }, [name])];
+  if (shared || via) rows.push(noteRow(via + shared));
+  if (cur.style === 'none' || cur.style === 'custom') return rows;
+  rows.push(inputRow('Thickness', String(cur.n), v => { cur.n = v; write(); }, { type: 'number', min: 1, max: 8, step: 1, title: 'pixels' }));
+  if (cur.style === 'line') rows.push(colorRow('Colour', 'All four sides', cur.light, v => { cur.light = cur.dark = v; write(); }, [name]));
+  else {
+    const top = cur.style === 'raised' ? 'Top and left' : 'Bottom and right', bottom = cur.style === 'raised' ? 'Bottom and right' : 'Top and left';
+    rows.push(colorRow('Light edge', top, cur.light, v => { cur.light = v; write(); }, [name]),
+      colorRow('Dark edge', bottom, cur.dark, v => { cur.dark = v; write(); }, [name]));
+  }
+  return rows;
+}
+
+// Square or rounded windows: FrameBorder's backgroundtype. Where FrameBorder isn't its own block, it becomes one
+// copied from what windows use now, so they keep their edge lines.
+function windowCornerRow(file) {
+  const f = F(file), b = borderOf(file, 'FrameBorder');
+  return selectRow('Window corners', [['2', 'Rounded'], ['0', 'Square']], b && b.props.backgroundtype === '2' ? '2' : '0',
+    v => save(f, 'FrameBorder', () => copyBorder(borderOf(file, 'FrameBorder'), { backgroundtype: v }), ['Borders']), ['FrameBorder']);
+}
+
+// The control type, in context: the buy menu's buttons are the same class as team select's but draw text with Label.TextColor.
+function controlIn(p, thing) {
+  if (p.cls === 'MouseOverButton' && thing && thing.key.startsWith('buy')) return CONTROLS.find(([k]) => k === 'BuyMouseOverPanelButton');
+  // a scroll bar's arrows report themselves as plain Buttons but draw with the scroll bar's colours
+  if (p.cls === 'Button' && p.parent && p.parent.cls.endsWith('ScrollBar')) return controlOf(p.parent.cls);
+  return controlOf(p.cls);
+}
+
+// The clicked control's own block in the window's .res file (walking up to its parents if it has none).
+// Rows made from a template get their own names (scoreboard: block "CTPlayerName0" -> panel "_CT_playername0",
+// "CTPlayerLatency0" -> "_CT_playerping0"), so names are compared without case or underscores.
+function ownBlock(sel) {
+  const norm = s => s.toLowerCase().replace(/_/g, '').replace('ping', 'latency');
+  const blocks = sel.res.parsed.sections.filter(s => s.path.length === 2).map(s => s.path[1]);
+  for (let p = sel.node; p && p !== sel.thing; p = p.parent) {
+    const block = p.name && blocks.find(b => norm(b) === norm(p.name));
+    if (!block) continue;
+    const ctl = controlIn(p, sel.thing);
+    return { block, ctl: ctl && ctl[0], what: ctl ? ctl[1].toLowerCase() : p.cls.endsWith('ImagePanel') ? 'image' : 'part', defaults: ctl ? ctl[2] : [] };
+  }
+  return null;
+}
+
+const POS = [['xpos', 'X position'], ['ypos', 'Y position'], ['wide', 'Width'], ['tall', 'Height']];
+
+// A single control's settings in a window .res: its own text/background/fill colour (falling back to the
+// scheme colour it would otherwise use) and position/size.
+const OWN_NOTE = { fgcolor_override: 'Text colour of just this one; overrides the shared colour below',
+  bgcolor_override: 'Background of just this one; overrides the shared colour below', fillcolor: 'Colour this shape or image is filled with' };
+function resRows(f, block, defaults, schemeFile, ctl) {
+  const p = layoutProps(f, block), sf = F(schemeFile), t = sf ? tables(sf) : EMPTY_TABLES, rows = [];
+  const def = label => { const d = defaults.find(([l]) => l === label); return d && resolve(t, d[1]); };
+  const own = (key, label, fallback) => {
+    const v = (p[key] && resolve(t, p[key])) || fallback;
+    if (v) rows.push(colorRow(label, OWN_NOTE[key], v, v2 => save(f, key, v2, block), [key]));
+  };
+  rows.push(showRow(f, block, 'Show on screen'));
+  if (PLAYER_ROW.test(block)) rows.push(noteRow('Player rows are placed like this, but coloured from Scoreboard: player rows below.'));
+  else {
+    own('fgcolor_override', 'Text', def('Text'));
+    own('bgcolor_override', 'Background', def('Background'));
+    if ('fillcolor' in p) own('fillcolor', 'Fill', null);
+    // which font this one control draws with: any font in its scheme (the game reads "font" from the .res)
+    const deflt = CONTROL_FONTS[ctl] && CONTROL_FONTS[ctl][0][1];
+    if (p.font || deflt) rows.push(inputRow('Font', p.font || deflt, v => save(f, 'font', v, block),
+      { list: fontList(schemeFile), title: `Just this one; any font in ${schemeFile}` }));
+  }
+  for (const [k, label] of POS) if (k in p) rows.push(numRow(f, block, k, label, p[k]));
+  return rows;
+}
+
+// Fonts a HUD part draws with by default (HudLayout font keys, when set, win). From telehud's comments and the SDK.
+const HUD_FONTS = { HudHealth: ['HudNumbers'], HudArmor: ['HudNumbers'], HudAmmo: ['HudNumbers'], HudAccount: ['HudNumbers'], HudRoundTimer: ['HudNumbers'],
+  HudHintDisplay: ['HudHintText'], HudHintKeyDisplay: ['HudHintTextSmall'], CCenterStringLabel: ['Trebuchet24'], HudMessage: ['CenterPrintText'], TargetID: ['TargetID'],
+  HudWeaponSelection: ['HudSelectionNumbers', 'HudSelectionText'], HudMenu: ['Default'], HudDeathNotice: ['Default'], HudRadar: ['ChatFont'], HudChat: ['ChatFont'] };
+
+// Fonts a selection draws with, as [scheme file, font, what for]: the control's own .res "font", HudLayout font keys
+// and the defaults above for HUD parts, the fonts the game gives some windows, and control types' defaults. With a
+// whole window selected, every font its controls use.
+function fontsOf(sel) {
+  const out = [];
+  const add = (file, font, what) => {
+    const have = font && out.find(([f, n]) => f === file && n.toLowerCase() === font.toLowerCase());
+    if (have) { if (what && !have[2].split(', ').includes(what)) have[2] += `, ${what}`; }
+    else if (font && hasFont(file, font)) out.push([file, font, what || '']);
+  };
+  const file = schemeOf(sel.control || sel.thing);
+  if (sel.info.kind === 'hud') {
+    const hf = sel.info.hud.scheme || schemeOf(sel.thing), p = layoutProps(F(L), sel.info.id);
+    for (const [k, v] of Object.entries(p)) if (/font/.test(k) && !/^font_?size/.test(k)) add(hf, v, k);
+    if (!out.length) for (const n of HUD_FONTS[sel.info.id] || []) add(hf, n, '');
+    return out;
+  }
+  if (WINDOW_FONTS[sel.info.id]) { // set by the game's code, whatever the controls' defaults say
+    for (const [f, what, names] of WINDOW_FONTS[sel.info.id]) add(f, names.split('|').find(n => hasFont(f, n)), what);
+    return out;
+  }
+  const own = sel.res && sel.node && ownBlock(sel), ownFont = own && layoutProps(sel.res, own.block).font;
+  if (ownFont) add(file, ownFont, 'this one');
+  if (sel.control) {
+    const ctl = controlIn(sel.control, sel.thing);
+    for (const [what, font] of (ctl && CONTROL_FONTS[ctl[0]] || []).slice(ownFont ? 1 : 0)) add(file, font, what.toLowerCase());
+    return out;
+  }
+  if (sel.info.file === S && sel.info.id !== 'gamemenu') add(S, resolveString(S, 'FrameTitleBar.Font') || 'Default', 'title');
+  if (sel.res) for (const s of sel.res.parsed.sections.filter(s => s.path.length === 2)) {
+    const f = layoutProps(sel.res, s.path[1]).font;
+    if (f) add(schemeOf(sel.thing), f, s.path[1]);
+  }
+  for (const p of live ? live.panels.filter(p => p.thing === sel.thing && p !== sel.thing) : []) {
+    const ctl = controlIn(p, sel.thing);
+    for (const [what, font] of ctl && CONTROL_FONTS[ctl[0]] || [])
+      add(schemeOf(p), font, what.toLowerCase() === ctl[1].toLowerCase() ? what.toLowerCase() : `${ctl[1].toLowerCase()} ${what.toLowerCase()}`);
+  }
+  return out;
+}
+
+const hasFont = (file, font) => !!(F(file) && font && fontVariants(F(file), font).size);
+// A BaseSettings string (FrameTitleBar.Font...), own file over #base.
+function resolveString(file, key) {
+  const f = F(file);
+  let v = null;
+  for (const p of f ? [...f.bases, f.parsed] : []) for (const e of p.entries)
+    if (e.path.length === 2 && e.path[1].toLowerCase() === 'basesettings' && e.key.toLowerCase() === key.toLowerCase()) v = e.value;
+  return v;
+}
+// Every font a scheme defines, in file order.
+function fontNames(file) {
+  const f = F(file), seen = new Map();
+  for (const p of f ? [...f.bases, f.parsed] : []) for (const e of p.entries)
+    if (e.path.length >= 3 && e.path[1].toLowerCase() === 'fonts' && !seen.has(e.path[2].toLowerCase())) seen.set(e.path[2].toLowerCase(), e.path[2]);
+  return [...seen.values()];
+}
+// A <datalist> of a scheme's font names, for font pickers; returns its id.
+function fontList(file) {
+  const id = `fonts-${file.replace(/\W/g, '')}`;
+  let dl = $(id);
+  if (!dl) document.body.append(dl = el('datalist', { id }));
+  dl.replaceChildren(...fontNames(file).map(n => el('option', { value: n })));
+  return id;
+}
+// Every font of every scheme, for ones nothing on screen uses right now. Filled when opened; stays open.
+const FONT_FILES = [[C, 'in game'], [S, 'menus'], [CH, 'chat']];
+let openAllFonts = false;
+function allFonts() {
+  const d = el('details');
+  d.append(el('summary', { textContent: 'All fonts' }));
+  const fill = () => {
+    if (d.childElementCount > 1) return;
+    let face = '', weight = '';
+    const go = el('button', { textContent: 'Apply to every text font', onclick: () => setAllFonts(face.trim(), weight.trim()) });
+    const apply = el('div', { className: 'row check' });
+    apply.append(el('span'), go);
+    apply.dataset.q = 'every font all fonts';
+    d.append(el('div', { className: 'sub', textContent: 'Every text font at once' }),
+      inputRow('Font', '', v => { face = v; }, { list: 'fontfaces', title: 'Left empty: faces stay as they are' }),
+      inputRow('Weight', '', v => { weight = v; }, { type: 'number', step: 100, min: 100, max: 900, title: 'Left empty: weights stay' }),
+      noteRow('Icon and symbol fonts (weapon icons, the logo, arrows) are left alone. Every screen size is changed.'), apply);
+    for (const [file, where] of FONT_FILES) {
+      const names = fontNames(file);
+      if (names.length) d.append(el('div', { className: 'sub', textContent: `${file} (${where})` }), ...names.map(n => fontFold(file, n, '')));
+    }
+  };
+  d.ontoggle = () => { openAllFonts = d.open; if (d.open) fill(); };
+  if (openAllFonts) { d.open = true; fill(); }
+  return d;
+}
+
+// Faces that draw icons and symbols, not text: "every text font" leaves them alone.
+const SYMBOL_FACES = new Set(['marlett', 'counter-strike', 'counter-strike logo', 'cs', 'csd', 'halflife2', 'buttons', 'webdings', 'wingdings']);
+// One face and/or weight for every text font in every scheme, each file written once.
+async function setAllFonts(face, weight) {
+  if (!face && !weight) return status('Type a font, a weight, or both first.');
+  let n = 0;
+  for (const [file] of FONT_FILES) {
+    const f = F(file);
+    if (!f) continue;
+    commit(f, `${file}/every font`, () => {
+      let cur = f;
+      for (const font of fontNames(file)) for (const [v, p] of fontVariants(cur, font)) {
+        if (SYMBOL_FACES.has((p.name || '').toLowerCase())) continue;
+        for (const [k, val] of [['name', face], ['weight', weight]]) {
+          if (!val || p[k] === val) continue;
+          const text = setAt(cur, ['Fonts', font, v], k, val);
+          cur = { ...cur, text, parsed: parse(text) };
+        }
+        n++;
+      }
+      return cur.text;
+    });
+  }
+  await writing;
+  render();
+  status(`${[face, weight && `weight ${weight}`].filter(Boolean).join(', ')} on ${n} font entries. Icon fonts were left alone.`);
+}
+
+// A font's settings in a fold, filled when first opened. Open ones stay open across re-renders.
+const openFonts = new Set();
+function fontFold(file, font, what, open) {
+  const d = el('details', { className: 'fold' }), key = `${file}:${font.toLowerCase()}`;
+  d.append(el('summary', { textContent: what ? `${font}: ${what}` : font }));
+  const fill = () => { if (d.childElementCount === 1) d.append(...fontRows(file, font)); };
+  d.ontoggle = () => { if (d.open) { openFonts.add(key); fill(); } else openFonts.delete(key); };
+  if (open || openFonts.has(key)) { d.open = true; fill(); }
+  d.dataset.q = `${font} ${what} font`.toLowerCase();
+  return d;
+}
+
+
+function inputRow(label, value, onChange, attrs = {}) {
+  const row = el('div', { className: 'row num' });
+  const input = el('input', { value });
+  for (const [k, v] of Object.entries(attrs)) input.setAttribute(k, v); // "list" can only be set as an attribute
+  input.setAttribute('aria-label', label);
+  input.oninput = () => { if (input.value !== '') onChange(input.value); };
+  row.append(el('div', { textContent: label }), input, el('div', { className: 'meta', textContent: attrs.title || '' }));
+  row.dataset.q = label.toLowerCase();
+  return row;
+}
+
+// A font's settings for the current screen height. Edits go to that entry only (fonts have one per resolution).
+function fontRows(file, font) {
+  const f = F(file);
+  const vars = f && fontVariants(f, font);
+  if (!vars || !vars.size) return [];
+  const H = live ? live.H : 1080, v = activeVariant(vars, H), p = vars.get(v);
+  const put = (key, val) => save(f, key, val, ['Fonts', font, v]);
+  const checks = [['outline', 'Outline'], ['dropshadow', 'Drop shadow'], ['additive', 'Additive (glow): hides outline and shadow'], ['antialias', 'Smooth edges']]
+    .map(([key, label]) => checkRow(label, p[key] === '1', on => {
+      put(key, on ? '1' : '0');
+      // additive text adds light to what's behind it, so black outlines and shadows can't show: turn it off for them
+      const glow = checks[2].firstElementChild;
+      if (on && key !== 'antialias' && key !== 'additive' && glow.checked) {
+        glow.checked = false;
+        put('additive', '0');
+      }
+    }));
+  const rows = [
+    inputRow('Font', p.name || '', val => put('name', val), { list: 'fontfaces', title: 'Installed or in the HUD' }),
+    inputRow('Size', p.tall || '', val => put('tall', val), { type: 'number', step: 1 }),
+    inputRow('Weight', p.weight || '400', val => put('weight', val), { type: 'number', step: 100, min: 100, max: 900 }),
+    inputRow('Blur', p.blur || '0', val => put('blur', val), { type: 'number', step: 1, min: 0 }),
+    ...checks,
+  ];
+  rows[0].lastElementChild.textContent = vars.size > 1 ? `Entry "${v}", for ${H}p screens` : '';
+  const add = el('div', { className: 'row check' });
+  add.append(el('span'), el('button', { textContent: 'Add a font file (.ttf/.otf)...', onclick: () => addFontFile(f, font, v) }));
+  add.dataset.q = 'font file ttf otf add';
+  return [...rows, add];
+}
+
+// Copies a font file into the HUD, lists it in CustomFontFiles (the game registers it, live) and switches this font to it.
+async function addFontFile(f, font, v) {
+  try {
+    const [rel, family] = (await call('addfont')).split('\t');
+    const used = [...f.bases, f.parsed].flatMap(p => p.entries).filter(e => e.path.length === 2 && e.path[1].toLowerCase() === 'customfontfiles').map(e => +e.key);
+    save(f, String(Math.max(0, ...used.filter(n => n > 0)) + 1), rel, ['CustomFontFiles']);
+    save(f, 'name', family, ['Fonts', font, v]);
+    $('fontfaces').prepend(el('option', { value: family }));
+    await sleep(400);
+    await writing;
+    render();
+    status(`Added "${family}" and switched ${font} to it.`);
+  } catch (err) {
+    if (err.message !== 'cancelled') status(err.message);
+  }
+}
+
+// The main menu's logo (ClientScheme Main.Title1.Color "COUNTER-STRIKE", Main.Title2.Color "SOURCE") and item
+// height (MainMenu.MenuItemHeight, before the game scales it to the screen: 22 is 66 pixels at 1440p).
+const LOGO_KEYS = ['Main.Title1.Color', 'Main.Title2.Color'];
+function mainMenuSections() {
+  const c = F(C), s = F(S), out = [];
+  if (c) {
+    const t = tables(c), shown = LOGO_KEYS.some(k => toRgba(resolve(t, k) || '0 0 0 0')[3] > 0);
+    const byDefault = k => toRgba(resolve(tables({ ...c, parsed: { entries: [], sections: [] } }), k) || '255 255 255 255')[3];
+    const show = checkRow('Show the logo', shown, on => {
+      for (const k of LOGO_KEYS) {
+        const [r, g, b] = toRgba(resolve(tables(c), k) || '255 255 255 255');
+        save(c, k, `${r} ${g} ${b} ${on ? byDefault(k) || 255 : 0}`);
+      }
+      refreshSoon();
+    });
+    out.push(['Main menu: logo', [show, ...schemeRows(C, [['Logo', LOGO_KEYS[0], '"COUNTER-STRIKE"'], ['Logo, second line', LOGO_KEYS[1], '"SOURCE"']])]]);
+  }
+  const h = s && tables(s).base.get('mainmenu.menuitemheight');
+  if (h) out.push(['Main menu: items', [inputRow('Item height', h.value, v => save(s, 'MainMenu.MenuItemHeight', v, ['BaseSettings']),
+    { type: 'number', min: 8, max: 80, step: 1, title: 'Scaled to your screen; the game\'s is 22. The text size is the MenuLarge font below' })]]);
+  return out;
+}
+
+// Everything editable for a selection, as [subheading, rows] pairs.
+function selectionSections(sel) {
+  const out = [], { info, control } = sel, fonts = fontsOf(sel);
+  const own = sel.res && ownBlock(sel);
+  if (own) out.push([`This ${own.what} only`, resRows(sel.res, own.block, own.defaults, schemeOf(sel.thing), own.ctl)]);
+  if (control) {
+    const [ctl, what, keys] = controlIn(control, sel.thing);
+    const file = schemeOf(control);
+    out.push([`${what} (every ${what.toLowerCase()} in ${file === C ? 'in-game windows' : file === CH ? 'the chat' : 'menus'})`, schemeRows(file, keys)]);
+    for (const [label, name] of BORDER_USE[ctl] || []) out.push([`${what}: ${label.toLowerCase()}`, borderRows(file, name)]);
+  }
+  if (info.kind === 'hud') out.push([info.name, hudRows(info.id, info.hud)]);
+  else {
+    out.push([`${info.name}: parts on screen`, windowPartRows(sel)]);
+    if (info.id === 'scores') out.push(...scoreboardSections(sel, fonts.map(([, n]) => n)));
+    if (info.id === 'gamemenu') out.push(...mainMenuSections());
+    if (info.id !== 'gamemenu') { // the main menu isn't a window frame
+      // menu windows paint their frame's background and edge; in-game ones (team select...) draw their own panels
+      const frame = info.file === S;
+      out.push(['Window', [...(frame ? [windowCornerRow(S)] : []), ...schemeRows(info.file, WINDOW_COLOURS[info.file])]]);
+      if (frame) out.push(['Window edge', borderRows(S, 'FrameBorder')]);
+    }
+    if (EXTRA[info.id]) out.push([info.name, schemeRows(S, EXTRA[info.id]).concat(info.file === C ? schemeRows(C, EXTRA[info.id]) : [])]);
+  }
+  if (fonts.length) out.push([`${fonts.length > 1 ? 'Fonts' : 'Font'} (a change shows everywhere the font is used)`,
+    fonts.map(([file, font, what]) => fontFold(file, font, what, fonts.length <= 2 && (control || info.kind === 'hud')))]);
+  return out.filter(([, rows]) => rows.length);
+}
+
+// Things on screen now (or every known HUD part when the game isn't reporting).
+function onScreen() {
+  const seen = new Map();
+  if (live) {
+    for (const p of live.panels) {
+      if (!p.thing || seen.has(p.thing)) continue;
+      const info = thingInfo(p.thing);
+      if (info && !CONTAINERS.has(p.thing.key)) seen.set(p.thing, info);
+    }
+    // windows first (they are what you are looking at), then HUD parts in a fixed order; skip parts that are always "visible" but rarely draw
+    const order = Object.keys(HUD);
+    return [...seen].map(([thing, info]) => ({ thing, info })).filter(t => !(t.info.hud && t.info.hud.quiet))
+      .sort((a, b) => (a.info.kind === 'hud') - (b.info.kind === 'hud') || order.indexOf(a.info.id) - order.indexOf(b.info.id));
+  }
+  return Object.entries(HUD).filter(([id]) => Object.keys(layoutProps(F(L), id)).length)
+    .map(([id, hud]) => ({ thing: { name: id, key: id.toLowerCase() }, info: { kind: 'hud', id, name: hud.name, hud } }));
+}
+
+// Scheme colours nothing above covers, for people who know what they're looking for.
+function otherRows(name, where) {
+  const f = F(name);
+  if (!f) return [];
+  const t = tables(f), seen = new Map();
+  for (const [k, v] of [...t.base, ...t.colors]) if (!LISTED.has(`${name}:${k}`)) seen.set(k, v.name);
+  return [...seen.values()].sort((a, b) => a.localeCompare(b)).map(key => [key, resolve(t, key)]).filter(([, v]) => v)
+    .map(([key, v]) => { const r = colorRow(key, where, v, v2 => save(f, key, v2)); r.children[1].firstElementChild.className = 'key'; r.dataset.q += ` ${key.toLowerCase()}`; return r; });
+}
+
+const el = (tag, props) => Object.assign(document.createElement(tag), props);
+
+// Rebuilding the list between mouse-down and mouse-up moves the click onto a new row (a Hide button click would
+// select the row instead), so a render asked for while a button is held waits for its release.
+let pointerDown = false, renderOnRelease = false, openOther = false;
+document.addEventListener('pointerdown', () => { pointerDown = true; }, true);
+document.addEventListener('pointerup', () => {
+  pointerDown = false;
+  if (renderOnRelease) { renderOnRelease = false; setTimeout(render); } // after the click this release makes
+}, true);
+
+function render() {
+  if (pointerDown) { renderOnRelease = true; return; }
+  // emptying the list scrolls it to the top; keep the reader's place (select() scrolls up itself)
+  const top = $('list').scrollTop;
+  renderList();
+  $('list').scrollTop = top;
+}
+
+function renderList() {
+  pendingRender = false;
+  const list = $('list'), q = $('search').value.trim().toLowerCase();
+  list.innerHTML = '';
+  if (!files.length) return;
+  if (q) {
+    // search: every HUD part, window type and control type, plus all other colours
+    list.append(el('h3', { textContent: `Search: ${q}` }));
+    const groups = [
+      ...Object.entries(HUD).map(([id, hud]) => [hud.name, hudRows(id, hud)]),
+      ...Object.entries(WINDOW_COLOURS).map(([file, l]) => [file === C ? 'In-game windows' : 'Menus', schemeRows(file, l)]),
+      ...Object.entries(EXTRA).map(([id, l]) => [WINDOWS[id], schemeRows(id === 'team' ? C : S, l)]),
+      ...CONTROLS.flatMap(([, what, keys]) => [[`${what} (in-game windows)`, schemeRows(C, keys)], [`${what} (menus)`, schemeRows(S, keys)],
+        [`${what} (chat)`, schemeRows(CH, keys)]]),
+      ['Other colours', [...otherRows(C, 'In game'), ...otherRows(S, 'Menus'), ...otherRows(CH, 'Chat')]],
+      ...FONT_FILES.map(([file, where]) => [`Fonts (${where})`, fontNames(file).map(n => fontFold(file, n, ''))]),
+    ];
+    let n = 0;
+    for (const [title, rows] of groups) {
+      const hits = title.toLowerCase().includes(q) ? rows : rows.filter(r => r.dataset.q.includes(q));
+      if (!hits.length) continue;
+      list.append(el('div', { className: 'sub', textContent: title }), ...hits);
+      n += hits.length;
+    }
+    if (!n) list.append(el('p', { className: 'meta', style: 'padding: 0 12px', textContent: 'Nothing matches.' }));
+    return;
+  }
+  if (selected) {
+    const crumbs = el('div', { className: 'crumbs', textContent: selected.info.name });
+    if (selected.control) crumbs.append(el('span', { className: 'meta', textContent: `  ›  ${controlIn(selected.control, selected.thing)[1]}${selected.control.name ? ` "${selected.control.name}"` : ''}` }));
+    const done = el('button', { className: 'done', textContent: 'Done', title: 'Save the changes into the HUD and go back to the list' });
+    done.onclick = async () => {
+      await sleep(300); // a change still being typed
+      await writing;
+      const saved = dirty && await saveHud(), msg = $('status').textContent;
+      await select(null);
+      if (saved) status(msg); // the list's hint would replace it
+    };
+    crumbs.prepend(done);
+    list.append(el('h3', { textContent: 'Selected' }), crumbs);
+    const sections = selectionSections(selected);
+    for (const [title, rows] of sections) list.append(el('div', { className: 'sub', textContent: title }), ...rows);
+    if (!sections.length) list.append(el('p', { className: 'meta', style: 'padding: 0 12px', textContent: 'Nothing to edit here yet.' }));
+  }
+  list.append(el('h3', { textContent: live ? 'On screen now' : 'HUD parts' }));
+  const things = onScreen();
+  shownKey = things.map(t => t.info.id).join();
+  const partRow = t => {
+    const hud = t.info.kind === 'hud' && canHide(t.info.id), hidden = hud && isHidden(t.info.id);
+    const b = el('button', { className: 'thing-btn' + (selected && selected.info.id === t.info.id ? ' sel' : '') + (hidden ? ' hidden' : '') });
+    b.append(el('span', { className: 'name', textContent: t.info.name }), el('span', { className: 'meta', textContent: hidden ? 'hidden' : t.info.kind === 'hud' ? 'HUD' : 'Window' }));
+    if (hud) {
+      const eye = el('span', { className: 'eye', role: 'button', textContent: hidden ? 'Show' : 'Hide', title: hidden ? 'Show this part again' : 'Hide this part' });
+      eye.onclick = e => { e.stopPropagation(); setHidden(t.info.id, !hidden); refreshSoon(); };
+      b.append(eye);
+    }
+    b.onclick = () => select({ thing: t.thing, info: t.info, control: null });
+    return b;
+  };
+  list.append(...things.map(partRow));
+  if (!things.length) list.append(el('p', { className: 'meta', style: 'padding: 0 12px', textContent: 'Nothing editable on screen right now.' }));
+  // parts that only show now and then (kill feed, pickup history, weapon selection...), so they can be hidden too
+  if (live && F(L)) {
+    const shown = new Set(things.map(t => t.info.id));
+    const rest = Object.entries(HUD).filter(([id]) => !shown.has(id) && canHide(id))
+      .map(([id, hud]) => partRow({ thing: { name: id, key: id.toLowerCase() }, info: { kind: 'hud', id, name: hud.name, hud } }));
+    if (rest.length) {
+      const d = el('details');
+      d.open = openOther;
+      d.ontoggle = () => { openOther = d.open; };
+      d.append(el('summary', { textContent: 'Other HUD parts (not on screen now)' }), ...rest);
+      list.append(d);
+    }
+  }
+  const other = el('details');
+  other.append(el('summary', { textContent: 'All other colours' }), ...otherRows(C, 'In game'), ...otherRows(S, 'Menus'), ...otherRows(CH, 'Chat'));
+  list.append(other, allFonts());
+  // the list's hint, unless a message ("Saved...") went up just now
+  if (!selected && Date.now() - statusAt > 5000) status(live ? 'Click anything in the preview to edit it. Keys pressed over it go to the game, e.g. your chat key opens the chat.' : 'Pick a HUD part below, or start the game to click things in the preview.');
+}
+
+// ---------- preview boxes ----------
+function boxList() {
+  if (live) {
+    const boxes = [], sel = selected;
+    for (const p of live.panels) {
+      if (!p.thing || p !== p.thing) continue;
+      const info = thingInfo(p);
+      if (!info || NO_CLICK.has(p.key)) continue;
+      for (const r of clickRects(p, info, live.W, live.H))
+        if (r.w * r.h <= 0.9 * live.W * live.H && r.x < live.W && r.y < live.H && r.x + r.w > 0 && r.y + r.h > 0) boxes.push({ thing: p, info, r, cls: 'thing' });
+    }
+    if (sel && sel.control) boxes.push({ thing: sel.thing, info: sel.info, r: sel.control, cls: 'sel', label: controlIn(sel.control, sel.thing)[1] });
+    return { W: live.W, H: live.H, boxes };
+  }
+  const v = $('video'), W = v.hidden ? 1920 : v.videoWidth || 1920, H = v.hidden ? 1080 : v.videoHeight || 1080;
+  const boxes = onScreen().map(t => ({ ...t, r: rectOf(layoutProps(F(L), t.info.id), W, H, t.info.hud.hit), cls: 'thing' })).filter(b => b.r.w > 0 && b.r.h > 0);
+  return { W, H, boxes };
+}
+
+function drawBoxes() {
+  const { W, H, boxes } = boxList(), host = $('boxes');
+  $('stage').style.setProperty('--aspect', W / H);
+  host.innerHTML = '';
+  for (const b of boxes) {
+    const isSel = selected && (b.cls === 'sel' || (!selected.control && selected.info.id === b.info.id));
+    const d = el('div', { className: `box ${b.cls}${isSel ? ' sel' : ''}` });
+    Object.assign(d.style, { left: `${b.r.x / W * 100}%`, top: `${b.r.y / H * 100}%`, width: `${b.r.w / W * 100}%`, height: `${b.r.h / H * 100}%` });
+    d.append(el('span', { textContent: b.label || b.info.name }));
+    host.append(d);
+  }
+  const hover = el('div', { className: 'box hover', id: 'hoverbox', hidden: true });
+  hover.append(el('span'));
+  host.append(hover);
+}
+
+const stagePoint = e => { const r = $('boxes').getBoundingClientRect(); return [(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height]; };
+$('boxes').onmousemove = e => {
+  const hit = pickAt(...stagePoint(e)), hb = $('hoverbox');
+  if (!hb) return;
+  hb.hidden = !hit;
+  if (!hit) return;
+  const { W, H } = boxList(), p = hit.control || hit.thing;
+  const r = live ? (hit.control || (hit.node ? clickRects(hit.thing, hit.info, W, H)[0] : hit.r)) : rectOf(layoutProps(F(L), hit.info.id), W, H, hit.info.hud.hit);
+  Object.assign(hb.style, { left: `${r.x / W * 100}%`, top: `${r.y / H * 100}%`, width: `${r.w / W * 100}%`, height: `${r.h / H * 100}%` });
+  hb.firstChild.textContent = hit.control ? `${hit.info.name} › ${controlIn(hit.control, hit.thing)[1]}` : hit.info.name;
+};
+$('boxes').onmouseleave = () => { if ($('hoverbox')) $('hoverbox').hidden = true; };
+$('boxes').onclick = e => { const hit = pickAt(...stagePoint(e)); if (hit) { $('search').value = ''; select(hit); } };
+
+// ---------- the game: live panel list, capture, test server ----------
+let pendingRender = false, captured = false, autoTried = false;
+
+let keepScores = false, scoresSent = 0;
+async function poll() {
+  // capture as soon as the game's window exists (capture picks it by title; earlier than that it would ask instead)
+  if (!captured && !autoTried && await call('gamewindow').then(() => true, () => false)) { autoTried = true; await sleep(1500); capture(true); }
+  const raw = await call('panels').catch(() => '');
+  if (raw === liveRaw) return;
+  liveRaw = raw;
+  live = raw ? parsePanels(raw) : null;
+  $('launch').hidden = !!live;
+  // the scoreboard closes when the HUD reloads: open it again while it's being kept open
+  if (keepScores && live && !live.panels.some(p => p.key === 'scores') && Date.now() - scoresSent > 1500) { scoresSent = Date.now(); call('cmd', '', '+showscores'); }
+  if (selected && live && !live.panels.includes(selected.thing)) {
+    // the same thing, found again in the new list (panels are re-read every time). One that is gone stays selected:
+    // windows close while the HUD reloads (the scoreboard) and come back
+    const again = live.panels.find(p => p === p.thing && p.key === selected.thing.key);
+    const ctl = again && selected.control && live.panels.find(p => p.thing === again && p.key === selected.control.key && p.cls === selected.control.cls);
+    const node = again && selected.node && live.panels.find(p => p.thing === again && p.key === selected.node.key && p.cls === selected.node.cls);
+    if (again) selected = { ...selected, thing: again, info: thingInfo(again) || selected.info, control: ctl || selected.control, node: node || selected.node };
+  }
+  drawBoxes();
+  const busy = document.activeElement && $('list').contains(document.activeElement) && document.activeElement.tagName === 'INPUT';
+  if (busy) pendingRender = true; else renderOnScreenOnly();
+}
+$('list').addEventListener('focusout', () => { if (pendingRender) setTimeout(render); });
+
+// Re-render only when the set of things on screen changed, so the rows being edited stay put.
+let shownKey = '';
+function renderOnScreenOnly() {
+  const key = onScreen().map(t => t.info.id).join();
+  if (key !== shownKey) { shownKey = key; render(); }
+}
+
+async function capture(auto) {
+  try {
+    // restores the game if it's minimised: capture only offers windows that are up, and picks the game by title
+    if (await call('gamewindow').then(() => true, () => false)) await sleep(300);
+    const stream = await navigator.mediaDevices.getDisplayMedia({ video: { displaySurface: 'window', frameRate: 60 }, audio: false });
+    const v = $('video');
+    v.srcObject = stream;
+    v.hidden = false;
+    $('empty').hidden = true;
+    $('capture').hidden = true;
+    $('stage').classList.remove('schematic');
+    captured = true;
+    v.onresize = drawBoxes;
+    stream.getVideoTracks()[0].onended = () => {
+      v.hidden = true; captured = false; autoTried = false;
+      $('empty').hidden = false; $('capture').hidden = false; $('stage').classList.add('schematic'); drawBoxes();
+    };
+  } catch (err) {
+    $('capture').hidden = false;
+    if (!auto && err.name !== 'NotAllowedError') status(err.message);
+  }
+}
+
+const TEST_SETUP = 'disconnect; sv_cheats 1; mp_autokick 0; mp_ignore_round_win_conditions 1; mp_autoteambalance 0; mp_limitteams 0; mp_freezetime 0; mp_roundtime 9; mp_buytime 9999; '
+  + 'mp_startmoney 16000; mp_timelimit 0; mp_maxrounds 0; mp_winlimit 0; bot_quota 1; bot_join_team T; bot_stop 1; bot_chatter off; '
+  + 'motdfile hudeditor_nomotd.txt; map de_dust2';
+// Sample server texts the test game keeps on screen, added up like the plugin's schemereload_testtext:
+// 1 timer box and right side, 2 speed, 4 jhud, 8 top left. Remembered between runs.
+let texts = 15;
+try { texts = +(localStorage.getItem('texts') ?? 15); } catch {}
+const showTexts = () => { for (const b of $('texts').children) b.setAttribute('aria-pressed', !!(texts & b.dataset.bit)); };
+
+async function toggleText(bit) {
+  texts ^= bit;
+  showTexts();
+  try { localStorage.setItem('texts', texts); } catch {}
+  await call('cmd', '', `schemereload_testtext ${texts}`);
+}
+
+async function testServer() {
+  if (!live) { status('Start the game first.'); return; }
+  status('Starting an offline test game on de_dust2...');
+  await call('cmd', '', `schemereload_testtext ${texts}; ${TEST_SETUP}`);
+  // once the team menu (or MOTD) shows up, join CT and close the menus
+  for (let i = 0; i < 90; i++) {
+    await sleep(1000);
+    if (live && live.panels.some(p => ['team', 'info', 'class_ct'].includes(p.key))) break;
+  }
+  await call('cmd', '', 'hidepanel info; jointeam 3');
+  for (let i = 0; i < 10 && !(live && live.panels.some(p => p.key === 'class_ct')); i++) await sleep(500);
+  await call('cmd', '', 'joinclass 5; hidepanel class_ct; hidepanel team; hidepanel info');
+  status('Test game running: a frozen bot on T, $16000, and the timer texts on screen.');
+}
+
+// ---------- HUD picker ----------
+async function showPicker(canCancel) {
+  const lines = (await call('huds')).split('\n');
+  const current = lines.pop().split('\t')[2] || '';
+  const huds = lines.filter(Boolean).map(l => l.split('\t'));
+  const box = $('hudlist');
+  box.innerHTML = '';
+  for (const [name, path, where] of huds) {
+    const b = el('button', { className: 'hud' + (path.toLowerCase() === current.toLowerCase() ? ' primary' : ''), textContent: name });
+    b.append(el('span', { className: 'meta', textContent: `${where === 'custom' ? 'In your custom folder' : 'Recent'} · ${path}` }));
+    b.onclick = () => openHud(path);
+    box.append(b);
+  }
+  if (!huds.length) box.append(el('p', { className: 'meta', textContent: 'No HUDs found yet. Browse for yours, or start a new one.' }));
+  $('pickclose').hidden = !canCancel;
+  $('picker').hidden = false;
+}
+
+async function openHud(path) {
+  if (dirty && !confirm(`Discard the unsaved changes to ${hudName}?`)) return;
+  try {
+    hudName = await call('open', path);
+    $('picker').hidden = true;
+    $('hudbtn').textContent = `HUD: ${hudName}`;
+    selected = null;
+    undoSteps.length = 0;
+    $('undo').disabled = true;
+    setDirty(false);
+    await loadAll();
+    status(live ? `Editing ${hudName}. Click anything in the preview to edit it.` : `Editing ${hudName}.`);
+    // the HUD's own font faces first in the font name suggestions
+    call('hudfonts').then(list => { for (const n of list.split('\n').filter(Boolean).reverse()) $('fontfaces').prepend(el('option', { value: n })); }).catch(() => {});
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
+async function saveHud() {
+  await sleep(300);
+  await writing;
+  try {
+    const n = +(await call('save'));
+    setDirty(false);
+    status(n ? `Saved ${n} file${n > 1 ? 's' : ''} in ${hudName}.` : `Nothing to save: ${hudName} is as it was.`);
+    return true;
+  } catch (err) {
+    status(`Couldn't save: ${err.message}`);
+    return false;
+  }
+}
+
+async function onHostEvent(ev) {
+  if (ev !== 'close') return;
+  if (dirty) {
+    if (confirm(`Save your changes to ${hudName} before closing?`)) { if (!(await saveHud())) return; }
+    else if (!confirm('Close without saving? Your changes will be lost.')) return;
+  }
+  call('quit');
+}
+
+if (host) {
+  $('hudbtn').onclick = () => showPicker(true);
+  $('pickclose').onclick = () => { $('picker').hidden = true; };
+  $('browse').onclick = async () => { try { await openHud(await call('browse')); } catch {} };
+  $('newhud').onclick = () => { $('newform').hidden = false; $('newerr').textContent = ''; $('newname').focus(); };
+  $('newform').onsubmit = async e => {
+    e.preventDefault();
+    const name = $('newname').value.trim();
+    if (!name) return;
+    try {
+      await openHud(await call('new', name));
+      $('newform').hidden = true;
+      $('newname').value = '';
+    } catch (err) {
+      $('newerr').textContent = err.message;
+    }
+  };
+  $('save').onclick = saveHud;
+  $('undo').onclick = undo;
+  document.addEventListener('keydown', e => {
+    const typing = document.activeElement && /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName) && document.activeElement.type !== 'range';
+    if (e.ctrlKey && !e.shiftKey && e.code === 'KeyZ' && !typing) { e.preventDefault(); undo(); }
+  });
+  $('explore').onclick = () => call('explore');
+  $('testserver').onclick = testServer;
+  // held open like Tab does, as Tab can't be held down while clicking in the editor
+  $('scores').onclick = () => {
+    if (!live) return status('Start the game first.');
+    keepScores = !keepScores;
+    $('scores').setAttribute('aria-pressed', keepScores);
+    call('cmd', '', keepScores ? '+showscores' : '-showscores');
+  };
+  $('texts').onclick = e => { const b = e.target.closest('button'); if (b) toggleText(+b.dataset.bit); };
+  showTexts();
+  $('capture').onclick = () => capture(false);
+  $('launch').onclick = async () => { try { await call('launch'); status('Starting the game...'); } catch (err) { status(err.message); } };
+  $('search').oninput = () => render();
+}
+
+// Keys pressed with the mouse over the preview go to the game (brought to the front): Esc, ~, Tab, B, movement...
+// The game reads scan codes, so KeyboardEvent.code is mapped to them.
+const SCAN = { Escape: '01', Backquote: '29', Tab: '0F', Space: '39', Enter: '1C', Backspace: '0E', ShiftLeft: '2A', ShiftRight: '36',
+  ControlLeft: '1D', AltLeft: '38', Minus: '0C', Equal: '0D', BracketLeft: '1A', BracketRight: '1B', Semicolon: '27', Quote: '28',
+  Backslash: '2B', Comma: '33', Period: '34', Slash: '35', F11: '57', F12: '58' };
+[['QWERTYUIOP', 0x10], ['ASDFGHJKL', 0x1E], ['ZXCVBNM', 0x2C]].forEach(([row, first]) => [...row].forEach((c, i) => { SCAN[`Key${c}`] = (first + i).toString(16); }));
+[...'1234567890'].forEach((c, i) => { SCAN[`Digit${c}`] = (2 + i).toString(16); });
+for (let i = 1; i <= 10; i++) SCAN[`F${i}`] = (0x3A + i).toString(16);
+let overPreview = false;
+$('preview').onmouseenter = () => { overPreview = true; };
+$('preview').onmouseleave = () => { overPreview = false; };
+// Down and up go separately, so a key held over the preview stays held in the game (Tab keeps the scoreboard open).
+const keysDown = new Set();
+document.addEventListener('keydown', e => {
+  const typing = document.activeElement && /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName);
+  if (!host || !overPreview || typing || e.ctrlKey || !$('picker').hidden || !SCAN[e.code]) return;
+  e.preventDefault();
+  if (e.repeat || keysDown.has(e.code)) return;
+  keysDown.add(e.code);
+  call('key', `${SCAN[e.code]} down`).then(() => status(`Sent ${e.key === ' ' ? 'Space' : e.key} to the game.`), err => status(`Couldn't send the key to the game: ${err.message}`));
+});
+document.addEventListener('keyup', e => {
+  // a release without focus is the one the browser makes up when the game comes to the front, not the key's
+  if (!keysDown.delete(e.code) || !document.hasFocus()) return;
+  e.preventDefault();
+  call('key', `${SCAN[e.code]} up`).catch(() => {});
+});
+// a release the editor never saw (it went to the game) mustn't block the next press
+window.addEventListener('focus', () => keysDown.clear());
+
+async function start() {
+  $('empty').innerHTML = '<p><b>Starting Counter-Strike: Source...</b></p><p>The game window shows up here by itself once it has loaded.</p>';
+  try {
+    const state = await call('start');
+    if (state === 'foreign') {
+      status('The game is already running without the editor. Quit it, then click Launch game.');
+      $('launch').hidden = false;
+    } else status(state === 'running' ? 'Game already running.' : 'Starting the game...');
+  } catch (err) {
+    status(err.message);
+    $('launch').hidden = false;
+  }
+  showPicker(false);
+  setInterval(poll, 500);
+  call('fontfaces').then(list => { for (const n of list.split('\n')) $('fontfaces').append(el('option', { value: n })); }).catch(() => {});
+}
+
+// ---------- self-check: open index.html#test (parser), or run CSSHudEditor.exe --selftest <empty folder> (exe bridge) ----------
+const check = (ok, what) => { if (!ok) throw new Error('self-check failed: ' + what); };
+function parserCheck() {
+  const src = '#base "base.res"\nScheme\n{\n\tColors\n\t{\n\t\t"A"\t"1 2 3 4"\n\t}\n\tBaseSettings\n\t{\n\t\tX\t"A"\n\t\t"Y"\t"9 9 9 9" [$X360]\n\t\t"Y"\t"5 5 5 5" [$WIN32]\n\t}\n}\n';
+  const f = { name: 't', text: src, parsed: parse(src), bases: [parse('Scheme { BaseSettings { "Z" "7 7 7 255" } }')] };
+  const t = tables(f);
+  check(f.parsed.bases[0] === 'base.res', '#base');
+  check(resolve(t, 'X') === '1 2 3 4', 'name resolves through Colors');
+  check(resolve(t, 'Y') === '5 5 5 5', '[$X360] value skipped');
+  check(resolve(t, 'Z') === '7 7 7 255', 'value from #base');
+  const edited = withValue(f, 'x', '10 20 30 40');
+  check(edited.includes('X\t"10 20 30 40"') && !edited.includes('X\t"A"'), 'edit in place');
+  const added = parse(withValue(f, 'Z', '1 1 1 1'));
+  check(added.entries.some(e => e.key === 'Z' && e.value === '1 1 1 1' && sectionOf(e) === 'basesettings'), 'insert missing key');
+  check(fromHex('#0a14ff', 128) === '10 20 255 128', 'hex -> rgba');
+  // fonts: pick the entry for the screen height, and create the nested blocks when only #base has the font
+  const fb = parse('Scheme { Fonts { HudHintText { "1" { "name" "Arial" "tall" "10" "yres" "1 1079" } "2" { "name" "Arial" "tall" "20" "yres" "1080 1439" } } } }');
+  const ff = { name: 'f', text: 'Scheme\n{\n}\n', parsed: parse('Scheme\n{\n}\n'), bases: [fb] };
+  const fv = fontVariants(ff, 'hudhinttext');
+  check(fv.size === 2 && activeVariant(fv, 1080) === '2' && activeVariant(fv, 720) === '1', 'font entry for the screen height');
+  // SourceScheme has blocks like "1" [$X360] { ... }: skip other platforms' blocks and keep the rest nested right
+  const fc = { bases: [], parsed: parse('Scheme { Fonts { A { "1" [$X360] { "tall" "9" } "1" [$WIN32] { "tall" "5" } } Trebuchet24 { "2" { "tall" "16" } } } }') };
+  check(fontVariants(fc, 'A').get('1').tall === '5' && fontVariants(fc, 'trebuchet24').get('2').tall === '16', 'blocks with platform conditions');
+
+  // borders: names follow aliases (undefined ones fall back to BaseBorder), own file over #base, styles, whole-block writes
+  const keepFiles = files, bsrc = 'Scheme\n{\n\tBorders\n\t{\n\t\tButtonBorder\t"RaisedBorder"\n\t}\n}\n';
+  const bbase = parse('Scheme { Colors { "Border.Bright" "200 200 200 255" "Border.Dark" "40 40 40 255" } Borders { BaseBorder "DepressedBorder" '
+    + 'RaisedBorder { "inset" "0 0 1 1" Left { "1" { "color" "Border.Bright" "offset" "0 1" } } Top { "1" { "color" "Border.Bright" } } '
+    + 'Right { "1" { "color" "Border.Dark" } "2" { "color" "0 0 0 0" } } Bottom { "1" { "color" "Border.Dark" } } } '
+    + 'DepressedBorder { Left { "1" { "color" "Border.Dark" } } Top { "1" { "color" "Border.Dark" } } Right { "1" { "color" "Border.Bright" } } Bottom { "1" { "color" "Border.Bright" } } } '
+    + 'FrameBorder { "backgroundtype" "2" } } }');
+  files = [{ name: 'b', text: bsrc, parsed: parse(bsrc), bases: [bbase] },
+    { name: L, text: '', parsed: parse('L { HudHealth { "alpha" "0" } HudArmor { "alpha" "90" } HudHintDisplay { "xpos" "9999" "xpos_hudeditor" "c-240" } }'), bases: [] }];
+  try {
+    const bf = F('b'), bt = tables(bf), raised = borderOf('b', 'ButtonBorder');
+    check(raised.name === 'RaisedBorder' && borderOf('b', 'ButtonDepressedBorder').name === 'DepressedBorder', 'border names follow aliases, then BaseBorder');
+    const rs = borderStyle(raised, bt);
+    check(rs.style === 'raised' && rs.n === 1 && rs.light === '200 200 200 255' && rs.dark === '40 40 40 255', 'raised border read from its lines');
+    check(borderStyle(borderOf('b', 'TextEntryBorder'), bt).style === 'sunken' && borderStyle(borderOf('b', 'FrameBorder'), bt).style === 'none', 'sunken and empty borders');
+    const body = borderBody({ style: 'line', n: 1, light: '1 2 3 255', dark: '1 2 3 255' }, raised);
+    const right = body.find(([k]) => k === 'Right')[1];
+    check(right.length === 2 && right[1][1][0][1] === '0 0 0 0', 'lines #base has beyond the thickness are written clear');
+    const t1 = setBlock(bf, ['Borders'], 'ButtonBorder', body), nb = parse(t1);
+    check(!nb.entries.some(e => e.path.length === 2 && e.key === 'ButtonBorder') && nb.sections.filter(s => s.path.join('/') === 'Scheme/Borders/ButtonBorder').length === 1
+      && nb.entries.some(e => e.path.join('/') === 'Scheme/Borders/ButtonBorder/Top/1' && e.key === 'color' && e.value === '1 2 3 255'), 'an alias replaced by a block');
+    const again = setBlock({ text: t1, parsed: nb }, ['Borders'], 'ButtonBorder', [['inset', '0 0 0 0']]);
+    check(parse(again).sections.filter(s => s.path.join('/') === 'Scheme/Borders/ButtonBorder').length === 1 && !again.includes('1 2 3 255'), 'a block replaced by a block');
+    const fresh = { text: 'Scheme\n{\n}\n', parsed: parse('Scheme\n{\n}\n') };
+    check(parse(setBlock(fresh, ['Borders'], 'FrameBorder', copyBorder(borderOf('b', 'FrameBorder'), { backgroundtype: '0' }))).entries
+      .some(e => e.path.join('/') === 'Scheme/Borders/FrameBorder' && e.key === 'backgroundtype' && e.value === '0'), 'a block added where there was no Borders section');
+    const dk = parse('A\n{\n\tB\n\t{\n\t\t"x"\t"1"\n\t\t"y"\t"2"\n\t}\n}\n');
+    check(dropKey({ text: 'A\n{\n\tB\n\t{\n\t\t"x"\t"1"\n\t\t"y"\t"2"\n\t}\n}\n', parsed: dk }, ['B'], 'x') === 'A\n{\n\tB\n\t{\n\t\t"y"\t"2"\n\t}\n}\n', 'key removed with its line');
+    check(isHidden('HudHealth') && !isHidden('HudArmor') && isHidden('HudHintDisplay') && !isHidden('HudAmmo'), 'hidden: alpha 0, or moved off screen for self-fading parts');
+  } finally {
+    files = keepFiles;
+  }
+  const ft = setAt(ff, ['Fonts', 'HudHintText', '2'], 'tall', '30');
+  const fp = parse(ft);
+  check(fp.entries.some(e => e.path.join('/') === 'Scheme/Fonts/HudHintText/2' && e.key === 'tall' && e.value === '30'), 'nested font block created');
+  check(setAt({ ...ff, text: ft, parsed: fp }, ['Fonts', 'HudHintText', '2'], 'tall', '31').includes('"tall"\t\t"31"'), 'nested font value edited in place');
+  const r = rectOf({ xpos: 'r157', ypos: '446', wide: '142', tall: 'f0' }, 1920, 1080);
+  check(r.x === 1920 - 157 * 2.25 && r.y === 446 * 2.25 && r.w === 142 * 2.25 && r.h === 1080, 'HudLayout position maths');
+  check(rectOf({ xpos: 'c-28' }, 1920, 1080).x === 960 - 63, 'centre anchor');
+
+  // recognition, on the shape of a real dump taken in game
+  live = parsePanels(['screen\t2560\t1440', '1\tBaseUI\tstaticPanel\t0\t0\t2560\t1440\tPanel', '2\tBaseUI\tstaticClientDLLPanel\t0\t0\t2560\t1440\tEditablePanel',
+    '3\tClientDLL\tCounterStrike Root Panel\t0\t0\t2560\t1440\tPanel', '4\tClientDLL\tCBaseViewport\t0\t0\t2560\t1440\tCounterStrikeViewport',
+    '5\tClientDLL\tHudHealth\t24\t1338\t240\t75\tCHudHealth', '5\tClientDLL\tTargetID\t0\t0\t2560\t1440\tCTargetID', '5\tClientDLL\tHudMessage\t0\t0\t2560\t1440\tCHudMessage\tClientScheme',
+    '5\tClientDLL\tHudHintDisplay\t560\t900\t1440\t300\tCHudHintDisplay', '6\tClientDLL\tHudHintDisplayLabel\t1145\t1036\t269\t164\tLabel',
+    '5\tClientDLL\tinfo\t0\t0\t2560\t1440\tCCSTextWindow', '6\tClientDLL\tframe_caption\t320\t0\t2530\t69\tPanel', '6\tClientDLL\tLeftClear\t0\t60\t380\t1320\tPanel',
+    '6\tClientDLL\tok\t548\t1092\t384\t60\tButton', '6\tClientDLL\turban\t548\t348\t444\t60\tMouseOverButton', '7\tClientDLL\tpanel\t560\t360\t100\t20\tPanel',
+'6\tClientDLL\tTextMessage\t548\t348\t1440\t720\tTextEntry',
+    '3\tClientDLL\tCCenterStringLabel\t0\t287\t2560\t432\tCCenterStringLabel\tSourceScheme','2\tBaseUI\tGameUI Panel\t0\t0\t2560\t1440\tEditablePanel',
+    '3\tBaseUI\tBaseGameUIPanel\t0\t0\t2560\t1440\tCBasePanel', '4\tGameUI\tGameMenu\t96\t618\t346\t726\tCGameMenu', '5\tGameUI\t\t96\t618\t346\t40\tMenuItem',
+    '3\tBaseUI\tGameConsole\t1232\t192\t1280\t1056\tCGameConsoleDialog', '4\tBaseUI\tframe_caption\t1232\t192\t1267\t30\tPanel',
+    '4\tBaseUI\tConsolePage\t1240\t226\t1264\t1014\tCConsolePanel', '5\tBaseUI\t\t1250\t240\t1200\t900\tRichText'].join('\n'));
+  const at = (x, y) => pickAt(x / 2560, y / 1440);
+  let hit = at(100, 1370);
+  check(hit && hit.info.name === 'Health' && !hit.control, 'click health');
+  hit = at(600, 1110);
+  check(hit && hit.info.name === 'Server message (MOTD)' && hit.control && controlOf(hit.control.cls)[1] === 'Button' && schemeOf(hit.control) === C, 'click the MOTD OK button');
+  hit = at(600, 370);
+  const res = { name: 'r', text: '', parsed: parse('"Resource/UI/x.res" { "urban" { "fgcolor_override" "1 2 3 255" "xpos" "10" } }'), bases: [] };
+  const own = ownBlock({ ...hit, res });
+  check(own && own.block === 'urban' && own.what === 'button' && resRows(res, own.block, own.defaults, C).length === 3, 'the clicked control\'s own .res block (show, text + x position)');
+  const sb = { name: 's', text: '', parsed: parse('"Resource/UI/scoreboard.res" { "CTPlayerLatency0" { "xpos" "1" } "CTPlayerName0" { "font" "X" } }'), bases: [] };
+  const scores = { key: 'scores' };
+  check(ownBlock({ thing: scores, node: { name: '_CT_playerping0', cls: 'Label', parent: scores }, res: sb }).block === 'CTPlayerLatency0'
+    && ownBlock({ thing: scores, node: { name: '_CT_playername0', cls: 'Label', parent: scores }, res: sb }).block === 'CTPlayerName0', 'scoreboard rows find their template block');
+  check(controlIn({ cls: 'MouseOverButton' }, { key: 'buy_ct' })[1] === 'Buy menu button' && controlIn({ cls: 'MouseOverButton' }, { key: 'class_ct' })[1] === 'Button', 'buy menu buttons read other colours');
+  check(hit && hit.control && hit.control.key === 'urban' && controlOf(hit.control.cls)[1] === 'Button', 'click a MouseOverButton (a plain Panel inside it walks up to the button)');
+  hit = at(1200, 1100);
+  check(hit && hit.info.id === 'HudHintDisplay', 'click the timer text (a label inside the hint display)');
+  const hb = clickRects(hit.thing, hit.info, live.W, live.H)[0];
+  check(hb.x === 1145 && hb.y === 1036 && hb.w === 269 && hb.h === 164, 'hint box outline fits the box, not its big panel');
+  hit = at(200, 300);
+  check(hit && hit.info.name === 'Server message (MOTD)' && !hit.control, 'click the MOTD background');
+  hit = at(1300, 500);
+  check(hit && hit.info.name === 'Console' && hit.control && controlOf(hit.control.cls)[1] === 'Text box' && schemeOf(hit.control) === S, 'click console text');
+  hit = at(150, 630);
+  check(hit && hit.info.name === 'Main menu' && !hit.control, 'click a main menu item: main menu colours, not generic menu ones');
+  hit = at(400, 300);
+  check(hit && hit.info.name === 'Centre print text' && schemeOf(hit.thing) === S, 'click the centre text: its fonts are in SourceScheme, as the plugin reports');
+  check(at(40, 30)?.info.id === 'HudMessage' && at(1150, 560)?.info.id === 'HudMessage' && schemeOf(at(40, 30).thing) === C, 'click the top-left or jhud server text');
+  check(onScreen().map(t => t.info.name).join() === 'Server message (MOTD),Main menu,Console,Health,Timer / hint text,Centre print text,Server HUD text (jhud, top left)', 'on screen list: windows first, no always-on overlays');
+  live = null;
+}
+if (location.hash === '#test') { try { parserCheck(); status('Self-check passed.'); } catch (err) { status(err.message); } }
+else if (host && location.hash !== '#hosttest') start();
+if (host && location.hash === '#hosttest') (async () => {
+  try {
+    parserCheck();
+    const path = await call('new', 'myhud');
+    await openHud(path);
+    check(hudName === 'myhud' && F(C) && F(S) && F(L) && F(L).defaultText && F(L).bases.length === 1 && F(CH).defaultText && F(CH).bases.length === 1, 'new HUD opens, with the game\'s HudLayout and ChatScheme');
+    for (const [id, hud] of Object.entries(HUD)) for (const [, keys] of hud.colours || [])
+      for (const k of keys.split('|')) if (!['Yellowish', 'Caution'].includes(k)) check(resolve(tables(F(hud.scheme || C)), k), `${hud.scheme || C} has ${k}`);
+    save(F(C), 'Panel.FgColor', '1 2 3 255');
+    save(F(L), 'xpos', '20', 'HudHealth');
+    await sleep(400);
+    await writing;
+    check(dirty, 'edits mark the HUD unsaved');
+    check((await readHud('resource/ClientScheme.res')).includes('"Panel.FgColor"\t\t"1 2 3 255"'), 'colour written into the HUD');
+    check(/HudHealth\s*\{\s*"xpos"\t\t"20"/.test(await readHud('scripts/HudLayout.res') || ''), 'position written into the HUD');
+    check(await call('save') === '3' && !(await call('save').then(n => +n)), 'Save HUD keeps the 3 changed files, then has nothing to keep');
+    setDirty(false);
+    await openHud(path); // fresh copy of the saved HUD
+    check((await readHud('resource/ClientScheme.res')).includes('"Panel.FgColor"\t\t"1 2 3 255"') && layoutProps(F(L), 'HudHealth').xpos === '20', 'saved changes are in the HUD');
+    check(layoutProps(F(L), 'HudHealth').ypos === '446', 'own HudLayout value wins, the rest comes from #base');
+    setHidden('HudHealth', true);
+    await sleep(400);
+    await writing;
+    check(isHidden('HudHealth') && !$('undo').disabled, 'hide writes alpha 0, and can be undone');
+    await undo();
+    const undone = await readHud('scripts/HudLayout.res');
+    check(!isHidden('HudHealth') && !/"alpha"/.test(undone) && /"xpos"\t\t"20"/.test(undone), 'undo puts the file back as it was');
+    save(F(C), 'Panel.FgColor', '9 9 9 255');
+    const spec = await uiFile('resource/UI/spectator.res');
+    check(spec && windowPartRows({ res: spec, info: { id: 'specgui' } }).length === 2, 'spectator bars start from the game\'s file, with show/hide');
+    setPartHidden(spec, 'topbar', true);
+    setPartHidden(spec, 'CTScoreLabel', true);
+    await sleep(400);
+    await writing;
+    const specText = await readHud('resource/UI/spectator.res') || '';
+    check(/"topbar"[^}]*"tall"\s+"0"[^}]*"tall_hudeditor"\s+"52"/.test(specText) && /"CTScoreLabel"[^}]*"xpos"\s+"9999"/.test(specText), 'hiding window parts writes a copy of the game\'s file: the top bar 0 high, a label off screen');
+    check(windowPartRows({ res: spec, info: { id: 'specgui' } }).length === 3, 'hidden window parts are listed to show again');
+    setPartHidden(spec, 'CTScoreLabel', false);
+    await sleep(400);
+    await writing;
+    check(layoutProps(spec, 'CTScoreLabel').xpos === 'r268' && !partHidden(spec, 'CTScoreLabel'), 'showing a window part puts its position back');
+    const sb = await uiFile('resource/UI/scoreboard.res'), sbSections = scoreboardSections({ res: sb, info: { id: 'scores' }, thing: { key: 'scores' } }, []);
+    const sbCounts = sbSections.map(([, rows]) => rows.length);
+    check(sbCounts[0] === 2 && sbCounts[1] === 6 && sbCounts[2] === 8 && sbCounts[3] >= 8, `scoreboard: background, text colours, player rows and fonts in one place (${sbCounts})`);
+    const menuFonts = fontsOf({ info: { kind: 'window', id: 'gamemenu', file: S }, thing: { key: 'gamemenu' } }).map(([f, n]) => `${f}:${n}`).join();
+    const btnFonts = fontsOf({ info: { kind: 'window', id: 'info', file: C }, thing: { key: 'info' }, control: { cls: 'Button' } });
+    check(menuFonts === `${S}:MenuLarge,${C}:ClientTitleFont` && btnFonts.length === 1 && btnFonts[0][1] === 'Default' && fontNames(C).length > 50
+      && resRows(sb, 'MapName', [], C, 'Label').some(r => r.dataset.q === 'font') && allFonts().ontoggle,
+      `fonts for everything: the main menu's own, a control type's default, a per-control font picker (${menuFonts})`);
+    const boxTick = sbSections[0][1][1].querySelector('input'); // "Colour box behind the scoreboard" (not in the page, so no click events)
+    boxTick.checked = true;
+    boxTick.onchange({ target: boxTick });
+    await sleep(400);
+    await writing;
+    check(/"?HudEditorBackground"?\s*\{[^}]*"zpos"\s+"-1"[^}]*"paintbackgroundtype"\s+"2"/.test(sb.text), 'scoreboard colour box added to a copy of the game\'s scoreboard.res');
+    const mm = mainMenuSections().map(([title, rows]) => `${title}:${rows.length}`).join();
+    check(mm === 'Main menu: logo:3,Main menu: items:1', `main menu: logo on/off and colours, item height (${mm})`);
+    await setAllFonts('Arial', '600');
+    const cf = F(C), marlett = fontVariants(cf, 'Marlett'), dflt = fontVariants(cf, 'Default');
+    check([...dflt.values()].every(p => p.name === 'Arial' && p.weight === '600') && [...marlett.values()].every(p => p.name === 'Marlett'),
+      'every text font at once: Arial 600, the symbol font left alone');
+    setOutline(F(L), 'HudHintKeyDisplay', true);
+    await sleep(400);
+    await writing;
+    check(layoutProps(F(L), 'HudHintKeyDisplay').paintborder === '1' && borderOf(C, OUTLINE)?.name === OUTLINE, 'HUD box outline: border made in ClientScheme, turned on in HudLayout');
+    setSquareAll(true);
+    await writing;
+    check((await readHud(CORNER_VMT(3)) || '').includes('vgui/white'), 'square corners everywhere: the game\'s corner material replaced in the HUD');
+    setDirty(false); // skip the discard question
+    await openHud(path);
+    check(await readHud(CORNER_VMT(3)) === null, 'files the editor made are taken out again when discarded');
+    check((await readHud('resource/ClientScheme.res')).includes('"1 2 3 255"') && await readHud('resource/UI/spectator.res') === null && await readHud('resource/UI/scoreboard.res') === null,
+      'unsaved changes are put back when discarded');
+    check(await readHud('resource/nope.res') === null, 'missing file reads as null');
+    check(await call('read', '../outside.txt').then(() => false, () => true), 'paths outside the HUD refused');
+    check(await call('new', 'myhud').then(() => false, () => true), 'existing HUD not overwritten');
+    await call('done', '', 'ok');
+  } catch (err) {
+    await call('done', '', err.message);
+  }
+})();
+</script>
+</body>
+</html>
