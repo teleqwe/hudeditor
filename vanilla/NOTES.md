@@ -64,3 +64,6 @@ Not in custom: a folder there with full vanilla files would cover every HUD that
   chat. The typing line's y is set by code (46 px above the chat's bottom at 1440p) and the history's height runs
   down to it. The chat's background is DullWhite's colour at alpha 127 (code), the history's black at alpha 90.
 - ScrollBar.Wide is in 480-line units in ChatScheme (4 = 12 px at 1440p).
+- Scheme reloads and HUD reloads take the chat out of typing (its keyboard input is switched off). The plugin's panel
+  list marks panels that take keyboard input ("k"); HudChat has it only while typing. The editor presses the
+  player's messagemode key again when a reload closed it.

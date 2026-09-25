@@ -52,6 +52,8 @@
   .thing-btn .eye { padding: 1px 8px; border: 1px solid #3a3f49; border-radius: 4px; font-size: 11px; color: var(--dim); }
   .thing-btn .eye:hover { border-color: var(--accent); color: var(--text); }
   .row.note { display: block; }
+  .row.sides { grid-template-columns: 1fr repeat(4, auto); gap: 10px; }
+  .row.sides label { display: flex; align-items: center; gap: 4px; cursor: pointer; }
   .row.menuitem { grid-template-columns: 1fr repeat(3, 30px); gap: 4px; }
   .row.menuadd { grid-template-columns: 1fr 1fr auto; gap: 6px; }
   .row .reset { margin-left: 8px; padding: 0 6px; font-size: 11px; color: var(--dim); }
@@ -62,7 +64,14 @@
   summary { padding: 9px 12px; cursor: pointer; font-weight: 600; }
   .fold summary { font-weight: 400; border-top: 1px solid var(--line); }
   .row { display: grid; grid-template-columns: 40px 1fr 72px; gap: 10px; align-items: center; padding: 6px 12px; border-top: 1px solid var(--line); }
-  .row.num { grid-template-columns: 1fr 84px 110px; }
+  .row.num { grid-template-columns: 1fr 112px 100px; }
+  .step { display: flex; }
+  .step input { width: 100%; text-align: center; border-radius: 0; -moz-appearance: textfield; }
+  .step input::-webkit-inner-spin-button, .step input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  .step button { flex: 0 0 26px; padding: 0; background: #22262d; color: var(--dim); border: 1px solid #3a3f49; font: inherit; font-size: 15px; line-height: 1; cursor: pointer; }
+  .step button:hover { color: var(--text); background: #2b3038; border-color: var(--accent); }
+  .step button:first-child { border-radius: 4px 0 0 4px; border-right: 0; }
+  .step button:last-child { border-radius: 0 4px 4px 0; border-left: 0; }
   .row.check { grid-template-columns: 40px 1fr; cursor: pointer; }
   .row input[type=color] { width: 40px; height: 26px; padding: 0; border: 1px solid #3a3f49; border-radius: 4px; background: none; cursor: pointer; }
   .row input[type=range] { width: 72px; }
@@ -582,8 +591,31 @@ function save(f, key, value, section = null) {
   }, 250);
 }
 
+// A reload re-applies the chat's settings, which takes it out of typing. If it was open when an edit started, press
+// the player's chat key once it closes (the game opens it only from a real key press; the editor comes back after).
+let chatKey = null, chatWatch = null;
+function keepChatOpen() {
+  const open = () => live && live.panels.some(p => p.key === 'hudchat' && p.keys); // typing: the chat takes keys
+  if (chatWatch || !open()) return;
+  let tries = 0;
+  chatWatch = setInterval(async () => {
+    if (open() && ++tries < 12) return; // wait up to 6 s for the reload
+    clearInterval(chatWatch);
+    if (!open()) {
+      if (chatKey === null) {
+        const m = /^\s*bind\s+"([^"]+)"\s+"messagemode"\s*$/mi.exec(await call('config').catch(() => ''));
+        const k = m ? m[1].toUpperCase() : 'Y';
+        chatKey = SCAN[/^[A-Z]$/.test(k) ? `Key${k}` : /^\d$/.test(k) ? `Digit${k}` : 'KeyY'];
+      }
+      await call('key', chatKey).catch(() => {});
+    }
+    chatWatch = null;
+  }, 500);
+}
+
 // Writes a file's new text (made by edit() from its current text) as one undo step, once earlier writes are done.
 function commit(f, id, edit) {
+  keepChatOpen();
   writing = writing.then(async () => {
     try {
       const next = edit();
@@ -618,8 +650,8 @@ function parsePanels(raw) {
   const [, W, H] = head.split('\t');
   const stack = [], panels = [];
   for (const l of lines) {
-    const [d, module, name, x, y, w, h, cls, scheme] = l.split('\t');
-    const p = { depth: +d, module, name: name || '', key: (name || '').toLowerCase(), x: +x, y: +y, w: +w, h: +h, cls: cls || '', scheme };
+    const [d, module, name, x, y, w, h, cls, scheme, keys] = l.split('\t');
+    const p = { depth: +d, module, name: name || '', key: (name || '').toLowerCase(), x: +x, y: +y, w: +w, h: +h, cls: cls || '', scheme, keys: keys === 'k' };
     stack.length = p.depth - 1;
     p.parent = stack[p.depth - 2] || null;
     stack[p.depth - 1] = p;
@@ -878,14 +910,8 @@ const ANCHOR = { xpos: { '': 'from the left', r: 'from the right', c: 'from the 
 function numRow(lay, id, key, label, raw) {
   const m = /^\s*([rcf]?)\s*(-?[\d.]+)\s*$/i.exec(raw || '0') || [0, '', '0'];
   const prefix = m[1].toLowerCase();
-  const row = document.createElement('div');
-  row.className = 'row num';
-  row.innerHTML = `<div></div><input type="number" step="1" value="${m[2]}"><div class="meta"></div>`;
-  row.firstElementChild.textContent = label;
+  const row = inputRow(label, m[2], v => save(lay, key, prefix + v, id), { type: 'number', step: 1 });
   row.lastElementChild.textContent = ANCHOR[key][prefix] || '';
-  const input = row.querySelector('input');
-  input.setAttribute('aria-label', label);
-  input.oninput = () => { if (input.value !== '') save(lay, key, prefix + input.value, id); };
   row.dataset.q = `${label} position size`.toLowerCase();
   return row;
 }
@@ -1127,14 +1153,14 @@ function boxRows(lay, id, p, t, hud) {
 
 // ---------- borders ----------
 // Which borders each control asks its scheme for (vgui_controls sources), by CONTROLS key.
-const BORDER_USE = {
-  Button: [['Border', 'ButtonBorder'], ['Border while focused', 'ButtonKeyFocusBorder'], ['Border while pressed', 'ButtonDepressedBorder']],
-  TextEntry: [['Border', 'ButtonDepressedBorder']], ListPanel: [['Border', 'ButtonDepressedBorder']], SectionedListPanel: [['Border', 'ButtonDepressedBorder']],
-  ProgressBar: [['Border', 'ButtonDepressedBorder']], Menu: [['Border', 'MenuBorder']], MenuItem: [['Menu border', 'MenuBorder']],
-  ScrollBar: [['Arrow buttons', 'ScrollBarButtonBorder'], ['Arrow buttons while pressed', 'ScrollBarButtonDepressedBorder']],
-  ScrollBarSlider: [['Handle', 'ButtonBorder']], Slider: [['Knob', 'ButtonBorder'], ['Track', 'ButtonDepressedBorder']],
-  PropertySheet: [['Tabs', 'TabBorder'], ['Selected tab', 'TabActiveBorder'], ['Page', 'PropertySheetBorder']],
-  ComboBoxButton: [['Arrow button', 'ScrollBarButtonBorder']],
+const BORDER_USE = { // [what the border goes round, as a section title, border name]
+  Button: [['Buttons', 'ButtonBorder'], ['Buttons with keyboard focus', 'ButtonKeyFocusBorder'], ['Buttons while pressed', 'ButtonDepressedBorder']],
+  TextEntry: [['Text fields', 'ButtonDepressedBorder']], ListPanel: [['Lists', 'ButtonDepressedBorder']], SectionedListPanel: [['Lists', 'ButtonDepressedBorder']],
+  ProgressBar: [['Progress bars', 'ButtonDepressedBorder']], Menu: [['Menus', 'MenuBorder']], MenuItem: [['Menus', 'MenuBorder']],
+  ScrollBar: [['Scroll bar arrows', 'ScrollBarButtonBorder'], ['Scroll bar arrows while pressed', 'ScrollBarButtonDepressedBorder']],
+  ScrollBarSlider: [['Scroll bar handle', 'ButtonBorder']], Slider: [['Slider knob', 'ButtonBorder'], ['Slider track', 'ButtonDepressedBorder']],
+  PropertySheet: [['Tabs', 'TabBorder'], ['Selected tab', 'TabActiveBorder'], ['Tab page', 'PropertySheetBorder']],
+  ComboBoxButton: [['Drop-down arrow', 'ScrollBarButtonBorder']],
 };
 BORDER_USE.BuyMouseOverPanelButton = BORDER_USE.Button;
 // Everything else that asks for the same name, so it's clear what else an edit changes.
@@ -1182,32 +1208,24 @@ function readBorder(f, n) {
   return { props, sides, base };
 }
 
-// The border as a simple style: none, line (one colour all round), raised (light top-left, dark bottom-right) or
-// sunken (the other way round); custom when its lines follow none of these.
-function borderStyle(b, t) {
-  const col = l => resolve(t, l.color || '') || '0 0 0 0', lit = c => (c[0] * 299 + c[1] * 587 + c[2] * 114) / 1000;
-  const S = SIDES.map(s => (b ? b.sides[s] : []).filter(l => toRgba(col(l))[3] > 0));
-  const n = Math.max(0, ...S.map(s => s.length));
-  if (!n) return { style: 'none', n: 1, light: '255 255 255 255', dark: '0 0 0 255' };
-  const one = s => s.length === n && s.every(l => col(l) === col(s[0])) ? col(s[0]) : null;
-  const [l, t2, r, bot] = S.map(one);
-  if (l && l === t2 && r && r === bot) {
-    if (l === r) return { style: 'line', n, light: l, dark: l };
-    return lit(toRgba(l)) >= lit(toRgba(r)) ? { style: 'raised', n, light: l, dark: r } : { style: 'sunken', n, light: r, dark: l };
-  }
-  return { style: 'custom', n, light: l || t2 || '255 255 255 255', dark: r || bot || '0 0 0 255' };
+// The border as tick boxes: which sides draw, how many pixels thick and one colour (mixed: the HUD's sides differ).
+function borderState(b, t) {
+  const col = l => resolve(t, l.color || '') || '0 0 0 0';
+  const shown = SIDES.map(s => (b ? b.sides[s] : []).filter(l => toRgba(col(l))[3] > 0));
+  const colours = [...new Set(shown.flat().map(col))];
+  return { on: Object.fromEntries(SIDES.map((s, i) => [s, shown[i].length > 0])), n: Math.max(1, ...shown.map(v => v.length)),
+    colour: colours[0] || '255 255 255 255', mixed: colours.length > 1 };
 }
 
-// The block for a style. Lines #base has beyond the new thickness are written clear, or the merge would keep them.
+// The block for that state. Every side is written, with a clear line where nothing should draw: a running game keeps
+// the lines of a side the file no longer lists, and #base's extra lines would merge back in.
 function borderBody(st, b) {
-  const n = st.style === 'none' ? 0 : Math.max(1, Math.min(8, +st.n || 1));
-  const colour = { Left: st.style === 'sunken' ? st.dark : st.light, Top: st.style === 'sunken' ? st.dark : st.light,
-    Right: st.style === 'raised' ? st.dark : st.light, Bottom: st.style === 'raised' ? st.dark : st.light };
-  const body = [['inset', `${n} ${n} ${n} ${n}`]];
+  const n = Math.max(1, Math.min(8, +st.n || 1));
+  const body = [['inset', SIDES.map(s => st.on[s] ? n : 0).join(' ')]]; // left top right bottom
   if (b && b.props.backgroundtype) body.push(['backgroundtype', b.props.backgroundtype]);
   for (const s of SIDES) {
-    const count = Math.max(n, b ? b.base[s] : 0);
-    if (count) body.push([s, Array.from({ length: count }, (_, i) => [String(i + 1), [['color', i < n ? colour[s] : '0 0 0 0'], ['offset', '0 0']]])]);
+    const count = Math.max(n, (b && b.base[s]) || 0, (b && b.sides && b.sides[s].length) || 0);
+    body.push([s, Array.from({ length: count }, (_, i) => [String(i + 1), [['color', st.on[s] && i < n ? st.colour : '0 0 0 0'], ['offset', '0 0']]])]);
   }
   return body;
 }
@@ -1221,26 +1239,26 @@ function copyBorder(b, change) {
 }
 
 function borderRows(file, name) {
-  const f = F(file), t = tables(f), b = borderOf(file, name), cur = borderStyle(b, t);
+  const f = F(file), t = tables(f), b = borderOf(file, name), cur = borderState(b, t);
   // the block as it is when written: another row (window corners) may have changed it since this list was drawn
   const write = () => save(f, name, () => {
-    const now = borderOf(file, name);
-    return borderBody(cur, now && now.name.toLowerCase() === name.toLowerCase() ? now : { props: now ? now.props : {}, base: readBorder(f, name).base });
+    const now = borderOf(file, name), own = now && now.name.toLowerCase() === name.toLowerCase();
+    return borderBody(cur, own ? now : { props: now ? now.props : {}, base: readBorder(f, name).base, sides: now ? now.sides : null });
   }, ['Borders']);
-  const styles = [['none', 'None'], ['line', 'Line'], ['raised', 'Raised (light top and left)'], ['sunken', 'Sunken (dark top and left)']];
-  if (cur.style === 'custom') styles.push(['custom', 'As the HUD has it']);
-  const shared = BORDER_SHARED[name] ? `Also changes ${BORDER_SHARED[name]}. ` : '';
-  const via = b && b.name.toLowerCase() !== name.toLowerCase() ? `Now the same as ${b.name}; changing it gives this its own. ` : '';
-  const rows = [selectRow('Style', styles, cur.style, v => { if (v === 'custom') return; cur.style = v; write(); refreshSoon(); }, [name])];
-  if (shared || via) rows.push(noteRow(via + shared));
-  if (cur.style === 'none' || cur.style === 'custom') return rows;
-  rows.push(inputRow('Thickness', String(cur.n), v => { cur.n = v; write(); }, { type: 'number', min: 1, max: 8, step: 1, title: 'pixels' }));
-  if (cur.style === 'line') rows.push(colorRow('Colour', 'All four sides', cur.light, v => { cur.light = cur.dark = v; write(); }, [name]));
-  else {
-    const top = cur.style === 'raised' ? 'Top and left' : 'Bottom and right', bottom = cur.style === 'raised' ? 'Bottom and right' : 'Top and left';
-    rows.push(colorRow('Light edge', top, cur.light, v => { cur.light = v; write(); }, [name]),
-      colorRow('Dark edge', bottom, cur.dark, v => { cur.dark = v; write(); }, [name]));
-  }
+  const sides = el('div', { className: 'row sides' });
+  sides.append(el('div', { textContent: 'Sides' }), ...['Top', 'Left', 'Right', 'Bottom'].map(s => {
+    const l = el('label'), box = el('input', { type: 'checkbox', checked: cur.on[s], onchange: () => { cur.on[s] = box.checked; write(); } });
+    l.append(box, s);
+    return l;
+  }));
+  sides.dataset.q = 'border sides top left right bottom';
+  const rows = [sides,
+    inputRow('Thickness', String(cur.n), v => { cur.n = v; write(); }, { type: 'number', min: 1, max: 8, step: 1, title: 'pixels' }),
+    colorRow('Colour', 'The ticked sides', cur.colour, v => { cur.colour = v; write(); }, [name])];
+  const notes = [cur.mixed && 'The HUD gives this border more than one colour; a change here makes every side this colour.',
+    b && b.name.toLowerCase() !== name.toLowerCase() && `Now the same as ${b.name}; a change here gives this one its own.`,
+    BORDER_SHARED[name] && `Also changes ${BORDER_SHARED[name]}.`].filter(Boolean);
+  if (notes.length) rows.push(noteRow(notes.join(' ')));
   return rows;
 }
 
@@ -1447,7 +1465,14 @@ function inputRow(label, value, onChange, attrs = {}) {
   for (const [k, v] of Object.entries(attrs)) input.setAttribute(k, v); // "list" can only be set as an attribute
   input.setAttribute('aria-label', label);
   input.oninput = () => { if (input.value !== '') onChange(input.value); };
-  row.append(el('div', { textContent: label }), input, el('div', { className: 'meta', textContent: attrs.title || '' }));
+  let box = input;
+  if (attrs.type === 'number') { // - and + beside the box instead of the browser's arrows inside it
+    const step = (up, text) => el('button', { textContent: text, tabIndex: -1, title: up ? 'Up' : 'Down',
+      onclick: () => { try { up ? input.stepUp() : input.stepDown(); } catch { return; } input.oninput(); } });
+    box = el('div', { className: 'step' });
+    box.append(step(false, '−'), input, step(true, '+'));
+  }
+  row.append(el('div', { textContent: label }), box, el('div', { className: 'meta', textContent: attrs.title || '' }));
   row.dataset.q = label.toLowerCase();
   return row;
 }
@@ -1564,7 +1589,8 @@ function chatPaddingRows(sel) {
     const n = Math.max(0, Math.round(+v)), w = Math.max(20, (parseInt(layoutProps(lay, 'HudChat').wide, 10) || 320) - 2 * n);
     for (const b of ['HudChatHistory', 'ChatInputLine']) save(f, 'xpos', String(n), b), save(f, 'wide', String(w), b);
     save(f, 'ypos', String(n), 'HudChatHistory');
-  }, { type: 'number', min: 0, max: 40, step: 1, title: 'Around the messages and typing line; the game\'s is 10. Set it again after changing the chat\'s width' });
+  }, { type: 'number', min: 0, max: 40, step: 1, title: 'The game\'s is 10' });
+  row.title = 'Space around the messages and typing line. Set it again after changing the chat\'s width.';
   row.dataset.q = 'chat padding space inside';
   return [row];
 }
@@ -1679,55 +1705,56 @@ async function setBackground(file) {
 }
 
 // Everything editable for a selection, as [subheading, rows] pairs.
+// Everything editable for a selection, as [title, rows] pairs: colours first, then fonts, then borders, then the
+// rest (what's shown, the menu's buttons...). Titles say the kind first, then what it's for.
 function selectionSections(sel) {
-  const out = [], { info, control } = sel, fonts = fontsOf(sel);
-  const own = sel.res && ownBlock(sel);
-  // these menus read their .res only when the game makes them (the scoreboard and spectator bars read it again on a reload)
-  if (own) out.push([`This ${own.what} only`, [...(STARTUP_RES.has(info.id) ? [noteRow('This window reads its layout when the game starts: showing, hiding and moving things here appear after a game restart. Colours and fonts change straight away.')] : []),
-    ...resRows(sel.res, own.block, own.defaults, schemeOf(sel.thing), own.ctl)]]);
+  const groups = { colour: [], font: [], border: [], other: [] }, add = (kind, title, rows) => groups[kind].push([title, rows]);
+  const { info, control } = sel, fonts = fontsOf(sel), own = sel.res && ownBlock(sel);
+  // what was clicked, on its own: shown or not, position, and its own colours over the shared ones below
+  // (these menus read their .res only when the game makes them; the scoreboard and spectator bars read it on a reload)
+  if (own) add('colour', `Just this ${own.what}`, [...(STARTUP_RES.has(info.id) ? [noteRow('This window reads its layout when the game starts: showing, hiding and moving things here appear after a game restart. Colours and fonts change straight away.')] : []),
+    ...resRows(sel.res, own.block, own.defaults, schemeOf(sel.thing), own.ctl)]);
   if (control) {
     const [ctl, what, keys] = controlIn(control, sel.thing);
-    const file = schemeOf(control);
-    out.push([`${what} (every ${what.toLowerCase()} in ${file === C ? 'in-game windows' : file === CH ? 'the chat' : 'menus'})`, [
+    const file = schemeOf(control), where = file === C ? 'in-game windows' : file === CH ? 'the chat' : 'menus';
+    add('colour', `Colours: every ${what.toLowerCase()} in ${where}`, [
       // the chat keeps its scroll bar once it holds more lines than fit, even closed; the default colours are see-through
       ...(file === CH && ctl.startsWith('ScrollBar') ? [noteRow('The chat shows this scroll bar even while it is closed. Keep it see-through (low opacity) or it stays on screen.')] : []),
-      ...schemeRows(file, keys), ...(ctl.startsWith('ScrollBar') ? [scrollWideRow(file)].filter(Boolean) : [])]]);
-    for (const [label, name] of BORDER_USE[ctl] || []) out.push([`${what}: ${label.toLowerCase()}`, borderRows(file, name)]);
+      ...schemeRows(file, keys), ...(ctl.startsWith('ScrollBar') ? [scrollWideRow(file)].filter(Boolean) : [])]);
+    for (const [label, name] of BORDER_USE[ctl] || []) add('border', `Border: ${label.toLowerCase()} in ${where}`, borderRows(file, name));
   }
   if (info.kind === 'hud') {
-    out.push([info.name, hudRows(info.id, info.hud)]);
-    if (info.id === 'HudChat' && sel.res) out.push(['Chat: inside', chatPaddingRows(sel)]);
-    const hidden = windowPartRows(sel); // parts moved off screen (the chat's Filters button) can't be clicked any more
-    if (hidden.length) out.push([`${info.name}: hidden parts`, hidden]);
-  }
-  else {
-    out.push([`${info.name}: parts on screen`, windowPartRows(sel)]);
-    if (info.id === 'scores') out.push(...scoreboardSections(sel, fonts.map(([, n]) => n)));
-    if (info.id === 'gamemenu') out.push(...mainMenuSections());
-    if (/serverbrowser/.test(info.id) && serverBrowserRows().length) out.push(['Server browser: buttons', serverBrowserRows()]);
+    add('colour', info.name, hudRows(info.id, info.hud));
+    if (info.id === 'HudChat' && sel.res) add('other', 'Chat: space inside', chatPaddingRows(sel));
+    add('other', `${info.name}: hidden parts`, windowPartRows(sel)); // parts moved off screen (the chat's Filters button) can't be clicked any more
+  } else {
     if (info.id !== 'gamemenu') { // the main menu isn't a window frame
       // menu windows paint their frame's background and edge; in-game ones (team select...) draw their own panels
       const frame = info.file === S;
-      out.push(['Window', [...(frame ? [windowCornerRow(S)] : []), ...schemeRows(info.file, WINDOW_COLOURS[info.file])]]);
-      if (frame) out.push(['Window edge', borderRows(S, 'FrameBorder')]);
+      add('colour', 'Colours: the window', schemeRows(info.file, WINDOW_COLOURS[info.file]));
+      if (frame) add('border', 'Border: window edge (every window)', [windowCornerRow(S), ...borderRows(S, 'FrameBorder')]);
     }
-    if (EXTRA[info.id]) out.push([info.name, schemeRows(S, EXTRA[info.id]).concat(info.file === C ? schemeRows(C, EXTRA[info.id]) : [])]);
+    if (EXTRA[info.id]) add('colour', `Colours: ${info.name.toLowerCase()}`, schemeRows(S, EXTRA[info.id]).concat(info.file === C ? schemeRows(C, EXTRA[info.id]) : []));
+    add('other', `${info.name}: show or hide parts`, windowPartRows(sel));
+    if (info.id === 'scores') for (const [t, r] of scoreboardSections(sel, fonts.map(([, n]) => n))) add(/fonts$/.test(t) ? 'font' : 'colour', t, r);
+    if (info.id === 'gamemenu') for (const [t, r] of mainMenuSections()) add(/logo$/.test(t) ? 'colour' : 'other', t, r);
+    if (/serverbrowser/.test(info.id)) add('other', 'Server browser: buttons', serverBrowserRows());
   }
-  if (fonts.length) out.push([`${fonts.length > 1 ? 'Fonts' : 'Font'} (a change shows everywhere the font is used)`,
-    fonts.map(([file, font, what]) => fontFold(file, font, what, fonts.length <= 2 && (control || info.kind === 'hud')))]);
+  if (fonts.length) add('font', `${fonts.length > 1 ? 'Fonts' : 'Font'} (a change shows everywhere the font is used)`,
+    fonts.map(([file, font, what]) => fontFold(file, font, what, fonts.length <= 2 && (control || info.kind === 'hud'))));
   // a font the game asks for by name that its own scheme never defines (the right-side text's HudHintTextSmall): it
   // falls back to something else until the HUD has one of that name
   if (info.kind === 'hud') {
     const hf = info.hud.scheme || C, missing = (HUD_FONTS[info.id] || []).filter(n => F(hf) && !hasFont(hf, n));
-    if (missing.length) out.push(['Font', missing.map(n => {
+    add('font', 'Font the game is missing', missing.map(n => {
       const b = el('button', { textContent: `Add ${n} to the HUD` });
       b.onclick = () => { save(F(hf), n, [['1', [['name', 'Verdana'], ['tall', '9'], ['weight', '700'], ['antialias', '1']]]], ['Fonts']); refreshSoon(); };
       const r = noteRow(`The game draws this with the font ${n}, which it doesn't come with, so it uses a stand-in. Add it to set its look. `);
       r.append(b);
       return r;
-    })]);
+    }));
   }
-  return out.filter(([, rows]) => rows.length);
+  return [...groups.colour, ...groups.font, ...groups.border, ...groups.other].filter(([, rows]) => rows.length);
 }
 
 // Things on screen now (or every known HUD part when the game isn't reporting).
@@ -1817,8 +1844,8 @@ function renderList() {
   if (selected) {
     const crumbs = el('div', { className: 'crumbs' });
     crumbs.append(el('span', { className: 'what', textContent: selected.info.name }));
-    if (selected.control) crumbs.append(el('span', { className: 'meta', textContent: `  â€º  ${controlIn(selected.control, selected.thing)[1]}${selected.control.name ? ` "${selected.control.name}"` : ''}` }));
-    const back = el('button', { className: 'back', textContent: 'â€¹ Back', title: 'Back to the list (changes stay unsaved until Save HUD)' });
+    if (selected.control) crumbs.append(el('span', { className: 'meta', textContent: `  ›  ${controlIn(selected.control, selected.thing)[1]}${selected.control.name ? ` "${selected.control.name}"` : ''}` }));
+    const back = el('button', { className: 'back', textContent: '‹ Back', title: 'Back to the list (changes stay unsaved until Save HUD)' });
     back.onclick = () => select(null);
     const done = el('button', { className: 'done primary', textContent: 'Done', title: 'Save the changes into the HUD and go back to the list' });
     done.onclick = async () => {
@@ -1982,7 +2009,7 @@ $('boxes').onmousemove = e => {
   const { W, H } = boxList();
   const r = live ? (hit.control || (hit.node ? clickRects(hit.thing, hit.info, W, H)[0] : hit.r)) : rectOf(layoutProps(F(L), hit.info.id), W, H, hit.info.hud.hit);
   Object.assign(hb.style, { left: `${r.x / W * 100}%`, top: `${r.y / H * 100}%`, width: `${r.w / W * 100}%`, height: `${r.h / H * 100}%` });
-  hb.firstChild.textContent = hit.control ? `${hit.info.name} â€º ${controlIn(hit.control, hit.thing)[1]}` : hit.info.name;
+  hb.firstChild.textContent = hit.control ? `${hit.info.name} › ${controlIn(hit.control, hit.thing)[1]}` : hit.info.name;
 };
 $('boxes').onmouseleave = () => { if ($('hoverbox') && !drag) $('hoverbox').hidden = true; };
 // a drag ends with a click too: that one mustn't pick something else
@@ -2086,7 +2113,7 @@ async function showPicker(canCancel) {
   box.innerHTML = '';
   for (const [name, path, where] of huds) {
     const b = el('button', { className: 'hud' + (path.toLowerCase() === current.toLowerCase() ? ' primary' : ''), textContent: name });
-    b.append(el('span', { className: 'meta', textContent: `${where === 'custom' ? 'In your custom folder' : 'Recent'} Â· ${path}` }));
+    b.append(el('span', { className: 'meta', textContent: `${where === 'custom' ? 'In your custom folder' : 'Recent'} · ${path}` }));
     b.onclick = () => openHud(path);
     box.append(b);
   }
@@ -2265,12 +2292,15 @@ function parserCheck() {
   try {
     const bf = F('b'), bt = tables(bf), raised = borderOf('b', 'ButtonBorder');
     check(raised.name === 'RaisedBorder' && borderOf('b', 'ButtonDepressedBorder').name === 'DepressedBorder', 'border names follow aliases, then BaseBorder');
-    const rs = borderStyle(raised, bt);
-    check(rs.style === 'raised' && rs.n === 1 && rs.light === '200 200 200 255' && rs.dark === '40 40 40 255', 'raised border read from its lines');
-    check(borderStyle(borderOf('b', 'TextEntryBorder'), bt).style === 'sunken' && borderStyle(borderOf('b', 'FrameBorder'), bt).style === 'none', 'sunken and empty borders');
-    const body = borderBody({ style: 'line', n: 1, light: '1 2 3 255', dark: '1 2 3 255' }, raised);
-    const right = body.find(([k]) => k === 'Right')[1];
-    check(right.length === 2 && right[1][1][0][1] === '0 0 0 0', 'lines #base has beyond the thickness are written clear');
+    const rs = borderState(raised, bt), none = borderState(borderOf('b', 'FrameBorder'), bt);
+    check(SIDES.every(s => rs.on[s]) && rs.n === 1 && rs.colour === '200 200 200 255' && rs.mixed, 'border sides, thickness and colours read from its lines');
+    check(!SIDES.some(s => none.on[s]), 'empty border: no sides');
+    const body = borderBody({ on: { Left: true, Top: true, Right: true, Bottom: false }, n: 1, colour: '1 2 3 255' }, raised);
+    const side = s => body.find(([k]) => k === s)[1];
+    check(side('Right').length === 2 && side('Right')[1][1][0][1] === '0 0 0 0', 'lines #base has beyond the thickness are written clear');
+    check(side('Bottom')[0][1][0][1] === '0 0 0 0' && body[0][1] === '1 1 1 0', 'a side that is off is written as a clear line, with no inset');
+    const bare = borderBody({ on: { Left: false, Top: false, Right: false, Bottom: false }, n: 1, colour: '1 2 3 255' }, { props: {}, base: {}, sides: null });
+    check(SIDES.every(s => bare.some(([k, v]) => k === s && v.length === 1)), 'no sides still writes every side (a running game keeps unlisted ones)');
     const t1 = setBlock(bf, ['Borders'], 'ButtonBorder', body), nb = parse(t1);
     check(!nb.entries.some(e => e.path.length === 2 && e.key === 'ButtonBorder') && nb.sections.filter(s => s.path.join('/') === 'Scheme/Borders/ButtonBorder').length === 1
       && nb.entries.some(e => e.path.join('/') === 'Scheme/Borders/ButtonBorder/Top/1' && e.key === 'color' && e.value === '1 2 3 255'), 'an alias replaced by a block');

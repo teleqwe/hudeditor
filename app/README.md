@@ -53,11 +53,12 @@ packed inside it. Needs Windows 10 or 11 (it uses the WebView2 runtime that ship
      - **Radio and server menus** (radio commands, SourceMod menus such as bhop checkpoints): title, option and
        background colours, the title and option fonts, and the position.
    - **Windows** (team select, buy menu, scoreboard, spectator bars, MOTD, main menu, options, console): the exact
-     control you clicked. You get:
-     - its own colour and position (**This ... only**)
-     - the colours shared by every control of that type
-     - its borders (normal, focused, pressed...), each with a style (none, line, raised, sunken), thickness and colours
-     - the window colours
+     control you clicked. You get, in this order (colours, then fonts, then borders, then the rest):
+     - its own colour and position (**Just this ...**)
+     - the colours shared by every control of that type, and the window colours
+     - the fonts it uses
+     - its borders (normal, focused, pressed...): which sides draw (four tick boxes), thickness and colour. Sides that
+       are off are written as clear lines, since a running game keeps lines a file no longer lists
      - for menu windows, square or rounded corners and the window edge
      - **Main menu:** hide or colour the logo (`Main.Title1.Color`, `Main.Title2.Color` in ClientScheme), the item
        height (`MainMenu.MenuItemHeight`, scaled to your screen) and the menu text colours. The item text size is the

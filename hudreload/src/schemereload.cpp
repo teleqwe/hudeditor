@@ -1051,7 +1051,7 @@ static void Tick()
 
 //-----------------------------------------------------------------------------
 // Visible panels, for the editor: addons/schemereload_panels.txt lists every visible panel
-// a few levels deep ("screen W H", then "depth module name x y w h" per line). The HUD hides
+// a few levels deep ("screen W H", then "depth module name x y w h class scheme keys" per line). The HUD hides
 // elements that aren't being drawn, so this is what is actually on screen.
 //-----------------------------------------------------------------------------
 static bool g_bDumpBroken;
@@ -1081,8 +1081,9 @@ static void DumpTree( VPANEL p, int module, int depth, CUtlBuffer &out )
 		int x, y, w, h;
 		g_pVPanel->GetAbsPos( c, x, y );
 		g_pVPanel->GetSize( c, w, h );
-		out.Printf( "%d\t%s\t%s\t%d\t%d\t%d\t%d\t%s\t%s\n", depth, m >= 0 ? s_Modules[m] : "-", g_pVPanel->GetName( c ), x, y, w, h,
-			g_pVPanel->GetClassName( c ), SchemeLabel( c ) );
+		// last column: "k" while it takes keyboard input (the chat while typing)
+		out.Printf( "%d\t%s\t%s\t%d\t%d\t%d\t%d\t%s\t%s\t%s\n", depth, m >= 0 ? s_Modules[m] : "-", g_pVPanel->GetName( c ), x, y, w, h,
+			g_pVPanel->GetClassName( c ), SchemeLabel( c ), g_pVPanel->IsKeyBoardInputEnabled( c ) ? "k" : "" );
 		if ( depth < 10 )
 			DumpTree( c, m, depth + 1, out );
 	}
