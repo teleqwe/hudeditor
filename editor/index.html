@@ -646,6 +646,7 @@ const prettify = n => n.replace(/^Hud/, '').replace(/([a-z])([A-Z])/g, '$1 $2').
 let selected = null; // { thing: panel-like, info, control: panel|null }
 
 // A window's own .res file, where single controls get their own colours and positions.
+const STARTUP_RES = new Set(['team', 'class_ct', 'class_ter', 'info', 'buy_ct', 'buy_ter']);
 const UI_RES = { scores: 'resource/UI/scoreboard.res', specgui: 'resource/UI/spectator.res', specmenu: 'resource/UI/bottomspectator.res',
   team: 'resource/UI/TeamMenu.res', class_ct: 'resource/UI/ClassMenu_CT.res', class_ter: 'resource/UI/ClassMenu_TER.res', info: 'resource/UI/TextWindow.res',
   buy_ct: 'resource/UI/BuyMenu.res', buy_ter: 'resource/UI/BuyMenu.res' };
@@ -1512,7 +1513,9 @@ function mainMenuSections() {
 function selectionSections(sel) {
   const out = [], { info, control } = sel, fonts = fontsOf(sel);
   const own = sel.res && ownBlock(sel);
-  if (own) out.push([`This ${own.what} only`, resRows(sel.res, own.block, own.defaults, schemeOf(sel.thing), own.ctl)]);
+  // these menus read their .res only when the game makes them (the scoreboard and spectator bars read it again on a reload)
+  if (own) out.push([`This ${own.what} only`, [...(STARTUP_RES.has(info.id) ? [noteRow('This window reads its layout when the game starts: showing, hiding and moving things here appear after a game restart. Colours and fonts change straight away.')] : []),
+    ...resRows(sel.res, own.block, own.defaults, schemeOf(sel.thing), own.ctl)]]);
   if (control) {
     const [ctl, what, keys] = controlIn(control, sel.thing);
     const file = schemeOf(control);
@@ -1537,6 +1540,18 @@ function selectionSections(sel) {
   }
   if (fonts.length) out.push([`${fonts.length > 1 ? 'Fonts' : 'Font'} (a change shows everywhere the font is used)`,
     fonts.map(([file, font, what]) => fontFold(file, font, what, fonts.length <= 2 && (control || info.kind === 'hud')))]);
+  // a font the game asks for by name that its own scheme never defines (the right-side text's HudHintTextSmall): it
+  // falls back to something else until the HUD has one of that name
+  if (info.kind === 'hud') {
+    const hf = info.hud.scheme || C, missing = (HUD_FONTS[info.id] || []).filter(n => F(hf) && !hasFont(hf, n));
+    if (missing.length) out.push(['Font', missing.map(n => {
+      const b = el('button', { textContent: `Add ${n} to the HUD` });
+      b.onclick = () => { save(F(hf), n, [['1', [['name', 'Verdana'], ['tall', '9'], ['weight', '700'], ['antialias', '1']]]], ['Fonts']); refreshSoon(); };
+      const r = noteRow(`The game draws this with the font ${n}, which it doesn't come with, so it uses a stand-in. Add it to set its look. `);
+      r.append(b);
+      return r;
+    })]);
+  }
   return out.filter(([, rows]) => rows.length);
 }
 
