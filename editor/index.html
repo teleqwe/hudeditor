@@ -55,7 +55,14 @@
   .row.sides { grid-template-columns: 1fr repeat(4, auto); gap: 10px; }
   .row.sides label { display: flex; align-items: center; gap: 4px; cursor: pointer; }
   .row.menuitem { grid-template-columns: 1fr repeat(3, 30px); gap: 4px; }
-  .row.menuadd { grid-template-columns: 1fr 1fr auto; gap: 6px; }
+  .row.menuadd { grid-template-columns: 1fr auto; gap: 6px 8px; padding: 10px 12px; }
+  .row.menuadd > .meta, .row.menuadd > .wide { grid-column: 1 / -1; }
+  .row.menuadd > .meta { color: var(--text); font-size: 12px; font-weight: 600; }
+  .row.action { display: flex; gap: 8px; padding: 10px 12px; }
+  .row.action button { flex: 1; padding: 8px 10px; }
+  button.ghost { background: transparent; border-style: dashed; border-color: #4a505b; color: var(--dim); }
+  button.ghost:hover { color: var(--text); }
+  .rename[contenteditable="plaintext-only"] { outline: 1px solid var(--accent); outline-offset: 1px; border-radius: 2px; cursor: text; }
   .row .reset { margin-left: 8px; padding: 0 6px; font-size: 11px; color: var(--dim); }
   .row.pick { grid-template-columns: 1fr minmax(0, 190px); }
   .row.pick .meta { grid-column: 2; }
@@ -931,6 +938,32 @@ function pickAt(fx, fy) {
 }
 
 // ---------- list ----------
+// The sidebar's own words (section titles, row names, descriptions) can be renamed: double-click one. Kept in this
+// browser by the original text, so a rename shows wherever that text does; emptied, it goes back. Not in the HUD.
+let renamed = {};
+try { renamed = JSON.parse(localStorage.getItem('renamed') || '{}'); } catch {}
+function renameable(text) {
+  const s = el('span', { className: 'rename', textContent: renamed[text] ?? text, title: 'Double-click to rename' });
+  s.ondblclick = e => {
+    e.preventDefault(); e.stopPropagation();
+    s.contentEditable = 'plaintext-only';
+    s.focus();
+    getSelection().selectAllChildren(s);
+    s.onkeydown = k => {
+      if (k.key === 'Enter') { k.preventDefault(); s.blur(); }
+      else if (k.key === 'Escape') { s.textContent = renamed[text] ?? text; s.blur(); }
+    };
+    s.onblur = () => {
+      s.contentEditable = 'false';
+      const t = s.textContent.trim();
+      if (t && t !== text) renamed[text] = t; else delete renamed[text];
+      s.textContent = renamed[text] ?? text;
+      try { localStorage.setItem('renamed', JSON.stringify(renamed)); } catch {}
+    };
+  };
+  return s;
+}
+
 function colorRow(label, note, value, onChange, keys = [], onReset = null) {
   const rgba = toRgba(value);
   const row = document.createElement('div');
@@ -940,8 +973,8 @@ function colorRow(label, note, value, onChange, keys = [], onReset = null) {
   const [color, alpha] = row.querySelectorAll('input');
   color.setAttribute('aria-label', `${label} colour`);
   alpha.setAttribute('aria-label', `${label} opacity`);
-  row.children[1].firstElementChild.textContent = label;
-  row.querySelector('.meta').textContent = note;
+  row.children[1].firstElementChild.append(renameable(label));
+  if (note) row.querySelector('.meta').append(renameable(note));
   if (keys.length) row.querySelector('.meta').append(el('span', { className: 'setting', textContent: keys.join(' + ') }));
   if (onReset) row.children[1].firstElementChild.append(el('button', { className: 'reset', textContent: 'Default', title: 'Back to the default colour', onclick: onReset }));
   color.oninput = alpha.oninput = () => onChange(fromHex(color.value, +alpha.value));
@@ -963,8 +996,7 @@ function numRow(lay, id, key, label, raw) {
   show(raw);
   row.dataset.q = `${label} position size`.toLowerCase();
   if (key !== 'xpos' && key !== 'ypos') return row;
-  // Centre: "c" minus half the size, in the same units (a window's control centres in its window). Undo puts back
-  // where it was before
+  // Centre: "c" minus half the size, in the same units. Undo puts back where it was before
   const size = () => /^\s*\d+(\.\d+)?\s*$/.test(layoutProps(lay, id)[key === 'xpos' ? 'wide' : 'tall'] || '')
     ? +layoutProps(lay, id)[key === 'xpos' ? 'wide' : 'tall'] : null;
   const at = `${lay.name}/${id}/${key}`, set = r => { show(r); save(lay, key, r, id); };
@@ -973,7 +1005,9 @@ function numRow(lay, id, key, label, raw) {
   const centre = el('button', { className: 'mini', textContent: 'Centre', disabled: size() === null,
     title: size() === null ? 'Needs a width/height in plain numbers' : `Centre it ${key === 'xpos' ? 'left to right' : 'top to bottom'}`,
     onclick: () => {
-      const r = `c${-Math.round(size() / 2)}`, was = prefix + num;
+      // in a window smaller than the screen, a plain number from its edge (see windowSpan)
+      const t = moveTarget(selected), span = t && t.f === lay && t.block.toLowerCase() === id.toLowerCase() ? windowSpan(t, key) : null;
+      const r = span === null ? `c${-Math.round(size() / 2)}` : `${Math.round((span - size()) / 2)}`, was = prefix + num;
       if (r === was) return;
       if (!(at in centredFrom)) centredFrom[at] = was;
       set(r); undo.disabled = false;
@@ -1006,7 +1040,8 @@ function rangeRow(label, value, onChange) {
 }
 
 function noteRow(text) {
-  const row = el('div', { className: 'row note meta', textContent: text });
+  const row = el('div', { className: 'row note meta' });
+  row.append(renameable(text));
   row.dataset.q = '';
   return row;
 }
@@ -1380,9 +1415,6 @@ function resRows(f, block, defaults, schemeFile, ctl) {
     const deflt = CONTROL_FONTS[ctl] && CONTROL_FONTS[ctl][0][1];
     if (!CODE_FONTS[block.toLowerCase()] && (p.font || deflt)) rows.push(inputRow('Font', p.font || deflt, v => save(f, 'font', v, block),
       { list: fontList(schemeFile), title: `Just this one; any font in ${schemeFile}` }));
-    // its words ("#..." is the game's translated text). Texts the game fills in (map name, scores) replace these
-    if ('labeltext' in p) rows.push(inputRow('Text', p.labeltext, v => save(f, 'labelText', v, block),
-      { title: p.labeltext.startsWith('#') ? 'Type your own words over the game\'s' : 'What it says' }));
   }
   for (const [k, label] of POS) if (k in p || k.endsWith('pos')) rows.push(numRow(f, block, k, label, p[k]));
   return rows;
@@ -1540,7 +1572,10 @@ function inputRow(label, value, onChange, attrs = {}) {
     box = el('div', { className: 'step' });
     box.append(step(false, '−'), input, step(true, '+'));
   }
-  row.append(el('div', { textContent: label }), box, el('div', { className: 'meta', textContent: attrs.title || '' }));
+  const name = el('div'), meta = el('div', { className: 'meta' });
+  name.append(renameable(label));
+  if (attrs.title) meta.append(renameable(attrs.title));
+  row.append(name, box, meta);
   row.dataset.q = label.toLowerCase();
   return row;
 }
@@ -1611,8 +1646,8 @@ function mainMenuSections() {
     out.push(['Main menu: logo', [show, ...schemeRows(C, [['Logo', LOGO_KEYS[0], '"COUNTER-STRIKE"'], ['Logo, second line', LOGO_KEYS[1], '"SOURCE"']])]]);
   }
   const pick = el('input', { type: 'file', accept: 'image/*', hidden: true, onchange: () => { if (pick.files[0]) setBackground(pick.files[0]); pick.value = ''; } });
-  const add = el('div', { className: 'row check' });
-  add.append(pick, el('button', { textContent: 'Import a picture...', onclick: () => pick.click() }));
+  const add = el('div', { className: 'row action' });
+  add.append(pick, el('button', { className: 'primary', textContent: 'Import a picture…', onclick: () => pick.click() }));
   add.dataset.q = 'background picture image wallpaper import';
   const buttons = menuRows();
   if (buttons.length) out.push(['Main menu: buttons', buttons]);
@@ -1712,9 +1747,10 @@ function menuRows() {
   }));
   // a button that joins a server: goes above Quit
   const add = el('div', { className: 'row menuadd' });
-  const label = el('input', { value: 'CONNECT TO SERVER', title: 'Button text, shown as typed' }), ip = el('input', { placeholder: 'IP:port', title: 'e.g. 192.168.0.5:27015' });
+  const label = el('input', { value: 'CONNECT TO SERVER', placeholder: 'Button text', title: 'Button text, shown as typed' }), ip = el('input', { placeholder: 'IP:port', title: 'e.g. 192.168.0.5:27015' });
   label.setAttribute('aria-label', 'Button text'), ip.setAttribute('aria-label', 'Server IP');
-  add.append(label, ip, el('button', { textContent: 'Add', onclick: () => {
+  label.className = 'wide';
+  add.append(el('div', { className: 'meta', textContent: 'Add a button that joins a server' }), label, ip, el('button', { className: 'primary', textContent: 'Add button', onclick: () => {
     const addr = ip.value.trim(), text = label.value.replace(/["\\]/g, '').trim();
     if (!/^[\w.-]+(:\d{1,5})?$/.test(addr)) return status('Type the server as an IP or name, with an optional :port (like 1.2.3.4:27015).');
     const quit = items.findIndex(it => cmd(it) === 'Quit'), it = [['label', text || addr], ['command', `engine connect ${addr}`]];
@@ -1722,8 +1758,8 @@ function menuRows() {
   } }));
   add.dataset.q = 'menu button connect server ip add';
   // an empty button is an empty line (the game's own list has one, in game only)
-  const gap = el('div', { className: 'row check' });
-  gap.append(el('span'), el('button', { textContent: 'Add a gap', title: 'An empty line; move it into place with the arrows', onclick: () => setMenu([...items, [['label', ''], ['command', '']]]) }));
+  const gap = el('div', { className: 'row action' });
+  gap.append(el('button', { className: 'ghost', textContent: '+ Add a gap', title: 'An empty line; move it into place with the arrows', onclick: () => setMenu([...items, [['label', ''], ['command', '']]]) }));
   gap.dataset.q = 'menu button gap space empty';
   return [...rows, add, gap,noteRow('The game reads these when it starts: restart it to see changes.')];
 }
@@ -1881,7 +1917,9 @@ function render() {
 // A bordered group of rows with a title.
 function card(title, rows) {
   const c = el('section', { className: 'card' });
-  c.append(el('div', { className: 'sub', textContent: title }), ...rows);
+  const sub = el('div', { className: 'sub' });
+  sub.append(renameable(title));
+  c.append(sub, ...rows);
   return c;
 }
 
@@ -2029,9 +2067,18 @@ function moveTarget(sel) {
   const wide = /^\s*\d+\s*$/.test(p.wide || '') ? +p.wide : 0, s = panel && wide && panel.w ? panel.w / wide : live.H / 480;
   return { f, block, p, s, panel, hud: sel.info.kind === 'hud' && !sel.control, lockX: sel.info.kind === 'hud' && !sel.control && !!sel.info.hud.lockX };
 }
+// "c" and "r" count from the middle and right (bottom) of the screen, even for a control inside a smaller window (the
+// MOTD's OK button at c-64 sat right of centre). Inside such a window, positions are plain numbers from its left or
+// top edge instead. The window's width (xpos) or height in units; null when it spans the screen that way.
+function windowSpan(t, key) {
+  if (!t || t.hud || !t.panel || !t.panel.parent) return null;
+  const par = t.panel.parent, [len, screen] = key === 'xpos' ? [par.w, live.W] : [par.h, live.H];
+  return Math.abs(len - screen) <= 2 ? null : len / t.s;
+}
 // Magnet: within 12 preview pixels of an edge of the screen (a window's control: of its window) or its middle, a
 // dragged part snaps there. At an edge it stops 1 unit short (positions are whole units of screen height / 480, so
-// that is the smallest gap: 3 px at 1440p), anchored to that edge ("r" for right and bottom), in the middle "c".
+// that is the smallest gap: 3 px at 1440p), anchored to that edge ("r" for right and bottom), in the middle "c"
+// (plain numbers inside a window smaller than the screen, see windowSpan).
 // r = the panel's rect moved by the mouse, changed in place; returns the positions to write for the snapped sides.
 function snapTo(r, t) {
   const b = !t.hud && t.panel && t.panel.parent || { x: 0, y: 0, w: live.W, h: live.H }, out = {};
@@ -2039,7 +2086,10 @@ function snapTo(r, t) {
   for (const [k, pos, size, sizeKey] of [['xpos', 'x', 'w', 'wide'], ['ypos', 'y', 'h', 'tall']]) {
     if (k === 'xpos' && t.lockX) continue;
     const u = /^\s*\d+\s*$/.test(t.p[sizeKey] || '') ? +t.p[sizeKey] : Math.round(r[size] / t.s), start = b[pos], len = b[size];
-    const spots = [[start + t.s, '1'], [start + len - (u + 1) * t.s, `r${u + 1}`], [start + len / 2 - Math.round(u / 2) * t.s, `c${-Math.round(u / 2)}`]];
+    const span = windowSpan(t, k), end = span === null ? null : Math.round(span - u - 1), mid = span === null ? null : Math.round((span - u) / 2);
+    const spots = span === null
+      ? [[start + t.s, '1'], [start + len - (u + 1) * t.s, `r${u + 1}`], [start + len / 2 - Math.round(u / 2) * t.s, `c${-Math.round(u / 2)}`]]
+      : [[start + t.s, '1'], [start + end * t.s, `${end}`], [start + mid * t.s, `${mid}`]];
     const [gap, at, v] = spots.map(([at, v]) => [Math.abs(at - r[pos]), at, v]).sort((a, c) => a[0] - c[0])[0];
     if (gap < near) { r[pos] = at; out[k] = v; }
   }
@@ -2533,12 +2583,18 @@ if (host && location.hash === '#hosttest') (async () => {
     const centred = layoutProps(sb, 'MapName').xpos;
     undoBtn.onclick(); await sleep(400); await writing;
     check(centred === 'c-30' && layoutProps(sb, 'MapName').xpos === 'c-290', `Centre on a position, and its Undo (${centred})`);
-    check(resRows(sb, 'MapName', [], C, 'Label').some(r => r.firstElementChild.textContent === 'Text' && r.querySelector('input:not([type])')?.value === '%mapname%'),
-      'a control\'s own words are editable');
     const liveWas = live;
     live = { W: 2560, H: 1440, panels: [] };
     const snapT = { p: { wide: '100', tall: '60' }, s: 3, hud: true }, left = snapTo({ x: 10, y: 600, w: 300, h: 180 }, snapT), corner = snapTo({ x: 2250, y: 1250, w: 300, h: 180 }, snapT);
+    // a control in a 640-unit window (the MOTD at 1440p): plain numbers across, "c" down (the window is screen tall)
+    const inWin = { p: { wide: '128', tall: '20' }, s: 3, hud: false, panel: { parent: { x: 320, y: 0, w: 1920, h: 1440 } } };
+    const spans = [windowSpan(inWin, 'xpos'), windowSpan(inWin, 'ypos')], mid = snapTo({ x: 320 + 254 * 3, y: 700, w: 384, h: 60 }, inWin);
     live = liveWas;
+    check(spans[0] === 640 && spans[1] === null && mid.xpos === '256' && mid.ypos === 'c-10', `inside a window, centring counts from its edge (${spans} ${JSON.stringify(mid)})`);
+    renamed['Colours: the window'] = 'Window colours';
+    const renamedOk = card('Colours: the window', []).textContent === 'Window colours';
+    delete renamed['Colours: the window'];
+    check(renamedOk && card('Colours: the window', []).textContent === 'Colours: the window', 'sidebar titles can be renamed');
     check(JSON.stringify(left) === '{"xpos":"1"}' && JSON.stringify(corner) === '{"xpos":"r101","ypos":"r61"}',
       `dragging snaps to edges 1 unit in (${JSON.stringify(left)} ${JSON.stringify(corner)})`);
     const boxTick = sbSections[0][1][1].querySelector('input'); // "Colour box behind the scoreboard" (not in the page, so no click events)
