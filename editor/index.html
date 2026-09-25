@@ -65,6 +65,8 @@
   .fold summary { font-weight: 400; border-top: 1px solid var(--line); }
   .row { display: grid; grid-template-columns: 40px 1fr 72px; gap: 10px; align-items: center; padding: 6px 12px; border-top: 1px solid var(--line); }
   .row.num { grid-template-columns: 1fr 112px 100px; }
+  .row button.mini { margin-left: 8px; padding: 1px 7px; font-size: 11px; }
+  .row button.mini + button.mini { margin-left: 4px; }
   .step { display: flex; }
   .step input { width: 100%; text-align: center; border-radius: 0; -moz-appearance: textfield; }
   .step input::-webkit-inner-spin-button, .step input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
@@ -947,12 +949,33 @@ function colorRow(label, note, value, onChange, keys = [], onReset = null) {
 const ANCHOR = { xpos: { '': 'from the left', r: 'from the right', c: 'from the centre' }, ypos: { '': 'from the top', r: 'from the bottom', c: 'from the centre' },
   wide: { '': '', f: 'less than full width' }, tall: { '': '', f: 'less than full height' } };
 
+// Where positions were before Centre, for their Undo: "file/block/key" -> value. Kept across re-renders.
+const centredFrom = {};
 function numRow(lay, id, key, label, raw) {
-  const m = /^\s*([rcf]?)\s*(-?[\d.]+)\s*$/i.exec(raw || '0') || [0, '', '0'];
-  const prefix = m[1].toLowerCase();
-  const row = inputRow(label, m[2], v => save(lay, key, prefix + v, id), { type: 'number', step: 1 });
-  row.lastElementChild.textContent = ANCHOR[key][prefix] || '';
+  const split = r => { const m = /^\s*([rcf]?)\s*(-?[\d.]+)\s*$/i.exec(r || '0') || [0, '', '0']; return [m[1].toLowerCase(), m[2]]; };
+  let [prefix, num] = split(raw);
+  const row = inputRow(label, num, v => save(lay, key, prefix + v, id), { type: 'number', step: 1 });
+  const input = row.querySelector('input'), meta = row.lastElementChild;
+  const show = r => { [prefix, num] = split(r); input.value = num; meta.textContent = ANCHOR[key][prefix] || ''; };
+  show(raw);
   row.dataset.q = `${label} position size`.toLowerCase();
+  if (key !== 'xpos' && key !== 'ypos') return row;
+  // Centre: "c" minus half the size, in the same units (a window's control centres in its window). Undo puts back
+  // where it was before
+  const size = () => /^\s*\d+(\.\d+)?\s*$/.test(layoutProps(lay, id)[key === 'xpos' ? 'wide' : 'tall'] || '')
+    ? +layoutProps(lay, id)[key === 'xpos' ? 'wide' : 'tall'] : null;
+  const at = `${lay.name}/${id}/${key}`, set = r => { show(r); save(lay, key, r, id); };
+  const undo = el('button', { className: 'mini', textContent: 'Undo', title: 'Put it back where it was before Centre', disabled: !(at in centredFrom),
+    onclick: () => { set(centredFrom[at]); delete centredFrom[at]; undo.disabled = true; } });
+  const centre = el('button', { className: 'mini', textContent: 'Centre', disabled: size() === null,
+    title: size() === null ? 'Needs a width/height in plain numbers' : `Centre it ${key === 'xpos' ? 'left to right' : 'top to bottom'}`,
+    onclick: () => {
+      const r = `c${-Math.round(size() / 2)}`, was = prefix + num;
+      if (r === was) return;
+      if (!(at in centredFrom)) centredFrom[at] = was;
+      set(r); undo.disabled = false;
+    } });
+  row.firstElementChild.append(centre, undo);
   return row;
 }
 
@@ -2473,6 +2496,11 @@ if (host && location.hash === '#hosttest') (async () => {
       .map(([, n, w]) => `${n}:${w}`).join();
     check(listFonts === 'DefaultSmall:servers, column headers' && hideHow('TextMessage').join() === 'xpos,9999',
       `the server list's font is the one the game's code picks (${listFonts}); MOTD parts hide off screen`);
+    const [centreBtn, undoBtn] = numRow(sb, 'MapName', 'xpos', 'X position', layoutProps(sb, 'MapName').xpos).querySelectorAll('button.mini');
+    centreBtn.onclick(); await sleep(400); await writing;
+    const centred = layoutProps(sb, 'MapName').xpos;
+    undoBtn.onclick(); await sleep(400); await writing;
+    check(centred === 'c-30' && layoutProps(sb, 'MapName').xpos === 'c-290', `Centre on a position, and its Undo (${centred})`);
     const boxTick = sbSections[0][1][1].querySelector('input'); // "Colour box behind the scoreboard" (not in the page, so no click events)
     boxTick.checked = true;
     boxTick.onchange({ target: boxTick });

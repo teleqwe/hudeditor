@@ -34,7 +34,8 @@ packed inside it. Needs Windows 10 or 11 (it uses the WebView2 runtime that ship
    and it stays open for editing. The game comes to the front while the key is down and the editor takes the front back
    once you let go (a map otherwise locks the mouse inside the game).
    **Drag anything in the preview to move it.** HUD parts move in HudLayout, window controls in the window's `.res`
-   (`xpos`/`ypos`, keeping `r` and `c` anchors). The dashed box shows where it goes, and the game follows once you
+   (`xpos`/`ypos`, keeping `r` and `c` anchors). **Centre** beside X and Y position centres it (in its window, for a
+   window's control), and **Undo** there puts it back. The dashed box shows where it goes, and the game follows once you
    pause. What the game places itself (main menu, server browser, window frames) can't be moved, and the radio menu
    only moves up and down (the game keeps it full width). The same X and Y positions are rows on every part that has
    them. The team, class and buy menus and the MOTD read positions at startup, so moves there show after a restart.
