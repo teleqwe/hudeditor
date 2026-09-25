@@ -93,6 +93,18 @@
   .card.folded .fold-btn svg { transform: rotate(-90deg); }
   .card.folded > :not(.sub) { display: none; }
   .card.folded > .sub { border-bottom: 0; }
+  /* a selection's sections in folders, like a directory */
+  .group { margin: 0 0 8px; }
+  .group-head { width: 100%; display: flex; align-items: center; gap: 8px; padding: 6px 4px; background: none; border: 0; border-radius: 6px; color: var(--text); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
+  .group-head:hover { background: #22262d; }
+  .group-head svg { width: 12px; height: 12px; color: var(--dim); transition: transform .15s; }
+  .group.folded .group-head svg { transform: rotate(-90deg); }
+  .group-head .count { margin-left: auto; padding: 0 7px; border-radius: 9px; background: #2c3038; color: var(--dim); font-size: 11px; font-weight: 400; letter-spacing: 0; }
+  .group-body { margin: 2px 0 0 9px; padding: 4px 0 0 10px; border-left: 1px solid #343944; }
+  .group.folded .group-body { display: none; }
+  .card.fonts .divider { padding: 7px 12px; background: var(--head); color: var(--text); font-size: 12px; font-weight: 600; border-top: 2px solid #3a3f49; }
+  .card.fonts .divider:first-child { border-top: 0; }
+  .card.fonts .divider + * { border-top: 1px solid var(--line); }
   .rename[contenteditable="plaintext-only"] { outline: 1px solid var(--accent); outline-offset: 1px; border-radius: 2px; cursor: text; }
   .row .reset { margin-left: 8px; padding: 0 6px; font-size: 11px; color: var(--dim); }
   .row.pick { grid-template-columns: 1fr minmax(0, 190px); }
@@ -118,7 +130,6 @@
   .row input[type=checkbox] { justify-self: center; }
   .key { font-family: ui-monospace, Consolas, monospace; overflow-wrap: anywhere; }
   .meta { font-size: 11px; color: var(--dim); }
-  .setting { display: block; font-family: ui-monospace, Consolas, monospace; font-size: 10px; opacity: .55; }
   #picker { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, .6); z-index: 10; }
   #picker > div { width: min(520px, 92vw); max-height: 80vh; overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; }
   #picker h2 { margin: 0 0 4px; font-size: 16px; }
@@ -194,6 +205,7 @@
     <div class="tline">
       <span class="glabel">Keep open</span>
       <button id="scores" aria-pressed="false" title="Keep the scoreboard open to edit it. Click again (or press Tab in the game) to close it.">Scoreboard</button>
+      <button id="keepchat" aria-pressed="false" title="Keep the chat open (typing) to edit it: opened again after a change reloads the HUD. Click again to close it.">Chat</button>
     </div>
     <div class="tline" id="texts">
       <span class="glabel">Sample text</span>
@@ -201,7 +213,7 @@
       <button data-bit="2" title="Centre print speed (font Trebuchet24, SourceScheme)">1 Speed</button>
       <button data-bit="4" title="jhud under it (font CenterPrintText, ClientScheme)">2 jhud</button>
       <button data-bit="8" title="Record times in the top left corner (font CenterPrintText, ClientScheme)">3 Top left</button>
-      <button data-bit="16" title="A chat line every few seconds (font ChatFont, ChatScheme)">Chat</button>
+      <button data-bit="16" title="A chat line every few seconds (font ChatFont, ChatScheme)">Chat lines</button>
     </div>
   </div>
   </div>
@@ -331,10 +343,11 @@ CONTROLS.unshift(['BuyMouseOverPanelButton', 'Buy menu button', [['Text', 'Label
 const CONTROL_FONTS = { Label: [['Text', 'Default']], Button: [['Text', 'Default']], CheckButton: [['Text', 'Default']],
   RadioButton: [['Text', 'Default']], MenuItem: [['Text', 'Default']], Menu: [['Items', 'Default']], TextEntry: [['Text', 'Default']],
   RichText: [['Text', 'Default']], PropertySheet: [['Tabs', 'Default']], ListPanel: [['Rows', 'Default'], ['Column headers', 'DefaultSmall']],
-  SectionedListPanel: [['Rows and headers', 'DefaultVerySmall']], Slider: [['Captions', 'DefaultVerySmall']], BuyMouseOverPanelButton: [['Text', 'Default']] };
-// Controls whose fonts the game's code sets over their type's defaults ("A|B": A if the scheme has it, else B): the
-// server browser's list of servers (CBaseGamesPage). A "font" in the .res doesn't reach them.
-const CODE_FONTS = { gamelist: [['Servers', 'ListSmall|DefaultSmall'], ['Column headers', 'DefaultSmall']] };
+  SectionedListPanel: [['Rows', 'Default'], ['Section headers', 'DefaultVerySmall']], Slider: [['Captions', 'DefaultVerySmall']], BuyMouseOverPanelButton: [['Text', 'Default']] };
+// Controls whose fonts the game's code sets over their type's defaults ("A|B": A if the scheme has it, else B), by
+// panel name, checked in game by giving each font its own face: the server browser's list of servers (CBaseGamesPage)
+// and the class menu's description. A "font" in the window's .res doesn't reach them.
+const CODE_FONTS = { gamelist: [['Servers', 'ListSmall|DefaultSmall'], ['Column headers', 'DefaultSmall']], infolabel: [['Class description', 'DefaultSmall']] };
 // Windows whose fonts the game picks itself: [scheme, what, font ("A|B": A if the scheme has it, else B)].
 const WINDOW_FONTS = { gamemenu: [[S, 'Menu items', 'MainMenuFont|MenuLarge'], [C, 'Logo', 'ClientTitleFont']],
   gameconsole: [[S, 'Console text', 'ConsoleText']] };
@@ -651,38 +664,45 @@ function setDirty(d) {
 }
 
 // Every edit goes through here. section = HudLayout block for layout settings; scheme colours are sorted into Colors/BaseSettings.
-const timers = {};
+const timers = {}, waiting = new Set(); // edits not written yet: the list isn't redrawn until they are (see render)
+let renderAfterSave = false;
 function save(f, key, value, section = null) {
   const id = `${f.name}/${section}/${key}`;
   clearTimeout(timers[id]);
+  waiting.add(id);
   timers[id] = setTimeout(() => {
+    waiting.delete(id);
     const sub = Array.isArray(section) ? section : section ? [section] : null;
     // a function value is worked out when it's written, from the file as it is then (blocks built from what's there)
     commit(f, id, () => {
       const v = typeof value === 'function' ? value() : value;
       return Array.isArray(v) ? setBlock(f, sub, key, v) : v === null ? dropKey(f, sub, key) : sub ? setAt(f, sub, key, v) : withValue(f, key, v);
     });
+    if (!waiting.size && renderAfterSave) writing.then(() => { renderAfterSave = false; render(); });
   }, 250);
 }
 
 // A reload re-applies the chat's settings, which takes it out of typing. If it was open when an edit started, press
 // the player's chat key once it closes (the game opens it only from a real key press; the editor comes back after).
 let chatKey = null, chatWatch = null;
+const chatOpen = () => live && live.panels.some(p => p.key === 'hudchat' && p.keys); // typing: the chat takes keys
+// the player's messagemode key (config.cfg), as a scan code
+async function chatKeyScan() {
+  if (chatKey === null) {
+    const m = /^\s*bind\s+"([^"]+)"\s+"messagemode"\s*$/mi.exec(await call('config').catch(() => ''));
+    const k = m ? m[1].toUpperCase() : 'Y';
+    chatKey = SCAN[/^[A-Z]$/.test(k) ? `Key${k}` : /^\d$/.test(k) ? `Digit${k}` : 'KeyY'];
+  }
+  return chatKey;
+}
 function keepChatOpen() {
-  const open = () => live && live.panels.some(p => p.key === 'hudchat' && p.keys); // typing: the chat takes keys
+  const open = chatOpen;
   if (chatWatch || !open()) return;
   let tries = 0;
   chatWatch = setInterval(async () => {
     if (open() && ++tries < 12) return; // wait up to 6 s for the reload
     clearInterval(chatWatch);
-    if (!open()) {
-      if (chatKey === null) {
-        const m = /^\s*bind\s+"([^"]+)"\s+"messagemode"\s*$/mi.exec(await call('config').catch(() => ''));
-        const k = m ? m[1].toUpperCase() : 'Y';
-        chatKey = SCAN[/^[A-Z]$/.test(k) ? `Key${k}` : /^\d$/.test(k) ? `Digit${k}` : 'KeyY'];
-      }
-      await call('key', chatKey).catch(() => {});
-    }
+    if (!open()) await call('key', await chatKeyScan()).catch(() => {});
     chatWatch = null;
   }, 500);
 }
@@ -1091,6 +1111,7 @@ function colorRow(label, note, value, onChange, keys = [], onReset = null) {
   acts.append(undo);
   if (onReset) acts.append(el('button', { className: 'reset', textContent: 'Default', title: 'Back to the default colour',
     onclick: () => { steps.push(rgba.join(' ')); onReset(); } }));
+  row.dataset.keys = keys.join(' + '); // shown over the section's title (see card)
   row.append(pick, alpha, text, acts);
   show();
   row.dataset.q = `${label} ${note} ${keys.join(' ')}`.toLowerCase();
@@ -1138,7 +1159,7 @@ function selectRow(label, options, value, onChange, keys = []) {
   sel.setAttribute('aria-label', label);
   sel.onchange = () => onChange(sel.value);
   row.append(el('div', { textContent: label }), sel, el('div', { className: 'meta' }));
-  if (keys.length) row.lastElementChild.append(el('span', { className: 'setting', textContent: keys.join(' + ') }));
+  row.dataset.keys = keys.join(' + '); // shown over the section's title (see card)
   row.dataset.q = `${label} ${keys.join(' ')}`.toLowerCase();
   return row;
 }
@@ -1431,6 +1452,16 @@ function borderState(b, t) {
     colour: colours[0] || '255 255 255 255', mixed: colours.length > 1 };
 }
 
+// Whether any border in a scheme (its own blocks over #base's, as the game merges them) still draws with one of these
+// named colours. A border set with the side tick boxes has its colour written in, so it no longer follows them, and
+// once none does, the scheme colour (Border.Bright, Border.Dark) changes nothing.
+function bordersUse(file, names) {
+  const f = F(file), low = s => s.toLowerCase(), want = names.map(low), blocks = new Set();
+  if (!f) return false;
+  for (const p of [f.parsed, ...f.bases]) for (const s of p.sections) if (s.path.length === 3 && low(s.path[1]) === 'borders') blocks.add(s.path[2]);
+  return [...blocks].some(n => SIDES.some(s => readBorder(f, n).sides[s].some(l => want.includes(low(l.color || '')))));
+}
+
 // The block for that state. Every side is written, with a clear line where nothing should draw: a running game keeps
 // the lines of a side the file no longer lists, and #base's extra lines would merge back in.
 function borderBody(st, b) {
@@ -1576,8 +1607,8 @@ function fontsOf(sel) {
   }
   for (const p of live ? live.panels.filter(p => p.thing === sel.thing && p !== sel.thing) : []) {
     const ctl = controlIn(p, sel.thing);
-    for (const [what, font] of ctl && CONTROL_FONTS[ctl[0]] || [])
-      add(schemeOf(p), font, what.toLowerCase() === ctl[1].toLowerCase() ? what.toLowerCase() : `${ctl[1].toLowerCase()} ${what.toLowerCase()}`);
+    for (const [what, font] of CODE_FONTS[p.key] || ctl && CONTROL_FONTS[ctl[0]] || [])
+      add(schemeOf(p), font.split('|').find(n => hasFont(schemeOf(p), n)), !ctl || what.toLowerCase() === ctl[1].toLowerCase() ? what.toLowerCase() : `${ctl[1].toLowerCase()} ${what.toLowerCase()}`);
   }
   return out;
 }
@@ -1585,11 +1616,12 @@ function fontsOf(sel) {
 const hasFont = (file, font) => !!(F(file) && font && fontVariants(F(file), font).size);
 // A BaseSettings string (FrameTitleBar.Font...), own file over #base.
 function resolveString(file, key) {
+  // the game takes the first of a repeated key (the game's FrameTitleBar.Font is "UiBold", then "DefaultLarge": window
+  // titles are UiBold, checked in game), the HUD's own over #base's
   const f = F(file);
-  let v = null;
-  for (const p of f ? [...f.bases, f.parsed] : []) for (const e of p.entries)
-    if (e.path.length === 2 && e.path[1].toLowerCase() === 'basesettings' && e.key.toLowerCase() === key.toLowerCase()) v = e.value;
-  return v;
+  for (const p of f ? [f.parsed, ...f.bases] : []) for (const e of p.entries)
+    if (e.path.length === 2 && e.path[1].toLowerCase() === 'basesettings' && e.key.toLowerCase() === key.toLowerCase()) return e.value;
+  return null;
 }
 // Every font a scheme defines, in file order.
 function fontNames(file) {
@@ -1950,7 +1982,8 @@ function selectionSections(sel) {
     if (info.id !== 'gamemenu') { // the main menu isn't a window frame
       // menu windows paint their frame's background and edge; in-game ones (team select...) draw their own panels
       const frame = info.file === S;
-      add('colour', 'Colours: the window', schemeRows(info.file, WINDOW_COLOURS[info.file]));
+      // the Borders colours only while some border still draws with them (see bordersUse)
+      add('colour', 'Colours: the window', schemeRows(info.file, WINDOW_COLOURS[info.file].filter(([, k]) => !k.startsWith('Border.') || bordersUse(info.file, k.split('|')))));
       if (frame) add('border', 'Border: window edge (every window)', [windowCornerRow(S), ...borderRows(S, 'FrameBorder')]);
     }
     if (EXTRA[info.id]) add('colour', `Colours: ${info.name.toLowerCase()}`, schemeRows(S, EXTRA[info.id]).concat(info.file === C ? schemeRows(C, EXTRA[info.id]) : []));
@@ -1979,7 +2012,8 @@ function selectionSections(sel) {
       return r;
     }));
   }
-  return [...groups.colour, ...groups.font, ...groups.border, ...groups.other].filter(([, rows]) => rows.length);
+  // [title, rows, kind]: shown grouped by kind (see group)
+  return Object.entries(groups).flatMap(([kind, list]) => list.map(([t, r]) => [t, r, kind])).filter(([, rows]) => rows.length);
 }
 
 // Things on screen now (or every known HUD part when the game isn't reporting).
@@ -2023,6 +2057,8 @@ document.addEventListener('pointerup', () => {
 
 function render() {
   if (pointerDown) { renderOnRelease = true; return; }
+  // a row drawn now would show the value from before an edit still waiting to be written (a tick box would untick)
+  if (waiting.size) { renderAfterSave = true; return; }
   // emptying the list scrolls it to the top; keep the reader's place (select() scrolls up itself)
   const top = $('list').scrollTop;
   renderList();
@@ -2036,7 +2072,7 @@ try { folded = new Set(JSON.parse(localStorage.getItem('folded') || '[]')); } ca
 function card(title, rows) {
   const c = el('section', { className: 'card' });
   const sub = el('div', { className: 'sub' });
-  const fold = el('button', { className: 'fold-btn', title: 'Fold or unfold', innerHTML: '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>' });
+  const fold = el('button', { className: 'fold-btn', title: 'Fold or unfold', innerHTML: CHEVRON });
   const set = on => { c.classList.toggle('folded', on); fold.setAttribute('aria-expanded', !on); };
   fold.onclick = () => {
     const on = !c.classList.contains('folded');
@@ -2046,7 +2082,44 @@ function card(title, rows) {
   };
   set(folded.has(title) && !$('search').value.trim());
   sub.append(renameable(title), fold);
+  keysTip(sub, rows);
   c.append(sub, ...rows);
+  return c;
+}
+const CHEVRON = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+// The settings a section's rows change (Frame.BgColor...), shown when the mouse is over its title rather than in the rows.
+function keysTip(head, rows) {
+  const keys = [...new Set(rows.flatMap(r => (r.dataset && r.dataset.keys || '').split(' + ').filter(Boolean)))];
+  const name = head.querySelector('.rename');
+  if (keys.length && name) name.title = `${keys.join('\n')}\n\nDouble-click to rename`;
+}
+
+// A folder of sections for one selection (Colours, Fonts, Borders, More), folding like a directory; remembered.
+function group(name, count, children) {
+  const g = el('div', { className: 'group' }), head = el('button', { className: 'group-head', innerHTML: CHEVRON }), body = el('div', { className: 'group-body' });
+  head.append(el('span', { textContent: name }), el('span', { className: 'count', textContent: count }));
+  const key = `group:${name}`, set = on => { g.classList.toggle('folded', on); head.setAttribute('aria-expanded', !on); };
+  head.onclick = () => {
+    const on = !g.classList.contains('folded');
+    set(on);
+    on ? folded.add(key) : folded.delete(key);
+    try { localStorage.setItem('folded', JSON.stringify([...folded])); } catch {}
+  };
+  set(folded.has(key) && !$('search').value.trim());
+  body.append(...children);
+  g.append(head, body);
+  return g;
+}
+
+// Every font section of a selection in one card, each under a line with its title.
+function fontsCard(sections) {
+  const c = el('section', { className: 'card fonts' });
+  for (const [title, rows] of sections) {
+    const line = el('div', { className: 'divider' });
+    line.append(renameable(title));
+    keysTip(line, rows);
+    c.append(line, ...rows);
+  }
   return c;
 }
 
@@ -2097,7 +2170,11 @@ function renderList() {
     crumbs.append(done);
     list.append(crumbs);
     const sections = selectionSections(selected);
-    for (const [title, rows] of sections) list.append(card(title, rows));
+    for (const [kind, name] of [['colour', 'Colours'], ['font', 'Fonts'], ['border', 'Borders'], ['other', 'More']]) {
+      const mine = sections.filter(s => s[2] === kind);
+      // every font in one card, each part's set under a line with its name
+      if (mine.length) list.append(group(name, mine.length, kind === 'font' ? [fontsCard(mine)] : mine.map(([t, r]) => card(t, r))));
+    }
     if (!sections.length) list.append(el('p', { className: 'meta', style: 'padding: 0 12px', textContent: 'Nothing to edit here yet.' }));
     return; // one thing at a time: the lists come back with Back or Done
   }
@@ -2283,7 +2360,7 @@ $('boxes').onclick = e => { if (Date.now() - dragEnded < 300) return; const hit 
 // ---------- the game: live panel list, capture, test server ----------
 let pendingRender = false, captured = false, autoTried = false;
 
-let keepScores = false, scoresSent = 0;
+let keepScores = false, scoresSent = 0, keepChat = false, chatSent = 0;
 async function poll() {
   // capture once the plugin answers: a game started some other way (from Steam) is left alone, the editor can't use it
   if (live && !captured && !autoTried) { autoTried = true; capture(true); }
@@ -2294,6 +2371,8 @@ async function poll() {
   $('launch').hidden = !!live;
   // the scoreboard closes when the HUD reloads: open it again while it's being kept open
   if (keepScores && live && !live.panels.some(p => p.key === 'scores') && Date.now() - scoresSent > 1500) { scoresSent = Date.now(); call('cmd', '', '+showscores'); }
+  // the same for the chat (a reload takes it out of typing): the player's chat key opens it again
+  if (keepChat && live && !chatOpen() && !chatWatch && Date.now() - chatSent > 4000) { chatSent = Date.now(); chatKeyScan().then(k => call('key', k)).catch(() => {}); }
   if (selected && live && !live.panels.includes(selected.thing)) {
     // the same thing, found again in the new list (panels are re-read every time). One that is gone stays selected:
     // windows close while the HUD reloads (the scoreboard) and come back
@@ -2481,6 +2560,13 @@ if (host) {
     keepScores = !keepScores;
     $('scores').setAttribute('aria-pressed', keepScores);
     call('cmd', '', keepScores ? '+showscores' : '-showscores');
+  };
+  $('keepchat').onclick = async () => {
+    if (!live) return status('Start the game first.');
+    keepChat = !keepChat;
+    $('keepchat').setAttribute('aria-pressed', keepChat);
+    // Esc closes the chat; pressed with it closed it would open the game's menu instead
+    if (keepChat !== !!chatOpen()) { chatSent = Date.now(); await call('key', keepChat ? await chatKeyScan() : '01').catch(() => {}); }
   };
   $('texts').onclick = e => { const b = e.target.closest('button'); if (b) toggleText(+b.dataset.bit); };
   showTexts();

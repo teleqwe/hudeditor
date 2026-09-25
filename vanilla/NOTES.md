@@ -81,3 +81,14 @@ Not in custom: a folder there with full vanilla files would cover every HUD that
   archived cvars (the scoreboard name colours) that beat config.cfg, while the player's autoexec still wins.
 - The scoreboard's row templates (CTPlayerArea, TPlayerName0...) are hidden by the game once; a live reload's
   visibility restore showed them. The plugin hides them again after every reload.
+
+## Which font draws what in menus and in-game windows (checked in game, one font at a time given its own face)
+- SourceScheme (menus): **Default** tabs, buttons, labels, check boxes, drop-downs, the Options keyboard list's rows;
+  **DefaultSmall** the server browser's list of servers and every list's column headers; **DefaultVerySmall** the
+  keyboard list's section headers (MOVEMENT...) and slider captions (Low/High); **UiBold** window titles
+  ("Servers", "OPTIONS"); **MenuLarge** the main menu; **ConsoleText** the console's text. DefaultBold, DefaultLarge,
+  ServerBrowserTitle and ServerBrowserSmall showed nowhere in the server browser or Options.
+- The game's FrameTitleBar.Font is listed twice ("UiBold", then "DefaultLarge"): the first one counts.
+- ClientScheme (in-game windows): **MenuTitle** window titles (MOTD, class and buy menus, from their .res), **Default**
+  their buttons and labels, **DefaultSmall** the class menu's description (infolabel, set by the game).
+- A reload while a map loads crashed the plugin's panel refresh; it now waits for the loading screen to go.

@@ -19,7 +19,8 @@ packed inside it. Needs Windows 10 or 11 (it uses the WebView2 runtime that ship
    folder in custom (normally they are searched alphabetically), so other HUDs there can't cover your changes.
 3. **Test server** starts an offline game on de_dust2, with you on CT, a frozen bot on T and $16000. It keeps the
    bhop/surf-style texts on screen. **Test tools** beside it (it opens when a test game starts)
-   holds the switches for each one (remembered) and Scoreboard:
+   holds the switches for each one (remembered), plus Scoreboard and Chat, which keep those open (the chat is
+   opened again with your chat key after a change reloads the HUD):
    - **Timer:** the timer hint box (HudHintText) and the right-side text (HudHintTextSmall). The hint's beep is
      silent while the editor runs: the plugin has the game use a silent `sound/ui/hint.wav` from
      `addons/schemereload_sounds`. Nothing goes into your HUD.
@@ -127,7 +128,9 @@ packed inside it. Needs Windows 10 or 11 (it uses the WebView2 runtime that ship
 
    "On screen now" lists what's visible; **Done** saves and goes back to it from a selection. Search looks through everything.
    Double-click a title, name or description in the list to rename it (kept in the editor on this PC, not in the HUD);
-   ↺ next to it puts the original back. The chevron in a section's title folds it (remembered). Colour rows show the RGB
+   ↺ next to it puts the original back. A selection's sections are in folders (Colours, Fonts, Borders,
+   More) that fold like a directory, all its fonts in one card; a section's chevron folds it too (remembered). The
+   settings a section changes (Frame.BgColor...) show when the mouse is over its title. Colour rows show the RGB
    over the colour and the opacity over a second swatch, which opens a strip fading the colour from 100% to 0%.
    Messages pop up at the bottom of the list for a few seconds.
    A colour your HUD changed has a **Default** button that puts the game's own colour back, and **Undo** (Ctrl+Z)
