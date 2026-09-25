@@ -5,7 +5,8 @@ packed inside it. Needs Windows 10 or 11 (it uses the WebView2 runtime that ship
 
 ## Use
 1. Quit Counter-Strike: Source and open `CSSHudEditor.exe`. It starts the game windowed, with the plugin, and shows
-   the game window in the editor on its own.
+   the game window in the editor on its own. The editor captures the game's window directly (Windows.Graphics.Capture):
+   no share dialog, and nothing else on screen is looked at.
    - The game runs borderless at your resolution, so keep the editor on another monitor or make the game window
      smaller.
    - `-insecure` is used for that launch only and is never saved in your Steam launch options, so playing normally

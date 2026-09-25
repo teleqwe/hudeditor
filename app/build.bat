@@ -16,5 +16,5 @@ rc /nologo /fo "%OUT%\app.res" app.rc || exit /b 1
 cl /nologo /O2 /MT /EHsc /std:c++17 /W3 /D UNICODE /D _UNICODE /I "%~dp0webview2\build\native\include" ^
  /Fo"%OUT%\\" main.cpp /link /SUBSYSTEM:WINDOWS /OUT:"%~dp0CSSHudEditor.exe" "%OUT%\app.res" ^
  "%~dp0webview2\build\native\x64\WebView2LoaderStatic.lib" ^
- user32.lib gdi32.lib ole32.lib oleaut32.lib shell32.lib shlwapi.lib advapi32.lib version.lib || exit /b 1
+ user32.lib gdi32.lib ole32.lib oleaut32.lib shell32.lib shlwapi.lib advapi32.lib version.lib d3d11.lib dxgi.lib windowsapp.lib || exit /b 1
 echo Built %~dp0CSSHudEditor.exe
