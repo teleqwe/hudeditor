@@ -76,6 +76,31 @@
   #newform input { flex: 1; min-width: 0; background: #16181c; color: var(--text); border: 1px solid #3a3f49; border-radius: 4px; padding: 6px 8px; font: inherit; }
   #picker .hud .meta { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   @media (max-width: 860px) { body { grid-template-columns: 1fr; grid-template-rows: 45vh 1fr; } aside { border-left: 0; border-top: 1px solid var(--line); } }
+  /* sidebar: a header with the HUD and game tools, then cards of settings */
+  :root { --card: #23262d; --head: #292d35; }
+  aside { background: var(--bg); }
+  .top { padding: 10px; display: grid; gap: 8px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  .top .line { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .top .glabel { font-size: 11px; color: var(--dim); min-width: 62px; }
+  .top .line button { padding: 5px 9px; }
+  #texts button { padding: 3px 9px; border-radius: 12px; font-size: 12px; }
+  .bar { padding: 8px 10px; border-bottom: 0; }
+  #status { margin: 0 10px 8px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
+  #list { padding: 0 10px 16px; }
+  #list h3 { border: 0; padding: 4px 2px 8px; }
+  .card, #list > details { background: var(--card); border: 1px solid var(--line); border-radius: 8px; margin: 0 0 10px; overflow: hidden; }
+  .card > .sub { padding: 8px 12px; background: var(--head); color: var(--text); font-size: 12px; font-weight: 600; text-transform: none; letter-spacing: 0; }
+  .card > .sub + * { border-top: 1px solid var(--line); }
+  .card .row { border-top-color: #2a2e35; }
+  .card .thing-btn { border-bottom-color: #2a2e35; }
+  .card .thing-btn:last-child { border-bottom: 0; }
+  #list > details > summary { background: var(--head); }
+  .crumbs { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 8px; margin: 0 -10px 10px; padding: 8px 10px; background: var(--panel); border-bottom: 1px solid var(--line); }
+  .crumbs .what { font-weight: 600; }
+  .crumbs .meta { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .crumbs .done { float: none; margin-left: auto; padding: 4px 14px; font-size: 13px; }
+  .crumbs .back { padding: 4px 10px; font-size: 12px; font-weight: 400; }
+  select option:disabled { color: #666; }
 </style>
 </head>
 <body>
@@ -87,24 +112,28 @@
   </div>
 </main>
 <aside>
-  <div class="bar">
+  <div class="top">
+  <div class="line">
     <button id="hudbtn" title="Pick which HUD to edit">No HUD open</button>
     <button id="save" class="primary" disabled>Save HUD</button>
     <button id="undo" disabled title="Undo the last change (Ctrl+Z)">Undo</button>
     <button id="explore" title="Open the HUD's folder">Folder</button>
   </div>
-  <div class="bar">
+  <div class="line">
+    <span class="glabel">Game</span>
     <button id="testserver" title="Offline game with a frozen bot and bhop/surf-style timer texts on screen">Test server</button>
     <button id="scores" aria-pressed="false" title="Keep the scoreboard open to edit it. Click again (or press Tab in the game) to close it.">Scoreboard</button>
     <button id="capture" hidden>Capture game</button>
     <button id="launch" hidden>Launch game</button>
   </div>
-  <div class="bar" id="texts">
+  <div class="line" id="texts">
+    <span class="glabel">Test text</span>
     <button data-bit="1" title="Timer box (font HudHintText) and right-side text (HudHintTextSmall)">Timer</button>
     <button data-bit="2" title="Centre print speed (font Trebuchet24, SourceScheme)">1 Speed</button>
     <button data-bit="4" title="jhud under it (font CenterPrintText, ClientScheme)">2 jhud</button>
     <button data-bit="8" title="Record times in the top left corner (font CenterPrintText, ClientScheme)">3 Top left</button>
     <button data-bit="16" title="A chat line every few seconds (font ChatFont, ChatScheme)">Chat</button>
+  </div>
   </div>
   <div class="bar"><input type="search" id="search" placeholder="Search everything, e.g. health, timer, button"></div>
   <div id="status">Starting...</div>
@@ -163,14 +192,17 @@ const HUD = {
   // the chat reads ChatScheme; its message colours (names in team colours, yellow server lines) are the game's own
   HudChat: { name: 'Chat', scheme: CH, rounded: true, colours: [['Background', 'DullWhite', 'Behind the chat while typing; the game sets how see-through it is'],
     ['Typing text', 'Chat.TypingText', ''], ['"Say :" text', 'Label.TextColor', ''], ['Typing box', 'TextEntry.BgColor', '']] },
-  HudHintDisplay: { name: 'Timer / hint text', fit: true, rounded: true, note: 'Font HudHintText', colours: [['Text', 'HintMessageFg', 'Also the right-side text'], ['Background', 'HintMessageBg', '']] },
+  HudHintDisplay: { name: 'Timer / hint text', fit: true, rounded: true, roundOnly: true, note: 'Font HudHintText', colours: [['Text', 'HintMessageFg', 'Also the right-side text'], ['Background', 'HintMessageBg', '']] },
   HudHintKeyDisplay: { name: 'Right-side text', fit: true, note: 'Font HudHintTextSmall', colours: [['Text', 'HintMessageFg', 'Shared with the timer text (the game ignores HudLayout "TextColor" here)']] },
   CCenterStringLabel: { name: 'Centre print text', fixed: 'The game always draws this text white, so no HUD can recolour it. Its font (below) can change.', note: 'PrintCenterText from server plugins; font Trebuchet24' },
   HudMessage: { name: 'Server HUD text (jhud, top left)', fixed: 'Its colour and position come from the server plugin, not the HUD. Its font (below) can change.', note: 'ShowHudText / game_text from server plugins and maps; font CenterPrintText',
     hit: [['c-60', '178', '120', '30'], ['4', '2', '230', '60']] },
   TargetID: { name: 'Player name when aiming', quiet: true, colours: [['Counter-Terrorists', 'CT_Blue', 'Also kill feed names unless set there'], ['Terrorists', 'T_Red', 'Also kill feed names unless set there'], ['Hostages', 'Hostage_Yellow', ''] ] },
-  HudMenu: { name: 'Radio and server menus', hit: ['0', 'c-100', '220', '200'], colours: [
-    ['Title', 'MenuColor', ''], ['Options', 'ItemColor', 'The numbered choices'], ['Background', 'MenuBoxBg', ''] ] },
+  // radio menus, and SourceMod menus on bhop/surf servers (checkpoints, timer menus)
+  HudMenu: { name: 'Radio and server menus', hit: ['0', 'c-100', '220', '200'], pos: true, colours: [
+    ['Title', 'MenuColor', 'Also options that can\'t be picked'], ['Options', 'ItemColor', 'The numbered choices'], ['Background', 'MenuBoxBg', ''] ],
+    links: { MenuColor: 'MenuColor', MenuItemColor: 'ItemColor', MenuBoxColor: 'MenuBoxBg' },
+    fontKeys: [['Title font', 'TextFont', 'Default'], ['Options font', 'ItemFont|ItemFontPulsing', 'Default']] },
   HudProgressBar: { name: 'Plant / defuse bar', colours: [['Bar', 'ProgressBarFg', '']] },
   HudHistoryResource: { name: 'Pickup history', hit: ['r160', '250', '150', '130'], colours: [['Items', 'Yellowish', ''], ['Slot full', 'Caution', '']] },
   HudVoiceStatus: { name: 'Voice chat list', quiet: true },
@@ -178,7 +210,7 @@ const HUD = {
   HudAchievementTracker: { name: 'Achievement tracker', quiet: true },
 };
 // Fullscreen overlays that draw little; never picked by clicking (still reachable from the list).
-const NO_CLICK = new Set(['hudweapon', 'hudcrosshair', 'hudzoom', 'hudclosecaption', 'targetid', 'hudflashbang', 'hudvoicestatus', 'hudachievementtracker', 'hudmenu', 'huddeathnotice', 'hudweaponselection', 'hudhistoryresource']);
+const NO_CLICK = new Set(['hudweapon', 'hudcrosshair', 'hudzoom', 'hudclosecaption', 'targetid', 'hudflashbang', 'hudvoicestatus', 'hudachievementtracker', 'huddeathnotice', 'hudweaponselection', 'hudhistoryresource']);
 
 // Windows: panel name -> friendly name, plus window-wide colours per scheme.
 const WINDOWS = { info: 'Server message (MOTD)', team: 'Team select', class_ct: 'Class select', class_ter: 'Class select', buy: 'Buy menu',
@@ -220,7 +252,8 @@ const CONTROLS = [
   ['Label', 'Text', [['Text', 'Label.TextColor'], ['Dim text', 'Label.TextDullColor'], ['Bright text', 'Label.TextBrightColor'], ['Background', 'Label.BgColor']]],
 ];
 // Game subclasses of the VGUI controls. The buy menu's buttons draw their text with Label.TextColor (checked in telehud).
-const ALIAS = { CItemButton: 'SectionedListPanel', MouseOverButton: 'Button', MouseOverPanelButton: 'Button', CHudChatFilterButton: 'Button', CHudChatHistory: 'RichText', RichTextInterior: 'RichText' };
+// PageTab: one tab of a PropertySheet, drawn with its colours; CCheckBoxWithStatus: the server browser's checkbox
+const ALIAS = { CItemButton: 'SectionedListPanel', PageTab: 'PropertySheet', CCheckBoxWithStatus: 'CheckButton', ComboBox: 'TextEntry', MouseOverButton: 'Button', MouseOverPanelButton: 'Button', CHudChatFilterButton: 'Button', CHudChatHistory: 'RichText', RichTextInterior: 'RichText' };
 CONTROLS.unshift(['BuyMouseOverPanelButton', 'Buy menu button', [['Text', 'Label.TextColor'], ['Background', 'Button.BgColor'], ['Background (mouse over)', 'Button.ArmedBgColor']]]);
 // Fonts each control type draws with when neither its .res "font" nor the game's code picks one (vgui_controls'
 // ApplySchemeSettings). Symbol fonts (Marlett: arrows, ticks) are left out.
@@ -232,7 +265,8 @@ const CONTROL_FONTS = { Label: [['Text', 'Default']], Button: [['Text', 'Default
 const WINDOW_FONTS = { gamemenu: [[S, 'Menu items', 'MainMenuFont|MenuLarge'], [C, 'Logo', 'ClientTitleFont']],
   gameconsole: [[S, 'Console text', 'ConsoleText']] };
 // Exact class, then a known subclass, then any class ending in a control's name (CCvarSlider -> Slider).
-const controlOf = cls => CONTROLS.find(([k]) => cls === k) || CONTROLS.find(([k]) => ALIAS[cls] === k) || CONTROLS.find(([k]) => cls.endsWith(k));
+// an alias also covers game classes ending in it (CLabeledCommandComboBox)
+const controlOf = cls => { const a = ALIAS[cls] || Object.entries(ALIAS).find(([k]) => cls.endsWith(k))?.[1]; return CONTROLS.find(([k]) => cls === k) || (a && CONTROLS.find(([k]) => k === a)) || CONTROLS.find(([k]) => cls.endsWith(k)); };
 // The scheme file a panel draws with. The plugin reports it (the centre print is a client panel on SourceScheme);
 // otherwise go by module: client panels use ClientScheme, menus SourceScheme.
 const schemeOf = p => ({ SourceScheme: S, ClientScheme: C, ChatScheme: CH })[p && p.scheme] || (p && p.module && p.module !== 'ClientDLL' ? S : C);
@@ -735,9 +769,7 @@ function scoreboardSections(sel, shownFonts) {
     })];
   if (boxOn) {
     background.push(colorRow('Box colour', 'The editor\'s own box (HudEditorBackground)', box.bgcolor_override || '0 0 0 200', v => save(f, 'bgcolor_override', v, SB_BOX), ['bgcolor_override']),
-      checkRow('Rounded corners', box.paintbackgroundtype === '2', on => save(f, 'paintbackgroundtype', on ? '2' : '0', SB_BOX)),
-      checkRow('Outline', box.paintborder === '1', on => setOutline(f, SB_BOX, on)));
-    if (box.paintborder === '1') background.push(...borderRows(C, OUTLINE));
+      checkRow('Rounded corners', box.paintbackgroundtype === '2', on => save(f, 'paintbackgroundtype', on ? '2' : '0', SB_BOX)));
     for (const [k, label] of POS) background.push(numRow(f, SB_BOX, k, `Box ${label.toLowerCase()}`, box[k]));
   }
   const text = SCOREBOARD_TEXT.map(([label, blocks]) => {
@@ -788,7 +820,7 @@ function pickAt(fx, fy) {
   const x = fx * live.W, y = fy * live.H;
   let best = null;
   for (const p of live.panels) {
-    if (!p.thing || CONTAINERS.has(p.key) || p.key.startsWith('frame_') && p.key.endsWith('grip')) continue;
+    if (!p.thing || p.w * p.h <= 0 || CONTAINERS.has(p.key) || p.key.startsWith('frame_') && p.key.endsWith('grip')) continue;
     const info = thingInfo(p.thing);
     if (!info || (p === p.thing && NO_CLICK.has(p.key))) continue;
     const r = clickRects(p, info, live.W, live.H).find(r => x >= r.x && y >= r.y && x <= r.x + r.w && y <= r.y + r.h);
@@ -845,7 +877,7 @@ function numRow(lay, id, key, label, raw) {
 
 function selectRow(label, options, value, onChange, keys = []) {
   const row = el('div', { className: 'row pick' }), sel = el('select');
-  for (const [v, text] of options) sel.append(el('option', { value: v, textContent: text }));
+  for (const [v, text, off] of options) sel.append(el('option', { value: v, textContent: text, disabled: !!off }));
   sel.value = value;
   sel.setAttribute('aria-label', label);
   sel.onchange = () => onChange(sel.value);
@@ -975,12 +1007,17 @@ function hudRows(id, hud) {
     if (v) rows.push(colorRow(label, ` for this part only`, v, v2 => save(lay, key, v2, id), [key]));
   }
   if (canHide(id)) rows.unshift(...visibilityRows(id));
-  // hud.rounded: the game draws the box itself, always rounded (the chat, the timer, weapon selection); only its corner
-  // textures change its look, and its colour is listed above. Those boxes don't fill their panel, so an outline (round
-  // the panel) isn't offered there, only shown to turn one off.
-  if ('paintbackgroundtype' in p || hud.rounded) rows.push(...boxRows(lay, id, p, t, !hud.rounded, hud.rounded), ...outlineRows(lay, id, p, !hud.rounded));
+  // hud.rounded: the game draws the box itself (the chat, the timer, weapon selection); its colour is listed above
+  if ('paintbackgroundtype' in p || hud.rounded) rows.push(...boxRows(lay, id, p, t, hud));
+  // fonts the part's code reads from HudLayout by name (read again on every reload)
+  for (const [label, keys, dflt] of hud.fontKeys || []) {
+    const ks = keys.split('|'), now = p[ks[0].toLowerCase()] || dflt, names = fontNames(C);
+    if (!names.some(n => n.toLowerCase() === now.toLowerCase())) names.push(now);
+    rows.push(selectRow(label, names.sort().map(n => [n, n]), names.find(n => n.toLowerCase() === now.toLowerCase()),
+      v => { ks.forEach(k => save(lay, k, v, id)); refreshSoon(); }, [ks[0]]));
+  }
   for (const [k, label] of [['xpos', 'X position'], ['ypos', 'Y position'], ['wide', 'Width'], ['tall', 'Height']])
-    if (k in p) rows.push(numRow(lay, id, k, label, p[k]));
+    if (k in p || (hud.pos && k.endsWith('pos'))) rows.push(numRow(lay, id, k, label, p[k]));
   return rows;
 }
 
@@ -1012,85 +1049,65 @@ function visibilityRows(id) {
   return rows;
 }
 
-// ---------- box backgrounds ----------
-// PaintBackgroundType: 0 square, 2 rounded, 3 fading from solid on the left to clear on the right (1 stretches
-// Texture1 over the box). RoundedCorners picks the corners (1 top-left, 2 top-right, 4 bottom-left, 8 bottom-right).
-// Corners are drawn with Texture1-4 (top-left, top-right, bottom-right, bottom-left) at a fixed size, so other
-// textures change their shape; the editor makes those textures inside the HUD.
+// ---------- box corners ----------
+// PaintBackgroundType 0 draws a square box, 2 a rounded one; its corners are the images Texture1-4 (by default
+// vgui/hud/8x800corner1-4). Boxes the game's own code draws (hud.rounded) are always "rounded", so they go square
+// with plain square corner images instead. The timer's box (hud.roundOnly) is drawn by a part HudLayout can't reach.
 const ROUND_CORNERS = 'vgui/hud/8x800corner';
-const CORNER_SHAPES = [['round', 'Round'], ['tight', 'Tighter curve'], ['bevel', 'Cut off (bevel)'], ['scoop', 'Scooped in'], ['square', 'Square (no curve)']];
-function cornerShape(p) {
-  const t = (p.texture1 || '').toLowerCase();
-  if (!t || t.startsWith(ROUND_CORNERS)) return 'round';
-  const m = /^vgui\/hudeditor\/(\w+)_corner1$/.exec(t);
-  return m && CORNER_SHAPES.some(([k]) => k === m[1]) ? m[1] : 'custom';
+const squareTex = p => /square_corner1$/i.test(p.texture1 || '');
+async function setCorners(lay, id, square, drawn) {
+  try {
+    const base = square ? await call('corners', 'square') : ROUND_CORNERS;
+    // written even to put the defaults back: values HudLayout no longer sets stay in a running game
+    for (let i = 1; i <= 4; i++) save(lay, `Texture${i}`, base + i, id);
+    if (!drawn) { save(lay, 'PaintBackgroundType', square ? '0' : '2', id); if (!square) save(lay, 'RoundedCorners', '15', id); }
+    // a panel with a "border" takes its box shape from the border, and a running game keeps a border once set
+    if (!drawn && layoutProps(lay, id).border !== undefined) {
+      save(lay, 'border', null, id);
+      save(lay, 'paintborder', null, id);
+      alert('Restart the game to see the new corners.\n\nThis part had a border, which sets its box shape. The border is taken out, but the game only lets go of it when it restarts.');
+    }
+  } catch (err) { status(err.message); }
+  refreshSoon();
 }
 
-// Boxes the game rounds with its own corner image, vgui/hud/8x800corner1-4 (the timer's box, which HudLayout can't
-// reach, and every box left at the default corners), go square when the HUD has its own material of that name that
-// is plain white, tinted with the box colour like the real one. Off, it points back at the game's image.
+// An earlier editor made every default-rounded box square by replacing the game's corner material in the HUD.
 const CORNER_VMT = n => `materials/vgui/hud/8x800corner${n}.vmt`;
 let squareAll = false;
-function setSquareAll(on) {
-  squareAll = on;
+function removeSquareAll() {
+  squareAll = false;
   writing = writing.then(async () => {
     try {
-      for (let n = 1; n <= 4; n++) await call('write', CORNER_VMT(n), `"UnlitGeneric"\n{\n\t"$basetexture" "${on ? 'vgui/white' : `vgui/hud/8x800corner${n}`}"\n`
+      for (let n = 1; n <= 4; n++) await call('write', CORNER_VMT(n), `"UnlitGeneric"\n{\n\t"$basetexture" "vgui/hud/8x800corner${n}"\n`
         + '\t"$translucent" "1"\n\t"$vertexcolor" "1"\n\t"$vertexalpha" "1"\n\t"$ignorez" "1"\n\t"$no_fullbright" "1"\n}\n');
       await call('cmd', '', 'mat_reloadmaterial 8x800corner');
       setDirty(true);
       status('Changed in game. Click Done or Save HUD to keep it.');
     } catch (err) { status(`Couldn't apply: ${err.message}`); }
+    render();
   });
 }
 
-async function setCornerShape(lay, id, shape) {
-  try {
-    const base = shape === 'round' ? ROUND_CORNERS : await call('corners', shape);
-    for (let i = 1; i <= 4; i++) save(lay, `Texture${i}`, base + i, id);
-  } catch (err) {
-    status(err.message);
+function boxRows(lay, id, p, t, hud) {
+  const rows = [];
+  if (!hud.rounded) {
+    const bg = (p.bgcolor_override && resolve(t, p.bgcolor_override)) || resolve(t, 'Panel.BgColor') || '0 0 0 0';
+    rows.push(colorRow('Box background', 'The box drawn behind this part only', bg, v => save(lay, 'bgcolor_override', v, id), ['bgcolor_override']));
   }
-}
-
-function boxRows(lay, id, p, t, withBg = true, rounded = false) {
-  const bg = (p.bgcolor_override && resolve(t, p.bgcolor_override)) || resolve(t, 'Panel.BgColor') || '0 0 0 0';
-  const shape = rounded ? '2' : p.paintbackgroundtype || '0', rows = withBg ? [colorRow('Box background', 'The box drawn behind this part only', bg, v => save(lay, 'bgcolor_override', v, id), ['bgcolor_override'])] : [];
-  const shapes = [['0', 'Square'], ['2', 'Rounded corners'], ['3', 'Fade (solid left, clear right)']];
-  if (!shapes.some(([k]) => k === shape)) shapes.push([shape, 'As the HUD has it']);
-  // rounded: the game's code sets the shape itself; its corners can still be made square with their textures
-  rows.push(rounded ? noteRow('The game always draws this box with rounded corners. "Square corners on every box" below makes them square.')
-    : selectRow('Box shape', shapes, shape, v => { save(lay, 'PaintBackgroundType', v, id); refreshSoon(); }, ['PaintBackgroundType']));
-  if (shape !== '2' && shape !== '3') return rows;
-  rows.push(checkRow('Square corners on every box in the HUD (the game\'s own corner image)', squareAll, setSquareAll));
-  let bits = p.roundedcorners !== undefined ? +p.roundedcorners : 15;
-  if (shape === '2') // the fade draws all four corners whatever RoundedCorners says
-    for (const [bit, label] of [[1, 'Top left'], [2, 'Top right'], [4, 'Bottom left'], [8, 'Bottom right']])
-      rows.push(checkRow(`${label} corner rounded`, bits & bit, on => { bits = on ? bits | bit : bits & ~bit; save(lay, 'RoundedCorners', String(bits), id); }));
-  const cs = cornerShape(p), opts = cs === 'custom' ? [...CORNER_SHAPES, ['custom', 'The HUD\'s own textures']] : CORNER_SHAPES;
-  rows.push(selectRow('Corner shape', opts, cs, v => { if (v !== 'custom') setCornerShape(lay, id, v); }, ['Texture1-4']));
+  const type = hud.rounded ? '2' : p.paintbackgroundtype || '0';
+  const value = type === '0' || (type === '2' && squareTex(p)) ? 'square' : type === '2' ? 'round' : 'other';
+  const opts = [['round', 'Rounded'], ['square', 'Square', hud.roundOnly]];
+  if (value === 'other') opts.push(['other', 'As the HUD has it']);
+  rows.push(selectRow('Corners', opts, value, v => { if (v !== 'other') setCorners(lay, id, v === 'square', hud.rounded); }, ['PaintBackgroundType', 'Texture1-4']));
+  if (hud.roundOnly) rows.push(noteRow('The game always draws this box rounded.'));
+  if (squareAll) {
+    const b = el('button', { textContent: 'Remove it' });
+    b.onclick = removeSquareAll;
+    const r = noteRow('This HUD has the old "square corners everywhere" setting, so rounded boxes still look square. ');
+    r.append(b);
+    rows.push(r);
+  }
   return rows;
-}
-
-// An outline round a HUD part's box: HudLayout "border" names a ClientScheme border (every panel reads it from its
-// settings) and "paintborder" turns it on or off. One border, HudEditorOutline, is shared by every outlined part.
-// Borders are square, so they suit square boxes.
-const OUTLINE = 'HudEditorOutline';
-function outlineRows(lay, id, p, offer = true) {
-  const on = p.paintborder === '1' && (p.border || '').toLowerCase() === OUTLINE.toLowerCase();
-  if (!offer && !on) return [];
-  const rows = [checkRow('Outline', on, v => setOutline(lay, id, v))];
-  if (on && F(C)) rows.push(...borderRows(C, OUTLINE));
-  return rows;
-}
-// Turns the shared outline on or off for a block (a HudLayout part or a panel in a window .res), making the border
-// (a white line) the first time.
-function setOutline(f, block, on) {
-  if (on && borderOf(C, OUTLINE)?.name.toLowerCase() !== OUTLINE.toLowerCase())
-    save(F(C), OUTLINE, borderBody({ style: 'line', n: 1, light: '255 255 255 255', dark: '255 255 255 255' }, null), ['Borders']);
-  save(f, 'border', OUTLINE, block);
-  save(f, 'paintborder', on ? '1' : '0', block);
-  refreshSoon();
 }
 
 // ---------- borders ----------
@@ -1499,7 +1516,10 @@ function selectionSections(sel) {
   if (control) {
     const [ctl, what, keys] = controlIn(control, sel.thing);
     const file = schemeOf(control);
-    out.push([`${what} (every ${what.toLowerCase()} in ${file === C ? 'in-game windows' : file === CH ? 'the chat' : 'menus'})`, schemeRows(file, keys)]);
+    out.push([`${what} (every ${what.toLowerCase()} in ${file === C ? 'in-game windows' : file === CH ? 'the chat' : 'menus'})`, [
+      // the chat keeps its scroll bar once it holds more lines than fit, even closed; the default colours are see-through
+      ...(file === CH && ctl.startsWith('ScrollBar') ? [noteRow('The chat shows this scroll bar even while it is closed. Keep it see-through (low opacity) or it stays on screen.')] : []),
+      ...schemeRows(file, keys)]]);
     for (const [label, name] of BORDER_USE[ctl] || []) out.push([`${what}: ${label.toLowerCase()}`, borderRows(file, name)]);
   }
   if (info.kind === 'hud') out.push([info.name, hudRows(info.id, info.hud)]);
@@ -1567,6 +1587,13 @@ function render() {
   $('list').scrollTop = top;
 }
 
+// A bordered group of rows with a title.
+function card(title, rows) {
+  const c = el('section', { className: 'card' });
+  c.append(el('div', { className: 'sub', textContent: title }), ...rows);
+  return c;
+}
+
 function renderList() {
   pendingRender = false;
   const list = $('list'), q = $('search').value.trim().toLowerCase();
@@ -1588,16 +1615,19 @@ function renderList() {
     for (const [title, rows] of groups) {
       const hits = title.toLowerCase().includes(q) ? rows : rows.filter(r => r.dataset.q.includes(q));
       if (!hits.length) continue;
-      list.append(el('div', { className: 'sub', textContent: title }), ...hits);
+      list.append(card(title, hits));
       n += hits.length;
     }
     if (!n) list.append(el('p', { className: 'meta', style: 'padding: 0 12px', textContent: 'Nothing matches.' }));
     return;
   }
   if (selected) {
-    const crumbs = el('div', { className: 'crumbs', textContent: selected.info.name });
+    const crumbs = el('div', { className: 'crumbs' });
+    crumbs.append(el('span', { className: 'what', textContent: selected.info.name }));
     if (selected.control) crumbs.append(el('span', { className: 'meta', textContent: `  ›  ${controlIn(selected.control, selected.thing)[1]}${selected.control.name ? ` "${selected.control.name}"` : ''}` }));
-    const done = el('button', { className: 'done', textContent: 'Done', title: 'Save the changes into the HUD and go back to the list' });
+    const back = el('button', { className: 'back', textContent: '‹ Back', title: 'Back to the list (changes stay unsaved until Save HUD)' });
+    back.onclick = () => select(null);
+    const done = el('button', { className: 'done primary', textContent: 'Done', title: 'Save the changes into the HUD and go back to the list' });
     done.onclick = async () => {
       await sleep(300); // a change still being typed
       await writing;
@@ -1605,13 +1635,14 @@ function renderList() {
       await select(null);
       if (saved) status(msg); // the list's hint would replace it
     };
-    crumbs.prepend(done);
-    list.append(el('h3', { textContent: 'Selected' }), crumbs);
+    crumbs.prepend(back);
+    crumbs.append(done);
+    list.append(crumbs);
     const sections = selectionSections(selected);
-    for (const [title, rows] of sections) list.append(el('div', { className: 'sub', textContent: title }), ...rows);
+    for (const [title, rows] of sections) list.append(card(title, rows));
     if (!sections.length) list.append(el('p', { className: 'meta', style: 'padding: 0 12px', textContent: 'Nothing to edit here yet.' }));
+    return; // one thing at a time: the lists come back with Back or Done
   }
-  list.append(el('h3', { textContent: live ? 'On screen now' : 'HUD parts' }));
   const things = onScreen();
   shownKey = things.map(t => t.info.id).join();
   const partRow = t => {
@@ -1626,8 +1657,8 @@ function renderList() {
     b.onclick = () => select({ thing: t.thing, info: t.info, control: null });
     return b;
   };
-  list.append(...things.map(partRow));
-  if (!things.length) list.append(el('p', { className: 'meta', style: 'padding: 0 12px', textContent: 'Nothing editable on screen right now.' }));
+  const parts = things.length ? things.map(partRow) : [el('p', { className: 'meta', style: 'padding: 8px 12px; margin: 0', textContent: 'Nothing editable on screen right now.' })];
+  list.append(card(live ? 'On screen now' : 'HUD parts', parts));
   // parts that only show now and then (kill feed, pickup history, weapon selection...), so they can be hidden too
   if (live && F(L)) {
     const shown = new Set(things.map(t => t.info.id));
@@ -1663,7 +1694,7 @@ function boxList() {
     return { W: live.W, H: live.H, boxes };
   }
   const v = $('video'), W = v.hidden ? 1920 : v.videoWidth || 1920, H = v.hidden ? 1080 : v.videoHeight || 1080;
-  const boxes = onScreen().map(t => ({ ...t, r: rectOf(layoutProps(F(L), t.info.id), W, H, t.info.hud.hit), cls: 'thing' })).filter(b => b.r.w > 0 && b.r.h > 0);
+  const boxes = []; // no boxes without the game: where things are is only known from the game itself
   return { W, H, boxes };
 }
 
@@ -1762,7 +1793,7 @@ const TEST_SETUP = 'disconnect; sv_cheats 1; mp_autokick 0; mp_ignore_round_win_
 // 1 timer box and right side, 2 speed, 4 jhud, 8 top left. Remembered between runs.
 let texts = 15;
 try { texts = +(localStorage.getItem('texts') ?? 15); } catch {}
-const showTexts = () => { for (const b of $('texts').children) b.setAttribute('aria-pressed', !!(texts & b.dataset.bit)); };
+const showTexts = () => { for (const b of $('texts').querySelectorAll('button')) b.setAttribute('aria-pressed', !!(texts & b.dataset.bit)); };
 
 async function toggleText(bit) {
   texts ^= bit;
@@ -2102,13 +2133,14 @@ if (host && location.hash === '#hosttest') (async () => {
     const cf = F(C), marlett = fontVariants(cf, 'Marlett'), dflt = fontVariants(cf, 'Default');
     check([...dflt.values()].every(p => p.name === 'Arial' && p.weight === '600') && [...marlett.values()].every(p => p.name === 'Marlett'),
       'every text font at once: Arial 600, the symbol font left alone');
-    setOutline(F(L), 'HudHintKeyDisplay', true);
+    await setCorners(F(L), 'HudHintKeyDisplay', true, false);
     await sleep(400);
     await writing;
-    check(layoutProps(F(L), 'HudHintKeyDisplay').paintborder === '1' && borderOf(C, OUTLINE)?.name === OUTLINE, 'HUD box outline: border made in ClientScheme, turned on in HudLayout');
-    setSquareAll(true);
+    const hk = layoutProps(F(L), 'HudHintKeyDisplay');
+    check(hk.paintbackgroundtype === '0' && squareTex(hk), 'square corners: square box, square corner images');
+    removeSquareAll();
     await writing;
-    check((await readHud(CORNER_VMT(3)) || '').includes('vgui/white'), 'square corners everywhere: the game\'s corner material replaced in the HUD');
+    check((await readHud(CORNER_VMT(3)) || '').includes('vgui/hud/8x800corner3'), 'old square-everywhere setting put back to the game\'s corner image');
     setDirty(false); // skip the discard question
     await openHud(path);
     check(await readHud(CORNER_VMT(3)) === null, 'files the editor made are taken out again when discarded');
