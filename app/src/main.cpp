@@ -110,6 +110,23 @@ static string Encode( const wstring &text, const string &old )
 	return ( old.compare( 0, 3, "\xEF\xBB\xBF" ) == 0 ? "\xEF\xBB\xBF" : "" ) + Utf8( text );
 }
 
+// Binary files the page makes (textures) come as base64.
+static string Unbase64( const wstring &s )
+{
+	string out;
+	unsigned bits = 0, n = 0;
+	for ( wchar_t c : s )
+	{
+		int v = c >= 'A' && c <= 'Z' ? c - 'A' : c >= 'a' && c <= 'z' ? c - 'a' + 26 : c >= '0' && c <= '9' ? c - '0' + 52 : c == '+' ? 62 : c == '/' ? 63 : -1;
+		if ( v < 0 ) // "=" padding
+			continue;
+		bits = bits << 6 | v, n += 6;
+		if ( n >= 8 )
+			n -= 8, out += (char)( bits >> n & 0xFF );
+	}
+	return out;
+}
+
 // Maps "resource/ClientScheme.res" to a path inside the HUD; refuses anything that could leave it.
 static bool InHud( const wstring &rel, wstring &out )
 {
@@ -701,6 +718,13 @@ static void OnMessage( const wstring &msg )
 			if ( !WriteAll( path, Encode( body, old ) ) )
 				fail( L"couldn't write " + path );
 		}
+	}
+	else if ( op == L"writebin" ) // arg = path in the HUD, body = the file in base64
+	{
+		if ( !InHud( arg, path ) )
+			fail( L"bad path" );
+		else if ( KeepSaved( path ), !WriteAll( path, Unbase64( body ) ) )
+			fail( L"couldn't write " + path );
 	}
 	else if ( op == L"save" ) // keep the changes: answers how many files changed
 	{

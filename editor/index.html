@@ -1509,10 +1509,59 @@ function mainMenuSections() {
     });
     out.push(['Main menu: logo', [show, ...schemeRows(C, [['Logo', LOGO_KEYS[0], '"COUNTER-STRIKE"'], ['Logo, second line', LOGO_KEYS[1], '"SOURCE"']])]]);
   }
+  const pick = el('input', { type: 'file', accept: 'image/*', hidden: true, onchange: () => { if (pick.files[0]) setBackground(pick.files[0]); pick.value = ''; } });
+  const add = el('div', { className: 'row check' });
+  add.append(pick, el('button', { textContent: 'Import a picture...', onclick: () => pick.click() }));
+  add.dataset.q = 'background picture image wallpaper import';
+  out.push(['Main menu: background', [add, noteRow('PNG, JPG, WebP... It is cropped to fill the screen. The game loads it at startup: restart it to see a new one.')]]);
   const h = s && tables(s).base.get('mainmenu.menuitemheight');
   if (h) out.push(['Main menu: items', [inputRow('Item height', h.value, v => save(s, 'MainMenu.MenuItemHeight', v, ['BaseSettings']),
     { type: 'number', min: 8, max: 80, step: 1, title: 'Scaled to your screen; the game\'s is 22. The text size is the MenuLarge font below' })]]);
   return out;
+}
+
+// The main menu background: the game stretches materials/console/background01 (4:3 screens) or
+// background01_widescreen over the screen, read once at startup. The picture is cropped to that shape and written
+// as VTF 7.2, BGR888 (no compression, so dark gradients don't band), one mip level, power-of-two sizes.
+function backgroundVtf(img, w, h, aspect) {
+  const cv = el('canvas', { width: w, height: h }), g = cv.getContext('2d');
+  const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height, sw = Math.min(iw, ih * aspect), sh = sw / aspect;
+  g.imageSmoothingQuality = 'high';
+  g.fillRect(0, 0, w, h); // black behind see-through pictures
+  g.drawImage(img, (iw - sw) / 2, (ih - sh) / 2, sw, sh, 0, 0, w, h);
+  const px = g.getImageData(0, 0, w, h).data, out = new Uint8Array(80 + w * h * 3), v = new DataView(out.buffer);
+  out.set([86, 84, 70]); // "VTF"
+  v.setUint32(4, 7, true), v.setUint32(8, 2, true), v.setUint32(12, 80, true), v.setUint16(16, w, true), v.setUint16(18, h, true);
+  v.setUint32(20, 0x4 | 0x8 | 0x100 | 0x200, true); // clamp S and T, no mipmaps, no LOD
+  v.setUint16(24, 1, true), v.setFloat32(48, 1, true), v.setUint32(52, 3, true); // one frame, bumpmap scale, BGR888
+  out[56] = 1, v.setInt32(57, -1, true), v.setUint16(63, 1, true); // one mip level, no low-res image, depth 1
+  for (let i = 0, o = 80; i < px.length; i += 4, o += 3) out[o] = px[i + 2], out[o + 1] = px[i + 1], out[o + 2] = px[i];
+  return out;
+}
+const base64 = bytes => new Promise(res => {
+  const r = new FileReader();
+  r.onload = () => res(r.result.slice(r.result.indexOf(',') + 1));
+  r.readAsDataURL(new Blob([bytes]));
+});
+async function setBackground(file) {
+  const img = new Image(), url = URL.createObjectURL(file);
+  try {
+    img.src = url;
+    await img.decode();
+    status('Making the background...');
+    for (const [name, w, h, aspect] of [['background01', 1024, 1024, 4 / 3], ['background01_widescreen', 2048, 1024, 16 / 9]]) {
+      const path = `materials/console/${name}`;
+      await call('writebin', `${path}.vtf`, await base64(backgroundVtf(img, w, h, aspect)));
+      await call('write', `${path}.vmt`, `"UnlitGeneric"\n{\n\t"$basetexture"\t"console/${name}"\n\t"$vertexcolor"\t"1"\n\t"$vertexalpha"\t"1"\n`
+        + `\t"$ignorez"\t"1"\n\t"$no_fullbright"\t"1"\n\t"$nolod"\t"1"\n}\n`);
+    }
+    setDirty(true);
+    status('Background set. Save the HUD, then restart the game to see it.');
+  } catch (err) {
+    status(`Couldn't use that picture: ${err.message}`);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
 }
 
 // Everything editable for a selection, as [subheading, rows] pairs.
@@ -1629,6 +1678,7 @@ function renderList() {
       ...Object.entries(EXTRA).map(([id, l]) => [WINDOWS[id], schemeRows(id === 'team' ? C : S, l)]),
       ...CONTROLS.flatMap(([, what, keys]) => [[`${what} (in-game windows)`, schemeRows(C, keys)], [`${what} (menus)`, schemeRows(S, keys)],
         [`${what} (chat)`, schemeRows(CH, keys)]]),
+      ['Main menu', mainMenuSections().flatMap(([, rows]) => rows)],
       ['Other colours', [...otherRows(C, 'In game'), ...otherRows(S, 'Menus'), ...otherRows(CH, 'Chat')]],
       ...FONT_FILES.map(([file, where]) => [`Fonts (${where})`, fontNames(file).map(n => fontFold(file, n, ''))]),
     ];
@@ -2066,6 +2116,10 @@ function parserCheck() {
   const added = parse(withValue(f, 'Z', '1 1 1 1'));
   check(added.entries.some(e => e.key === 'Z' && e.value === '1 1 1 1' && sectionOf(e) === 'basesettings'), 'insert missing key');
   check(fromHex('#0a14ff', 128) === '10 20 255 128', 'hex -> rgba');
+  const cv = el('canvas', { width: 2, height: 1 }), g = cv.getContext('2d');
+  g.fillStyle = '#ff0000', g.fillRect(0, 0, 1, 1), g.fillStyle = '#0000ff', g.fillRect(1, 0, 1, 1);
+  const tex = backgroundVtf(cv, 2, 1, 2), dv = new DataView(tex.buffer);
+  check(tex.length === 86 && dv.getUint32(52, true) === 3 && dv.getUint16(16, true) === 2 && tex[82] === 255 && tex[83] === 255, 'background texture: header, BGR order');
   // fonts: pick the entry for the screen height, and create the nested blocks when only #base has the font
   const fb = parse('Scheme { Fonts { HudHintText { "1" { "name" "Arial" "tall" "10" "yres" "1 1079" } "2" { "name" "Arial" "tall" "20" "yres" "1080 1439" } } } }');
   const ff = { name: 'f', text: 'Scheme\n{\n}\n', parsed: parse('Scheme\n{\n}\n'), bases: [fb] };
@@ -2216,7 +2270,7 @@ if (host && location.hash === '#hosttest') (async () => {
     await writing;
     check(/"?HudEditorBackground"?\s*\{[^}]*"zpos"\s+"-1"[^}]*"paintbackgroundtype"\s+"2"/.test(sb.text), 'scoreboard colour box added to a copy of the game\'s scoreboard.res');
     const mm = mainMenuSections().map(([title, rows]) => `${title}:${rows.length}`).join();
-    check(mm === 'Main menu: logo:3,Main menu: items:1', `main menu: logo on/off and colours, item height (${mm})`);
+    check(mm === 'Main menu: logo:3,Main menu: background:2,Main menu: items:1', `main menu: logo on/off and colours, background import, item height (${mm})`);
     await setAllFonts('Arial', '600');
     const cf = F(C), marlett = fontVariants(cf, 'Marlett'), dflt = fontVariants(cf, 'Default');
     check([...dflt.values()].every(p => p.name === 'Arial' && p.weight === '600') && [...marlett.values()].every(p => p.name === 'Marlett'),
