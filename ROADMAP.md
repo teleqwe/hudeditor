@@ -29,9 +29,10 @@ Each step is committed on its own, so work can stop after any of them.
 6. [x] **Test values** in the Test tools drop-down: 5 HP, 1500 HP, $0 / $16000, empty magazine, a 15:00 round timer,
    bots with long names filling the scoreboard, kill feed, reset. Still to do: MVP stars (the count isn't a networked
    field the plugin can set; comes with step 9).
-7. [ ] **Main menu and window settings** (ClientScheme / SourceScheme): main menu and logo position
-   (`Main.Menu.X/Y`, `Main.Title1/2/3.X/Y`, `Main.BottomBorder`), window fade time (`Frame.TransitionEffectTime`),
-   MOTD web page background (`HTML.BgColor`), tooltips, pop-ups, buy preset boxes.
+7. [x] **Main menu and window settings** (ClientScheme / SourceScheme): main menu and logo position
+   (`Main.Menu.X/Y`, `Main.Title1/2.X/Y`, `Main.BottomBorder`, live), window fade time (`Frame.TransitionEffectTime`),
+   MOTD web page background (`HTML.BgColor`), tooltips. Buy preset boxes go with step 15; `Popup.BgColor` and
+   `Main.Title3` weren't found drawing anything, so they stay under All other colours.
 8. [ ] **Fewer restarts**: new menu background picture shows straight away; buy menu layout live like team select.
 9. [ ] **MVP star picture** (e.g. a flower): `hud/scoreboard_mvp` and the round-end panel's star. Needs testing.
 10. [ ] **Loading screen** (`resource/LoadingDialog.res`): position, progress bar, hide lines. Tested by reloading the map.

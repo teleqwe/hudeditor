@@ -378,7 +378,8 @@ const WINDOW_COLOURS = {
   [C]: [['Window background', 'Frame.BgColor', 'Also the spectator bars'], ['Backdrop', 'BgColor', 'Behind team select and the MOTD'], ['Title', 'FrameTitleBar.TextColor', ''],
     ['Text', 'Label.TextColor', 'Shared by in-game windows and the buy menu'], ['Borders', 'Border.Bright|Border.Dark', '']],
   [S]: [['Window background', 'Frame.BgColor', ''], ['Window background, not focused', 'Frame.OutOfFocusBgColor', ''],
-    ['Title', 'FrameTitleBar.TextColor', ''], ['Title bar', 'FrameTitleBar.BgColor', ''], ['Text', 'Label.TextColor', ''], ['Borders', 'Border.Bright|Border.Dark', '']],
+    ['Title', 'FrameTitleBar.TextColor', ''], ['Title bar', 'FrameTitleBar.BgColor', ''], ['Text', 'Label.TextColor', ''], ['Borders', 'Border.Bright|Border.Dark', ''],
+    ['Tooltip text', 'Tooltip.TextColor', 'The hint that shows when the mouse rests on a setting'], ['Tooltip background', 'Tooltip.BgColor', '']],
 };
 const EXTRA = {
   gamemenu: [['Menu text', 'MainMenu.TextColor', 'Resume Game, Find Servers, Options...'], ['Menu text (mouse over)', 'MainMenu.ArmedTextColor', ''],
@@ -408,6 +409,7 @@ const CONTROLS = [
   ['Slider', 'Slider', [['Knob', 'Slider.NobColor'], ['Text', 'Slider.TextColor'], ['Track', 'Slider.TrackColor']]],
   ['Menu', 'Menu', [['Text', 'Menu.TextColor'], ['Background', 'Menu.BgColor'], ['Text (mouse over)', 'Menu.ArmedTextColor'], ['Background (mouse over)', 'Menu.ArmedBgColor']]],
   ['Label', 'Text', [['Text', 'Label.TextColor'], ['Dim text', 'Label.TextDullColor'], ['Bright text', 'Label.TextBrightColor'], ['Background', 'Label.BgColor']]],
+  ['HTML', 'Web page', [['Background', 'HTML.BgColor']]], // the MOTD when a server sends a web page
 ];
 // Game subclasses of the VGUI controls. The buy menu's buttons draw their text with Label.TextColor (checked in telehud).
 // PageTab: one tab of a PropertySheet, drawn with its colours; CCheckBoxWithStatus: the server browser's checkbox
@@ -2203,6 +2205,12 @@ function mainMenuSections() {
       refreshSoon();
     });
     out.push(['Main menu: logo', [show, ...schemeRows(C, [['Logo', LOGO_KEYS[0], '"COUNTER-STRIKE"'], ['Logo, second line', LOGO_KEYS[1], '"SOURCE"']])]]);
+    // where GameUI puts the menu and the logo (ClientScheme, in 480-line units): a menu that would reach the bottom gap
+    // is lifted, logo and all
+    const row = (label, key, note = '') => inputRow(label, (t.base.get(key.toLowerCase()) || {}).value || '0', v => save(c, key, v, ['BaseSettings']), { type: 'number', step: 1, ...(note ? { title: note } : {}) });
+    out.push(['Main menu: position', [row('Menu X', 'Main.Menu.X', 'From the left'), row('Menu Y', 'Main.Menu.Y', 'From the top'),
+      row('Gap at the bottom', 'Main.BottomBorder', 'The menu stays at least this far above the bottom'), row('Logo X', 'Main.Title1.X'), row('Logo Y', 'Main.Title1.Y'),
+      row('Second line X', 'Main.Title2.X'), row('Second line Y', 'Main.Title2.Y')]]);
   }
   const pick = el('input', { type: 'file', accept: 'image/*', hidden: true, onchange: () => { if (pick.files[0]) setBackground(pick.files[0]); pick.value = ''; } });
   const add = el('div', { className: 'row action' });
@@ -2215,6 +2223,19 @@ function mainMenuSections() {
   if (h) out.push(['Main menu: items', [inputRow('Item height', h.value, v => save(s, 'MainMenu.MenuItemHeight', v, ['BaseSettings']),
     { type: 'number', min: 8, max: 80, step: 1, title: 'Scaled to your screen; the game\'s is 22. The text size is the MenuLarge font below' })]]);
   return out;
+}
+
+// How long windows take to fade, in seconds: opening and closing, going behind another window, and (menus) changing
+// tabs. The game's menus take 0.3 s; its in-game windows (team select, MOTD...) 0.
+function fadeRows(file) {
+  const f = F(file);
+  if (!f) return [];
+  const t = tables(f), row = (label, key, note) => {
+    const v = t.base.get(key.toLowerCase());
+    return v && inputRow(label, v.value, x => save(f, key, x, ['BaseSettings']), { type: 'number', min: 0, max: 3, step: 0.05, title: note });
+  };
+  return [row('Opening and closing', 'Frame.TransitionEffectTime', 'Seconds; 0 is instant'), row('Going behind another window', 'Frame.FocusTransitionEffectTime', 'Seconds'),
+    file === S && row('Changing tabs', 'PropertySheet.TransitionEffectTime', 'Seconds')].filter(Boolean);
 }
 
 // Scroll bars' width: ScrollBar.Wide in each scheme (the game's is 17), applied again on a reload.
@@ -2399,6 +2420,7 @@ function selectionSections(sel) {
       // the Borders colours only while some border still draws with them (see bordersUse)
       add('colour', 'Colours: the window', schemeRows(info.file, WINDOW_COLOURS[info.file].filter(([, k]) => !k.startsWith('Border.') || bordersUse(info.file, k.split('|')))));
       if (frame) add('border', 'Border: window edge (every window)', [windowCornerRow(S), ...borderRows(S, 'FrameBorder')]);
+      add('other', `Fading (every ${frame ? 'menu' : 'in-game'} window)`, fadeRows(info.file));
     }
     if (EXTRA[info.id]) add('colour', `Colours: ${info.name.toLowerCase()}`, schemeRows(S, EXTRA[info.id]).concat(info.file === C ? schemeRows(C, EXTRA[info.id]) : []));
     if (CMD_WINDOWS.has(info.id)) add('other', 'Command buttons', commandRows(sel));
@@ -3339,7 +3361,7 @@ if (host && location.hash === '#hosttest') (async () => {
     await writing;
     check(/"?HudEditorBackground"?\s*\{[^}]*"zpos"\s+"-1"[^}]*"paintbackgroundtype"\s+"2"/.test(sb.text), 'scoreboard colour box added to a copy of the game\'s scoreboard.res');
     const mm = mainMenuSections().map(([title, rows]) => `${title}:${rows.length}`).join();
-    check(mm === 'Main menu: logo:3,Main menu: buttons:14,Main menu: background:2,Main menu: items:1', `main menu: logo on/off and colours, buttons, background import, item height (${mm})`);
+    check(mm === 'Main menu: logo:3,Main menu: position:7,Main menu: buttons:14,Main menu: background:2,Main menu: items:1', `main menu: logo on/off and colours, position, buttons, background import, item height (${mm})`);
     await setAllFonts('Arial', '600');
     const cf = F(C), marlett = fontVariants(cf, 'Marlett'), dflt = fontVariants(cf, 'Default');
     check([...dflt.values()].every(p => p.name === 'Arial' && p.weight === '600') && [...marlett.values()].every(p => p.name === 'Marlett'),

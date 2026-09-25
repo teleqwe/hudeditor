@@ -48,7 +48,7 @@ packed inside it. Needs Windows 10 or 11 (it uses the WebView2 runtime that ship
    a plain number from the window's edge), and **Undo** there puts it back where it was when the HUD was opened. Dragged near an edge of the screen (a window's control: of its
    window) or its middle, a part snaps there, stopping 1 unit short of the edge (positions are whole units of screen
    height / 480: 3 px at 1440p). The dashed box shows where it goes, and the game follows once you
-   pause. What the game places itself (main menu, server browser, window frames) can't be moved, and the radio menu
+   pause. What the game places itself (server browser, window frames) can't be moved, the main menu only with its position rows, and the radio menu
    only moves up and down (the game keeps it full width). The same X and Y positions are rows on every part that has
    them. The buy menu reads its own settings at startup, so changes to its controls show after a restart; the plugin reads the team and class menus' and the MOTD's again on every change.
 4. **Click anything in the preview** to edit it:
@@ -90,6 +90,12 @@ packed inside it. Needs Windows 10 or 11 (it uses the WebView2 runtime that ship
        (suggestions for surf/bhop servers come up as you type). A click closes the menu and runs it as if typed in the
        console. The new button copies the look of the window's most customised button (colours, border, font, size)
        and goes a row under the lowest one; the plugin makes it straight away (blocks named `hudeditor_cmd1`...).
+     - **Main menu position** (`Main.Menu.X/Y`, `Main.BottomBorder`, `Main.Title1/2.X/Y` in ClientScheme): where the
+       menu and the logo's two lines sit, live. A menu that would reach the bottom gap is lifted, logo and all.
+     - **Fading** (any window, under More): how long windows take to fade in and out, and to go behind another
+       window; menus also changing tabs (`Frame.TransitionEffectTime`...). The game's menus take 0.3 s, its in-game
+       windows 0. The MOTD's web page background (`HTML.BgColor`) is under its colours, and menus' tooltip colours
+       under the window colours.
      - **Main menu:** hide or colour the logo (`Main.Title1.Color`, `Main.Title2.Color` in ClientScheme), the item
        height (`MainMenu.MenuItemHeight`, scaled to your screen) and the menu text colours. The item text size is the
        MenuLarge font. **Import a picture** (also found by searching "background") sets the menu background: it is
