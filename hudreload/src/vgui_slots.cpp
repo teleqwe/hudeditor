@@ -2,6 +2,7 @@
 // call them on the game's panels without guessing offsets (slot = byte offset / 8). -1 if the thunk isn't the expected shape.
 #include "vgui_controls/Label.h"
 #include "vgui_controls/Menu.h"
+#include "vgui_controls/EditablePanel.h"
 
 static int SlotOf( const void *thunk )
 {
@@ -30,3 +31,6 @@ int SlotPanelSetInfo() { return SlotOf( Thunk( &vgui::Panel::SetInfo ) ); }
 int SlotMenuSetItemHeight() { return SlotOf( Thunk( &vgui::Menu::SetMenuItemHeight ) ); }
 int SlotMenuGetItemHeight() { return SlotOf( Thunk( &vgui::Menu::GetMenuItemHeight ) ); }
 int SlotApplySettings() { return SlotOf( Thunk( &vgui::Panel::ApplySettings ) ); }
+int SlotCreateControlByName() { return SlotOf( Thunk( &vgui::EditablePanel::CreateControlByName ) ); }
+int SlotSetParent() { return SlotOf( Thunk( static_cast< void ( vgui::Panel::* )( vgui::VPANEL ) >( &vgui::Panel::SetParent ) ) ); }
+int SlotAddActionSignalTarget() { return SlotOf( Thunk( static_cast< void ( vgui::Panel::* )( vgui::VPANEL ) >( &vgui::Panel::AddActionSignalTarget ) ) ); }

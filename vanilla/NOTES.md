@@ -104,3 +104,15 @@ Not in custom: a folder there with full vanilla files would cover every HUD that
   (classes/<name>.res), which deletes panels, so the reload puts visibility back by walking the live tree.
 - At startup the game reads the .res of whatever HUD sorts first in custom; the editor's HUD only replaces it on the
   first reload.
+- New controls in those windows: the plugin makes blocks named `hudeditor...` that have no panel yet the way
+  BuildGroup::NewControl does (the window's CreateControlByName, SetParent, AddActionSignalTarget(window), then
+  ApplySettings), and deletes them (IVGui::MarkPanelForDeletion) when their block goes. A Button's "command" goes to
+  the team/class menu's OnCommand, which runs it and closes the menu: `say !rtv` showed in chat.
+- `schemereload_press <name>` (plugin command) clicks a button, for tests without the mouse.
+
+## HudLayout settings (checked in game)
+- HudHintDisplay: text_xpos/text_ypos are the space round the text inside the box (both sides). center_x/center_y
+  move only the box, away from the text (the text stays centred). HintSize is the box's width as a fraction: 0 = no box.
+- HudDamageIndicator: DmgColorLeft/Right and dmg_* do nothing (Half-Life 2's). The arrows are the pain_* pictures
+  from mod_textures.txt; alpha 0 hides them.
+- HudHealth icon_ypos/digit_xpos move the icon/number inside the box, clipped by the box's width.

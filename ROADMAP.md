@@ -4,16 +4,18 @@ Decided 2026-09-26. Ordered for someone who plays surf/bhop: what they see and u
 Each step is committed on its own, so work can stop after any of them.
 
 ## Now, in this order
-1. [ ] **More HUD part settings** (HudLayout keys the editor doesn't show yet)
-   - Timer box and right-side text: text padding, centring, size (`text_xpos/ypos`, `center_x/y`, `HintSize`, `text_xgap/ygap`)
+1. [x] **More HUD part settings** (HudLayout keys the editor doesn't show yet)
+   - Timer box and right-side text: text padding (`text_xpos/ypos`). Checked in game: `center_x/y` only move the box
+     away from its text and `HintSize` is the box width, so those are left out.
    - Voice list: avatars, friend and dead icons on/off, row size and spacing, fade times
    - Weapon selection: box sizes and gap, number/icon/text positions, grow time, scroll sound
    - Kill feed: number of lines, line spacing, left/right side, font
    - Inside the number boxes: icon and number positions (health, armour, timer, ammo and its bar, money and its +/- line)
-   - Damage indicator: colour, size and position of the side flashes
+   - Damage indicator: its HudLayout colours/sizes do nothing in CS:S (checked); the arrows can be faded or hidden.
+     Recolouring them means swapping their pictures (`pain_*` in mod_textures), like the MVP star.
    - Per-part colours: low health, timer flash, icon colours (so they don't share the warning red / highlight green)
    - Smaller: pickup history spacing, plant/defuse bar border, scope settings
-2. [ ] **Command buttons** in windows (team menu first): an "Add a command button" section after Borders. The new
+2. [x] **Command buttons** in windows (team and class select; the buy menu comes with step 15): an "Add a command button" section after Borders. The new
    button gets a sensible size and copies another button's colours and border. Presets for surf/bhop/ZE servers.
    The plugin creates new buttons live.
 3. [ ] **+ Add to HUD**: pictures (PNG/JPG), animated pictures (GIF), text and colour boxes, in HudLayout

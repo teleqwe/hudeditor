@@ -59,6 +59,14 @@ packed inside it. Needs Windows 10 or 11 (it uses the WebView2 runtime that ship
        up again on a reload.
      - **Radio and server menus** (radio commands, SourceMod menus such as bhop checkpoints): title, option and
        background colours, the title and option fonts, and the position.
+     - **Settings** (under More): what a part's own code reads from HudLayout. Where the icon and number sit inside
+       health, armor, timer, ammo (and its divider) and money (and its +/- line); the space round the timer text; the
+       right-side text's place; weapon selection's box sizes, gaps, positions, grow time and scroll sound; the kill
+       feed's number of lines, line height, side and font; the voice list's avatars, icons, sizes and fade times; the
+       pickup history's spacing; the plant/defuse bar's border. Colours for one part only: low health, the timer's
+       flash, the buy zone, bomb, defuse kit and rescue zone icons.
+     - **Damage arrows** (under Other HUD parts) can be faded or hidden. They are pictures: HudLayout's DmgColor and
+       dmg_ settings are Half-Life 2's and do nothing in CS:S.
    - **Windows** (team select, buy menu, scoreboard, spectator bars, MOTD, main menu, options, console): the exact
      control you clicked. You get, in this order (colours, then fonts, then borders, then the rest):
      - its own colour and position (**Just this ...**)
@@ -67,6 +75,10 @@ packed inside it. Needs Windows 10 or 11 (it uses the WebView2 runtime that ship
      - its borders (normal, focused, pressed...): which sides draw (four tick boxes), thickness and colour. Sides that
        are off are written as clear lines, since a running game keeps lines a file no longer lists
      - for menu windows, square or rounded corners and the window edge
+     - **Command buttons** (team and class select, under More): add a button that runs a command, such as `say !rtv`
+       (suggestions for surf/bhop servers come up as you type). A click closes the menu and runs it as if typed in the
+       console. The new button copies the look of the window's most customised button (colours, border, font, size)
+       and goes a row under the lowest one; the plugin makes it straight away (blocks named `hudeditor_cmd1`...).
      - **Main menu:** hide or colour the logo (`Main.Title1.Color`, `Main.Title2.Color` in ClientScheme), the item
        height (`MainMenu.MenuItemHeight`, scaled to your screen) and the menu text colours. The item text size is the
        MenuLarge font. **Import a picture** (also found by searching "background") sets the menu background: it is
