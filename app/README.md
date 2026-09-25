@@ -35,17 +35,18 @@ packed inside it. Needs Windows 10 or 11 (it uses the WebView2 runtime that ship
    once you let go (a map otherwise locks the mouse inside the game).
 4. **Click anything in the preview** to edit it:
    - **HUD parts:** show/hide and opacity, colours, position and size, the font it uses, and its box:
-     - **Box shape:** square, rounded, or a fade (solid on the left, clear on the right).
-     - For rounded boxes, which corners are round.
-     - **Corner shape:** round, tighter curve, cut off (bevel), scooped in, or square. The editor makes those corner
-       textures inside your HUD (`materials/vgui/hudeditor`).
-     - **Square corners on every box in the HUD** gives the game's own corner image (`vgui/hud/8x800corner1-4`) a
-       square version in the HUD. That also reaches boxes HudLayout can't, such as the timer's.
-     - The chat, timer and weapon selection draw rounded boxes whatever HudLayout says; their rows say so.
-     - **Outline:** a line round the box, in a border (`HudEditorOutline` in ClientScheme) shared by every outlined
-       part. It isn't offered where the box doesn't fill its panel (chat, timer, weapon selection).
-     - Weapon selection's own colours only take the scheme colour at startup, so a change also names it in HudLayout
-       (`NumberColor "SelectionNumberFg"`...), which the game looks up again on a reload.
+     - **Corners:** rounded or square. Where the game can't draw one of them (the timer's box is always rounded) the
+       option is greyed out. Boxes the game's code draws (chat, weapon selection) go square with square corner images
+       the editor makes in your HUD (`materials/vgui/hudeditor`).
+     - A part with a `border` in HudLayout takes its box shape from the border, and a running game keeps it: picking
+       corners there takes the border out and asks you to restart the game.
+     - HUDs made with an earlier version may have "square corners everywhere" (a replaced `vgui/hud/8x800corner1-4`
+       material); the Corners row offers to remove it.
+     - Weapon selection's and the radio menu's own colours only take the scheme colour at startup, so a change also
+       names it in HudLayout (`NumberColor "SelectionNumberFg"`, `MenuItemColor "ItemColor"`...), which the game looks
+       up again on a reload.
+     - **Radio and server menus** (radio commands, SourceMod menus such as bhop checkpoints): title, option and
+       background colours, the title and option fonts, and the position.
    - **Windows** (team select, buy menu, scoreboard, spectator bars, MOTD, main menu, options, console): the exact
      control you clicked. You get:
      - its own colour and position (**This ... only**)
@@ -64,7 +65,7 @@ packed inside it. Needs Windows 10 or 11 (it uses the WebView2 runtime that ship
      - A HUD without that window's `.res` gets the game's own copy on the first change.
    - **Scoreboard:** everything it draws is under its selection:
      - **Background:** the game's picture on or off, and a colour box of the editor's own behind it (square or rounded,
-       any size, optional outline). The picture is a texture, so the game can't tint it.
+       any size). The picture is a texture, so the game can't tint it.
      - **Your own row:** the highlight behind your name is the image `vgui/scoreboard/scoreboard-select`. The editor
        replaces it in the HUD with a flat colour you pick.
      - **Text colours** in groups: header, each team's name and score, each team's column titles, spectators.
