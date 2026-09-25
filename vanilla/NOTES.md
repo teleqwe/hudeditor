@@ -92,3 +92,15 @@ Not in custom: a folder there with full vanilla files would cover every HUD that
 - ClientScheme (in-game windows): **MenuTitle** window titles (MOTD, class and buy menus, from their .res), **Default**
   their buttons and labels, **DefaultSmall** the class menu's description (infolabel, set by the game).
 - A reload while a map loads crashed the plugin's panel refresh; it now waits for the loading screen to go.
+
+## Buttons in windows (checked in game)
+- A Button's PerformLayout sets its colours from its state every layout, so `fgcolor_override`/`bgcolor_override` in its
+  .res block do nothing. Per button: `defaultFgColor_override`, `defaultBgColor_override`, `armed...`, `depressed...`
+  (and `selected...`); alpha works. Team select's Auto Assign is drawn armed (highlighted) while the menu is open.
+- The team and class menus and the MOTD read their .res once. The plugin gives each existing control its block again
+  on a reload (Panel::ApplySettings through the vtable; `labelText`/`text` left out so the game's texts stay).
+  EditablePanel::LoadControlSettings instead deletes and remakes the controls the file made, which the game still
+  points at: the next map load crashed in client.dll. A class/team button's ApplySettings reloads its info page
+  (classes/<name>.res), which deletes panels, so the reload puts visibility back by walking the live tree.
+- At startup the game reads the .res of whatever HUD sorts first in custom; the editor's HUD only replaces it on the
+  first reload.

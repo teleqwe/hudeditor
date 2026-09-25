@@ -24,9 +24,9 @@ packed inside it. Needs Windows 10 or 11 (it uses the WebView2 runtime that ship
    - **Timer:** the timer hint box (HudHintText) and the right-side text (HudHintTextSmall). The hint's beep is
      silent while the editor runs: the plugin has the game use a silent `sound/ui/hint.wav` from
      `addons/schemereload_sounds`. Nothing goes into your HUD.
-   - **1 Speed:** PrintCenterText, drawn with font Trebuchet24 from SourceScheme
-   - **2 jhud:** ShowHudText/game_text just under it, drawn with font CenterPrintText from ClientScheme
-   - **3 Top left:** record times in the top left corner, also ShowHudText with CenterPrintText
+   - **Small speed:** PrintCenterText, drawn with font Trebuchet24 from SourceScheme
+   - **Large speed:** ShowHudText/game_text just under it (jhud), drawn with font CenterPrintText from ClientScheme
+   - **Top left:** record times in the top left corner, also ShowHudText with CenterPrintText
    - **Chat:** a chat line every 3 seconds (a player in team colour and a green `[Timer]` line), font ChatFont from
      ChatScheme
 
@@ -39,12 +39,12 @@ packed inside it. Needs Windows 10 or 11 (it uses the WebView2 runtime that ship
    **Drag anything in the preview to move it.** HUD parts move in HudLayout, window controls in the window's `.res`
    (`xpos`/`ypos`, keeping `r` and `c` anchors). **Centre** beside X and Y position centres it (in its window, for a
    window's control: `c` and `r` count from the screen even there, so inside a window smaller than the screen it writes
-   a plain number from the window's edge), and **Undo** there puts it back. Dragged near an edge of the screen (a window's control: of its
+   a plain number from the window's edge), and **Undo** there puts it back where it was when the HUD was opened. Dragged near an edge of the screen (a window's control: of its
    window) or its middle, a part snaps there, stopping 1 unit short of the edge (positions are whole units of screen
    height / 480: 3 px at 1440p). The dashed box shows where it goes, and the game follows once you
    pause. What the game places itself (main menu, server browser, window frames) can't be moved, and the radio menu
    only moves up and down (the game keeps it full width). The same X and Y positions are rows on every part that has
-   them. The team, class and buy menus and the MOTD read positions at startup, so moves there show after a restart.
+   them. The buy menu reads its own settings at startup, so changes to its controls show after a restart; the plugin reads the team and class menus' and the MOTD's again on every change.
 4. **Click anything in the preview** to edit it:
    - **HUD parts:** show/hide and opacity, colours, position and size, the font it uses, and its box:
      - **Corners:** rounded or square. Where the game can't draw one of them (the timer's box is always rounded) the
@@ -110,11 +110,13 @@ packed inside it. Needs Windows 10 or 11 (it uses the WebView2 runtime that ship
      round end panel, bomb icon...) are under **Other HUD parts**. Most parts are hidden with opacity 0. The hint box,
      right-side text, weapon selection, radio menu and pickup history fade themselves in and out, so those are moved off
      screen instead, and moved back when shown.
-   - Some colours aren't the HUD's to set: the centre print is always white, and jhud/top-left text take their colour
+   - Some colours aren't the HUD's to set: the centre print is always white, and the large speed/top-left text take their colour
      from the server plugin. Their rows say so; only their fonts can change.
-   - **Fonts:** face, size, weight, blur, outline, shadow and glow for your screen resolution, in the scheme file the
-     part really uses (the game reports it). Additive (glow) text can't show black outlines or shadows, so ticking
-     either one turns glow off. **Add a font file** copies a .ttf/.otf into the HUD and switches to it, with no restart.
+   - **Fonts:** face, size, weight, blur, and outline, shadow, glow and anti-aliasing as Off/On, for your screen
+     resolution, in the scheme file the part really uses (the game reports it). **+** under a font adds the settings it
+     doesn't have yet (italic, underline, strike-through, scan lines, character range, symbol, rotary, custom). Additive
+     (glow) text can't show black outlines or shadows, so turning either on turns glow off. **+ Add font** at the top
+     of the Fonts card copies a .ttf/.otf into the HUD (no restart); then type its name into any Font box.
      Every selection lists its fonts:
      - **HUD parts:** the fonts they use.
      - **Controls:** their type's default (Default for text and buttons, DefaultSmall for list headers...).
@@ -131,10 +133,13 @@ packed inside it. Needs Windows 10 or 11 (it uses the WebView2 runtime that ship
    ↺ next to it puts the original back. A selection's sections are in folders (Colours, Fonts, Borders,
    More) that fold like a directory, all its fonts in one card; a section's chevron folds it too (remembered). The
    settings a section changes (Frame.BgColor...) show when the mouse is over its title. Colour rows show the RGB
-   over the colour and the opacity over a second swatch, which opens a strip fading the colour from 100% to 0%.
+   over the colour and the opacity over a second swatch; either opens the colour picker (shade, hue, opacity fading
+   from 100% to 0%, the numbers, and **Copy**/**Paste** as `R G B A`; Paste also takes #hex and rgb()). A button's own
+   colours (Team select, class menus) are set per state: normal, mouse over, clicked.
    Messages pop up at the bottom of the list for a few seconds.
-   A colour your HUD changed has a **Default** button that puts the game's own colour back, and **Undo** (Ctrl+Z)
-   steps back through this session's changes.
+   A colour your HUD changed has a **Default** button that puts the game's own colour back. A row's **Undo** puts it
+   back to how it was when the HUD was opened (a new HUD: the defaults); the top **Undo** (Ctrl+Z) steps back
+   through this session's changes.
 5. **Done** or **Save HUD** keeps your changes. They go into the HUD straight away so the game can show them, and until
    you save, the editor keeps each changed file's saved version in `%LOCALAPPDATA%\CSSHudEditor\unsaved`. Closing the
    editor asks about unsaved changes. Discarding them, or opening another HUD, puts the saved versions back; after a

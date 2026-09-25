@@ -29,3 +29,4 @@ int SlotLabelGetFont() { return SlotOf( Thunk( &vgui::Label::GetFont ) ); }
 int SlotPanelSetInfo() { return SlotOf( Thunk( &vgui::Panel::SetInfo ) ); }
 int SlotMenuSetItemHeight() { return SlotOf( Thunk( &vgui::Menu::SetMenuItemHeight ) ); }
 int SlotMenuGetItemHeight() { return SlotOf( Thunk( &vgui::Menu::GetMenuItemHeight ) ); }
+int SlotApplySettings() { return SlotOf( Thunk( &vgui::Panel::ApplySettings ) ); }

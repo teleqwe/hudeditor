@@ -1102,6 +1102,15 @@ static HRESULT OnController( HRESULT hr, ICoreWebView2Controller *ctl )
 			return S_OK;
 		} ).Get(), NULL );
 
+	// the colour picker's Paste reads the clipboard: allow it without asking
+	g_web->add_PermissionRequested( Callback< ICoreWebView2PermissionRequestedEventHandler >(
+		[]( ICoreWebView2 *, ICoreWebView2PermissionRequestedEventArgs *args ) -> HRESULT {
+			COREWEBVIEW2_PERMISSION_KIND kind;
+			if ( SUCCEEDED( args->get_PermissionKind( &kind ) ) && kind == COREWEBVIEW2_PERMISSION_KIND_CLIPBOARD_READ )
+				args->put_State( COREWEBVIEW2_PERMISSION_STATE_ALLOW );
+			return S_OK;
+		} ).Get(), NULL );
+
 	return g_web->Navigate( g_selftestOut.empty() ? L"https://hud.editor/" : L"https://hud.editor/#hosttest" );
 }
 

@@ -33,6 +33,7 @@
 #include "vgui/ISurface.h"
 #include "Color.h"
 #include <stdio.h>
+#include <unordered_map>
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
@@ -768,19 +769,37 @@ static void RemoveEditorBorders()
 
 // Re-applying a scheme makes dialogs re-apply their .res files, which sets hidden tab pages
 // visible again. Record visibility first and put it back afterwards.
-static void RecordVisibility( VPANEL p, CUtlVector< VPANEL > &panels, CUtlVector< bool > &visible, int depth )
+static void RecordVisibility( VPANEL p, std::unordered_map< VPANEL, bool > &was, int depth )
 {
 	if ( !p || depth > 64 )
 		return;
-	panels.AddToTail( p );
-	visible.AddToTail( g_pVPanel->IsVisible( p ) );
+	was[p] = g_pVPanel->IsVisible( p );
 	for ( int i = 0; i < g_pVPanel->GetChildCount( p ); ++i )
-		RecordVisibility( g_pVPanel->GetChild( p, i ), panels, visible, depth + 1 );
+		RecordVisibility( g_pVPanel->GetChild( p, i ), was, depth + 1 );
+}
+
+// Puts back what was shown or hidden before, walking the tree as it is now: the refresh can delete panels (a class
+// menu button remakes its info page), so a recorded one may be gone.
+static CUtlVector< VPANEL > g_Reshow; // visible before the last reload, see Reshow
+static void RestoreVisibility( VPANEL p, const std::unordered_map< VPANEL, bool > &was, int depth )
+{
+	for ( int i = 0; p && depth < 64 && i < g_pVPanel->GetChildCount( p ); ++i )
+	{
+		VPANEL c = g_pVPanel->GetChild( p, i );
+		auto it = was.find( c );
+		if ( c && it != was.end() )
+		{
+			if ( g_pVPanel->IsVisible( c ) != it->second )
+				g_pVPanel->SetVisible( c, it->second );
+			if ( it->second )
+				g_Reshow.AddToTail( c );
+		}
+		RestoreVisibility( c, was, depth + 1 );
+	}
 }
 
 static bool RunStep( int step, void ( *fn )() );
 static void StepHud();
-static CUtlVector< VPANEL > g_Reshow; // visible before the last reload, see Reshow
 static void HideRowTemplates();
 static double g_flReshowUntil;
 
@@ -890,11 +909,72 @@ static void RestoreMenu()
 	g_KeptMenu.RemoveAll();
 }
 
+// Windows the game lays out once, when it makes them (team and class menus, the MOTD): give each of their controls its
+// block of the .res again, so a change (own colours, places, sizes) shows without a restart. Panel::ApplySettings
+// through the vtable, on controls that exist: EditablePanel::LoadControlSettings would delete and remake the ones the
+// file made, which the game still points at (that crashed the next map load). Texts are left as the game set them
+// (the MOTD's title). Only when the menu check above found this game's slots as expected.
+int SlotApplySettings();
+typedef void ( *ApplySettingsFn )( void *, KeyValues * );
+static void *g_ApplyPanel;
+static KeyValues *g_ApplyKeys;
+static int g_ApplySlot;
+static void ApplyOne()
+{
+	( (ApplySettingsFn)( *(void ***)g_ApplyPanel )[g_ApplySlot] )( g_ApplyPanel, g_ApplyKeys );
+}
+static CUtlStringList g_ApplyBroken; // "window/block" whose settings crashed once: left alone until a restart
+static void ReapplyLayouts()
+{
+	static const char *s_Res[][2] = { { "team", "Resource/UI/TeamMenu.res" }, { "class_ct", "Resource/UI/ClassMenu_CT.res" },
+		{ "class_ter", "Resource/UI/ClassMenu_TER.res" }, { "info", "Resource/UI/TextWindow.res" } };
+	int slot = g_ApplySlot = SlotApplySettings();
+	if ( slot <= 0 || SlotLabelSetFont() != 0x710 / 8 )
+		return;
+	for ( int i = 0; i < ARRAYSIZE( s_Res ); ++i )
+	{
+		VPANEL win = FindNamed( TopPanel(), s_Res[i][0], 0 );
+		KeyValues *res = win ? LoadFresh( s_Res[i][1] ) : NULL;
+		for ( KeyValues *b = res ? res->GetFirstTrueSubKey() : NULL; b; b = b->GetNextTrueSubKey() )
+		{
+			VPANEL p = FindNamed( win, b->GetName(), 0 );
+			void *panel = p ? g_pVPanel->GetPanel( p, "ClientDLL" ) : NULL;
+			if ( !panel )
+				continue;
+			char id[256];
+			Q_snprintf( id, sizeof( id ), "%s/%s", s_Res[i][0], b->GetName() );
+			bool broken = false;
+			for ( int j = 0; j < g_ApplyBroken.Count() && !broken; ++j )
+				broken = !Q_stricmp( g_ApplyBroken[j], id );
+			if ( broken )
+				continue;
+			for ( const char *k : { "labelText", "text" } )
+				if ( KeyValues *t = b->FindKey( k ) )
+					b->RemoveSubKey( t ), t->deleteThis();
+			g_ApplyPanel = panel;
+			g_ApplyKeys = b;
+			if ( !SR_SafeCall( ApplyOne ) )
+			{
+				g_ApplyBroken.CopyAndAddToTail( id );
+				Warning( "[schemereload] applying %s's settings crashed; it's left alone until a restart\n", id );
+			}
+		}
+		if ( res )
+			res->deleteThis();
+	}
+}
+
 static void StepPanels()
 {
-	CUtlVector< VPANEL > panels;
-	CUtlVector< bool > visible;
-	RecordVisibility( TopPanel(), panels, visible, 0 );
+	std::unordered_map< VPANEL, bool > was;
+	RecordVisibility( TopPanel(), was, 0 );
+
+	static bool s_bReapplyBroken;
+	if ( !s_bReapplyBroken && !SR_SafeCall( ReapplyLayouts ) )
+	{
+		s_bReapplyBroken = true;
+		Warning( "[schemereload] re-reading the team/class/MOTD layouts crashed; switched off, they update after a restart\n" );
+	}
 
 	SR_SafeCall( KeepMenu );
 	RefreshPanels( TopPanel(), -2, 0 );
@@ -902,15 +982,8 @@ static void StepPanels()
 	// hud_reloadscheme closes an open scoreboard; run it now so the visibility put back below covers that too
 	RunStep( STEP_HUD, StepHud );
 
-	// ponytail: assumes no panel is deleted during the refresh; re-check the tree if that ever crashes here
 	g_Reshow.RemoveAll();
-	for ( int i = 0; i < panels.Count(); ++i )
-	{
-		if ( g_pVPanel->IsVisible( panels[i] ) != visible[i] )
-			g_pVPanel->SetVisible( panels[i], visible[i] );
-		if ( visible[i] )
-			g_Reshow.AddToTail( panels[i] );
-	}
+	RestoreVisibility( TopPanel(), was, 0 );
 	g_flReshowUntil = Plat_FloatTime() + 0.7;
 	HideRowTemplates();
 }
