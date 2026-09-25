@@ -52,6 +52,8 @@
   .thing-btn .eye { padding: 1px 8px; border: 1px solid #3a3f49; border-radius: 4px; font-size: 11px; color: var(--dim); }
   .thing-btn .eye:hover { border-color: var(--accent); color: var(--text); }
   .row.note { display: block; }
+  .row.menuitem { grid-template-columns: 1fr repeat(3, 30px); gap: 4px; }
+  .row.menuadd { grid-template-columns: 1fr 1fr auto; gap: 6px; }
   .row .reset { margin-left: 8px; padding: 0 6px; font-size: 11px; color: var(--dim); }
   .row.pick { grid-template-columns: 1fr minmax(0, 190px); }
   .row.pick .meta { grid-column: 2; }
@@ -515,6 +517,8 @@ async function loadFile(name) {
 
 async function loadAll() {
   files = (await Promise.all([C, S, L, CH].map(loadFile))).filter(Boolean);
+  const gm = (await readHud(GM)) ?? GAME_MENU; // written into the HUD on the first change
+  files.push({ name: GM, path: GM, text: gm, parsed: parse(gm), bases: [] });
   squareAll = (await readHud(CORNER_VMT(1)) || '').includes('vgui/white');
   render();
   drawBoxes();
@@ -1513,11 +1517,74 @@ function mainMenuSections() {
   const add = el('div', { className: 'row check' });
   add.append(pick, el('button', { textContent: 'Import a picture...', onclick: () => pick.click() }));
   add.dataset.q = 'background picture image wallpaper import';
-  out.push(['Main menu: background', [add, noteRow('PNG, JPG, WebP... It is cropped to fill the screen. The game loads it at startup: restart it to see a new one.')]]);
+  const buttons = menuRows();
+  if (buttons.length) out.push(['Main menu: buttons', buttons]);
+  out.push(['Main menu: background', [add,noteRow('PNG, JPG, WebP... It is cropped to fill the screen. The game loads it at startup: restart it to see a new one.')]]);
   const h = s && tables(s).base.get('mainmenu.menuitemheight');
   if (h) out.push(['Main menu: items', [inputRow('Item height', h.value, v => save(s, 'MainMenu.MenuItemHeight', v, ['BaseSettings']),
     { type: 'number', min: 8, max: 80, step: 1, title: 'Scaled to your screen; the game\'s is 22. The text size is the MenuLarge font below' })]]);
   return out;
+}
+
+// The main menu's buttons: resource/GameMenu.res, numbered blocks in order. The game reads it once at startup (a
+// scheme reload doesn't rebuild the menu). GAME_MENU is the game's own list, to put buttons back from.
+const GM = 'resource/GameMenu.res';
+const GAME_MENU = `"GameMenu"\n{\n${[
+  ['#GameUI_GameMenu_ResumeGame', 'ResumeGame', 1], ['#GameUI_GameMenu_Disconnect', 'Disconnect', 1],
+  ['#GameUI_GameMenu_PlayerList', 'OpenPlayerListDialog', 1], ['', '', 1], ['#GameUI_GameMenu_FindServers', 'OpenServerBrowser'],
+  ['#GameUI_GameMenu_CreateServer', 'OpenCreateMultiplayerGameDialog'], ['#GameUI_GameMenu_Achievements', 'OpenCSAchievementsDialog'],
+  ['#GameUI_ReportBug', 'engine bug'], ['#GameUI_LaunchBenchmark', 'OpenBenchmarkDialog'], ['#GameUI_GameMenu_Options', 'OpenOptionsDialog'],
+  ['#GameUI_GameMenu_Quit', 'Quit']].map(([l, c, g], i) => `\t"${i + 1}"\n\t{\n\t\t"label" "${l}"\n\t\t"command" "${c}"\n${g ? '\t\t"OnlyInGame" "1"\n' : ''}\t}\n`).join('')}}\n`;
+const MENU_NAMES = { ResumeGame: 'Resume Game', Disconnect: 'Disconnect', OpenPlayerListDialog: 'Player List', OpenServerBrowser: 'Find Servers',
+  OpenCreateMultiplayerGameDialog: 'Create Server', OpenCSAchievementsDialog: 'Achievements', 'engine bug': 'Report Bug',
+  OpenBenchmarkDialog: 'Video Stress Test', OpenOptionsDialog: 'Options', Quit: 'Quit' };
+// [[key, value]...] per button, in order
+const menuItems = f => f.parsed.sections.filter(s => s.path.length === 2)
+  .map(s => f.parsed.entries.filter(e => samePath(e.path, s.path)).map(e => [e.key, e.value]));
+const menuVal = (item, k) => (item.find(([key]) => key.toLowerCase() === k.toLowerCase()) || [])[1] || '';
+const menuName = item => MENU_NAMES[menuVal(item, 'command')] || menuVal(item, 'label') || '(gap)';
+const menuText = items => `"GameMenu"\n{\n${items.map((it, i) => `\t"${i + 1}"\n\t{\n${it.map(([k, v]) => `\t\t"${k}" "${v}"\n`).join('')}\t}\n`).join('')}}\n`;
+function setMenu(items) {
+  const f = F(GM);
+  commit(f, 'gamemenu', () => menuText(items));
+  writing = writing.then(() => { status('Menu buttons changed. Restart the game to see them (Save HUD keeps them).'); render(); });
+}
+function menuRows() {
+  const f = F(GM);
+  if (!f) return [];
+  const items = menuItems(f), defaults = menuItems({ parsed: parse(GAME_MENU) }), cmd = it => menuVal(it, 'command');
+  const move = (i, d) => { const next = [...items]; [next[i], next[i + d]] = [next[i + d], next[i]]; setMenu(next); };
+  const rows = items.map((it, i) => {
+    const row = el('div', { className: 'row menuitem' });
+    const what = cmd(it).startsWith('engine connect ') ? `Connects to ${cmd(it).slice(15)}` : menuVal(it, 'OnlyInGame') === '1' ? 'In game only' : '';
+    const name = el('div', { textContent: menuName(it) });
+    name.append(el('div', { className: 'meta', textContent: what }));
+    const btn = (text, title, on, off) => el('button', { textContent: text, title, disabled: !!off, onclick: on });
+    row.append(name, btn('↑', 'Move up', () => move(i, -1), i === 0), btn('↓', 'Move down', () => move(i, 1), i === items.length - 1),
+      btn('✕', 'Remove', () => setMenu(items.filter((_, j) => j !== i))));
+    row.dataset.q = `menu button ${menuName(it).toLowerCase()}`;
+    return row;
+  });
+  // the game's own buttons that aren't there, put back where the game has them
+  const missing = defaults.filter(d => cmd(d) && !items.some(it => cmd(it) === cmd(d)));
+  if (missing.length) rows.push(selectRow('Put back', [['', 'Choose a button...'], ...missing.map(d => [cmd(d), menuName(d)])], '', v => {
+    if (!v) return;
+    const d = defaults.find(x => cmd(x) === v), at = defaults.indexOf(d);
+    const before = items.findIndex(it => { const k = defaults.findIndex(x => cmd(x) && cmd(x) === cmd(it)); return k > at; });
+    setMenu(before < 0 ? [...items, d] : [...items.slice(0, before), d, ...items.slice(before)]);
+  }));
+  // a button that joins a server: goes above Quit
+  const add = el('div', { className: 'row menuadd' });
+  const label = el('input', { value: 'CONNECT TO SERVER', title: 'Button text, shown as typed' }), ip = el('input', { placeholder: 'IP:port', title: 'e.g. 192.168.0.5:27015' });
+  label.setAttribute('aria-label', 'Button text'), ip.setAttribute('aria-label', 'Server IP');
+  add.append(label, ip, el('button', { textContent: 'Add', onclick: () => {
+    const addr = ip.value.trim(), text = label.value.replace(/["\\]/g, '').trim();
+    if (!/^[\w.-]+(:\d{1,5})?$/.test(addr)) return status('Type the server as an IP or name, with an optional :port (like 1.2.3.4:27015).');
+    const quit = items.findIndex(it => cmd(it) === 'Quit'), it = [['label', text || addr], ['command', `engine connect ${addr}`]];
+    setMenu(quit < 0 ? [...items, it] : [...items.slice(0, quit), it, ...items.slice(quit)]);
+  } }));
+  add.dataset.q = 'menu button connect server ip add';
+  return [...rows, add, noteRow('The game reads these when it starts: restart it to see changes.')];
 }
 
 // The main menu background: the game stretches materials/console/background01 (4:3 screens) or
@@ -2116,6 +2183,8 @@ function parserCheck() {
   const added = parse(withValue(f, 'Z', '1 1 1 1'));
   check(added.entries.some(e => e.key === 'Z' && e.value === '1 1 1 1' && sectionOf(e) === 'basesettings'), 'insert missing key');
   check(fromHex('#0a14ff', 128) === '10 20 255 128', 'hex -> rgba');
+  const gmItems = menuItems({ parsed: parse(GAME_MENU) });
+  check(gmItems.length === 11 && menuName(gmItems[3]) === '(gap)' && menuText(gmItems) === GAME_MENU, 'game menu buttons read and written back unchanged');
   const cv = el('canvas', { width: 2, height: 1 }), g = cv.getContext('2d');
   g.fillStyle = '#ff0000', g.fillRect(0, 0, 1, 1), g.fillStyle = '#0000ff', g.fillRect(1, 0, 1, 1);
   const tex = backgroundVtf(cv, 2, 1, 2), dv = new DataView(tex.buffer);
@@ -2270,7 +2339,7 @@ if (host && location.hash === '#hosttest') (async () => {
     await writing;
     check(/"?HudEditorBackground"?\s*\{[^}]*"zpos"\s+"-1"[^}]*"paintbackgroundtype"\s+"2"/.test(sb.text), 'scoreboard colour box added to a copy of the game\'s scoreboard.res');
     const mm = mainMenuSections().map(([title, rows]) => `${title}:${rows.length}`).join();
-    check(mm === 'Main menu: logo:3,Main menu: background:2,Main menu: items:1', `main menu: logo on/off and colours, background import, item height (${mm})`);
+    check(mm === 'Main menu: logo:3,Main menu: buttons:13,Main menu: background:2,Main menu: items:1', `main menu: logo on/off and colours, buttons, background import, item height (${mm})`);
     await setAllFonts('Arial', '600');
     const cf = F(C), marlett = fontVariants(cf, 'Marlett'), dflt = fontVariants(cf, 'Default');
     check([...dflt.values()].every(p => p.name === 'Arial' && p.weight === '600') && [...marlett.values()].every(p => p.name === 'Marlett'),

@@ -64,6 +64,8 @@ packed inside it. Needs Windows 10 or 11 (it uses the WebView2 runtime that ship
        MenuLarge font. **Import a picture** (also found by searching "background") sets the menu background: it is
        cropped to fill the screen and written as `materials/console/background01` (4:3) and `background01_widescreen`
        (uncompressed VTFs). The game loads it at startup, so restart it to see a new one.
+       **Buttons** (`resource/GameMenu.res`): remove, reorder, put back any of the game's own buttons, or add one that
+       joins a server (type the IP:port). Also read at startup only.
      - **Show on screen** to hide the control. It moves off screen and its position is kept in `xpos_hudeditor`. The
        game sets window parts' visibility itself, so `visible` can't hide them.
      - **Spectator bars:** show or hide the top and bottom bar, keeping their text. The game sizes these two from the

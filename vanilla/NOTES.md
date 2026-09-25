@@ -30,6 +30,8 @@ Not in custom: a folder there with full vanilla files would cover every HUD that
 - ScoreboardBackground is a ScalableImagePanel texture; "drawcolor" does nothing. A new block in scoreboard.res
   (EditablePanel, paintbackground 1, paintbackgroundtype 2, bgcolor_override, zpos -1) is created live and draws
   behind everything.
+- A scheme border (ClientScheme Borders) on a new EditablePanel block ("border" key) draws around it; after a
+  clean start the scoreboard row templates (CTPlayerArea...) stay hidden, but switching HUDs live once showed them.
 - hud_reloadscheme closes the scoreboard. +showscores / -showscores from the console open and close it; they need
   the client's command buffer (ServerCommand says "Unknown command").
 
@@ -48,3 +50,6 @@ Not in custom: a folder there with full vanilla files would cover every HUD that
   when a dialog opens or closes.
 - The plugin keeps the logo alpha, the item fonts and Menu item height across a reload (vtable slots from
   hudreload/src/vgui_slots.cpp; the SDK 2013 headers match GameUI.dll x64: Label::SetFont at 0x710).
+- The buttons come from resource/GameMenu.res (numbered blocks: label, command, OnlyInGame), read once at startup:
+  scheme_reload doesn't rebuild the menu. Labels that aren't #tokens show as typed (the game's own are upper case).
+  "engine connect ip:port" as the command makes a join-server button.
