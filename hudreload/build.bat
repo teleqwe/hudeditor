@@ -25,7 +25,7 @@ set CFLAGS=/nologo /c /O2 /MT /fp:fast /GS- /W3 /Gw /Zc:inline /Zc:threadSafeIni
 
 set T1=%SDK%\tier1
 cl %CFLAGS% %DEFS% %INC% /Fo"%OUT%\\" ^
- "%~dp0src\schemereload.cpp" "%~dp0src\win32_helpers.cpp" "%~dp0src\vgui_slots.cpp" "%SDK%\public\tier0\memoverride.cpp" ^
+ "%~dp0src\schemereload.cpp" "%~dp0src\win32_helpers.cpp" "%~dp0src\vgui_slots.cpp" "%~dp0src\cvar_bounds.cpp" "%SDK%\public\tier0\memoverride.cpp" ^
  "%T1%\KeyValues.cpp" "%T1%\convar.cpp" "%T1%\interface.cpp" "%T1%\tier1.cpp" "%T1%\strtools.cpp" ^
  "%T1%\strtools_unicode.cpp" "%T1%\utlbuffer.cpp" "%T1%\utlsymbol.cpp" "%T1%\utlstring.cpp" ^
  "%T1%\characterset.cpp" "%T1%\generichash.cpp" "%T1%\mempool.cpp" "%T1%\memstack.cpp" ^

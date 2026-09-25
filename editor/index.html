@@ -246,6 +246,18 @@
       <button data-bit="8" title="Record times in the top left corner (font CenterPrintText, ClientScheme)">Top left</button>
       <button data-bit="16" title="A chat line every few seconds (font ChatFont, ChatScheme)">Chat lines</button>
     </div>
+    <div class="tline" id="values">
+      <span class="glabel">Test values</span>
+      <button data-cmd="schemereload_testvalue health 5" title="Low health: the number turns the low health colour">5 HP</button>
+      <button data-cmd="schemereload_testvalue health 1500" title="Four digits: do they fit the box?">1500 HP</button>
+      <button data-cmd="schemereload_testvalue money 0">$0</button>
+      <button data-cmd="schemereload_testvalue money 16000">$16000</button>
+      <button data-cmd="schemereload_testvalue clip 0" title="The weapon in hand's magazine empty">Empty mag</button>
+      <button data-cmd="schemereload_testvalue roundtime 15" title="A round timer over 10:00, as surf and bhop servers have (starts the round again)">15:00 timer</button>
+      <button data-cmd='bot_stop 1; bot_join_team any; bot_prefix "[WWWWWWWWWWWWWWWW]"; bot_quota 24' title="Bots with long names in both teams">Full scoreboard</button>
+      <button data-cmd="bot_kill" title="Kills every bot: a line each in the kill feed">Kill feed</button>
+      <button data-cmd='bot_prefix ""; bot_kick; bot_join_team T; bot_quota 1; mp_roundtime 9; mp_restartgame 1' title="Back to one frozen bot and a 9:00 round">Reset</button>
+    </div>
     <div class="tline">
       <span class="glabel">Guides</span>
       <button id="guide43" aria-pressed="false" title="Dashed lines where a 4:3 screen (1024x768, 1280x960...) ends: parts outside them are off screen there">4:3 edges</button>
@@ -2907,7 +2919,7 @@ function captureEnded() { // the game window closed
 
 const TEST_SETUP = 'disconnect; sv_cheats 1; mp_autokick 0; mp_ignore_round_win_conditions 1; mp_autoteambalance 0; mp_limitteams 0; mp_freezetime 0; mp_roundtime 9; mp_buytime 9999; '
   + 'mp_startmoney 16000; mp_timelimit 0; mp_maxrounds 0; mp_winlimit 0; bot_quota 1; bot_join_team T; bot_stop 1; bot_chatter off; '
-  + 'motdfile hudeditor_nomotd.txt; map de_dust2';
+  + 'motdfile hudeditor_nomotd.txt; maxplayers 32; map de_dust2';
 // Sample server texts the test game keeps on screen, added up like the plugin's schemereload_testtext:
 // 1 timer box and right side, 2 speed, 4 jhud, 8 top left. Remembered between runs.
 let texts = 15;
@@ -3029,6 +3041,7 @@ if (host) {
   });
   $('explore').onclick = () => call('explore');
   $('guide43').onclick = () => { guide43 = !guide43; $('guide43').setAttribute('aria-pressed', guide43); drawBoxes(); };
+  for (const b of $('values').querySelectorAll('button')) b.onclick = () => live ? call('cmd', '', b.dataset.cmd) : status('Start the test server first.');
   $('testserver').onclick = testServer;
   $('toolsbtn').onclick = () => showTools($('tools').hidden);
   // held open like Tab does, as Tab can't be held down while clicking in the editor
