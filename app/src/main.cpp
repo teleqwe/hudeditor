@@ -220,7 +220,12 @@ static void Revert()
 		string data;
 		ok = ReadAll( g_unsaved + L"\\files\\" + rel, data ) && WriteAll( dir + L"\\" + rel, data ) && ok;
 	} );
-	EachFile( g_unsaved + L"\\new", L"", [&]( const wstring &rel ) { DeleteFileW( ( dir + L"\\" + rel ).c_str() ); } );
+	EachFile( g_unsaved + L"\\new", L"", [&]( const wstring &rel ) {
+		DeleteFileW( ( dir + L"\\" + rel ).c_str() );
+		// and the folders made for it, once empty (RemoveDirectory leaves any that still hold something)
+		for ( size_t at = rel.rfind( L'\\' ); at != wstring::npos && at > 0; at = rel.rfind( L'\\', at - 1 ) )
+			RemoveDirectoryW( ( dir + L"\\" + rel.substr( 0, at ) ).c_str() );
+	} );
 	std::error_code ec;
 	if ( ok )
 		std::filesystem::remove_all( g_unsaved, ec );
