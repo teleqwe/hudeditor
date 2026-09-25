@@ -54,6 +54,7 @@
   .row.sides { grid-template-columns: 1fr repeat(4, auto); gap: 10px; }
   .row.sides label { display: flex; align-items: center; gap: 4px; cursor: pointer; }
   .row.menuitem { grid-template-columns: 1fr repeat(3, 30px); gap: 4px; }
+  .row.cmdbtn { grid-template-columns: 1fr 1.3fr 30px; gap: 6px; }
   .row.menuadd { grid-template-columns: 1fr auto; gap: 6px 8px; padding: 10px 12px; }
   .row.menuadd > .meta, .row.menuadd > .wide { grid-column: 1 / -1; }
   .row.menuadd > .meta { color: var(--text); font-size: 12px; font-weight: 600; }
@@ -275,34 +276,53 @@ const NUMBERS = ['Numbers and icons', 'Panel.FgColor|OrangeDim', 'Shared with he
 const WARN = ['Warning flash', 'HudIcon_Red', 'Shared: getting hurt, spending money, low time, the bomb icon'];
 const HIGHLIGHT = ['Highlight', 'HudIcon_Green', 'Shared: money gained and the buy zone, bomb and defuser icons'];
 
+// Settings a part's own code reads from its HudLayout block by name, again on every reload:
+// [label, key ('|' = set together), kind, the game's default, note]. kind: 'num' (sizes and positions in the same units
+// as X/Y position), 'time' (seconds), 'onoff' (1/0), or a list of [value, label] choices.
+const INSIDE = (ix, iy, dx, dy) => [['Icon X', 'icon_xpos', 'num', ix], ['Icon Y', 'icon_ypos', 'num', iy],
+  ['Number X', 'digit_xpos', 'num', dx], ['Number Y', 'digit_ypos', 'num', dy]];
+
 // HUD parts, keyed by panel name (= HudLayout block). layoutColours are colours set in that HudLayout block;
 // hit = clickable area (HudLayout units) for panels much bigger than what they draw.
 const HUD = {
-  HudHealth: { name: 'Health', colours: [NUMBERS, WARN] },
-  HudArmor: { name: 'Armor', colours: [NUMBERS] },
-  HudAmmo: { name: 'Ammo', colours: [NUMBERS] },
-  HudAccount: { name: 'Money', colours: [NUMBERS, HIGHLIGHT, WARN] },
-  HudRoundTimer: { name: 'Round timer', colours: [NUMBERS, WARN] },
+  HudHealth: { name: 'Health', colours: [NUMBERS, WARN], layoutColours: [['Low health', 'LowHealthColor', 'HudIcon_Red']], settings: INSIDE('8', '-4', '35', '-4') },
+  HudArmor: { name: 'Armor', colours: [NUMBERS], settings: INSIDE('8', '-4', '34', '-4') },
+  HudAmmo: { name: 'Ammo', colours: [NUMBERS], settings: [['Magazine X', 'digit_xpos', 'num', '8'], ['Magazine Y', 'digit_ypos', 'num', '-4'],
+    ['Reserve X', 'digit2_xpos', 'num', '63'], ['Reserve Y', 'digit2_ypos', 'num', '-4'], ['Divider X', 'bar_xpos', 'num', '53'],
+    ['Divider Y', 'bar_ypos', 'num', '3'], ['Divider width', 'bar_width', 'num', '2'], ['Divider height', 'bar_height', 'num', '20'],
+    ['Icon X', 'icon_xpos', 'num', '110'], ['Icon Y', 'icon_ypos', 'num', '2']] },
+  HudAccount: { name: 'Money', colours: [NUMBERS, HIGHLIGHT, WARN], settings: [...INSIDE('9', '16', '100', '16'),
+    ['+/− icon X', 'icon2_xpos', 'num', '9'], ['+/− icon Y', 'icon2_ypos', 'num', '-4'], ['+/− amount X', 'digit2_xpos', 'num', '100'], ['+/− amount Y', 'digit2_ypos', 'num', '-4']] },
+  HudRoundTimer: { name: 'Round timer', colours: [NUMBERS, WARN], layoutColours: [['Low time flash', 'FlashColor', 'HudIcon_Red']], settings: INSIDE('8', '-4', '42', '-4') },
   HudRadar: { name: 'Radar' },
   HudLocation: { name: 'Location name' },
   overview: { name: 'Map overview' },
-  HudShoppingCart: { name: 'Buy zone icon', colours: [HIGHLIGHT] },
-  HudC4: { name: 'Bomb icon', colours: [HIGHLIGHT, WARN] },
-  HudDefuser: { name: 'Defuse kit icon', colours: [HIGHLIGHT] },
-  HudHostageRescueZone: { name: 'Rescue zone icon', colours: [HIGHLIGHT, WARN] },
-  HudScenarioIcon: { name: 'Objective icon', colours: [['Icon', 'Hostage_Yellow', 'Bomb site / hostage icon by the timer']] },
-  HudWeaponSelection: { name: 'Weapon selection', hit: ['r640', '16', '640', '100'], colours: [
+  HudShoppingCart: { name: 'Buy zone icon', colours: [HIGHLIGHT], layoutColours: [['Icon', 'IconColor', 'HudIcon_Green']] },
+  HudC4: { name: 'Bomb icon', colours: [HIGHLIGHT, WARN], layoutColours: [['Icon', 'IconColor', 'HudIcon_Green'], ['Flash', 'FlashColor', 'HudIcon_Red']] },
+  HudDefuser: { name: 'Defuse kit icon', colours: [HIGHLIGHT], layoutColours: [['Icon', 'IconColor', 'HudIcon_Green']] },
+  HudHostageRescueZone: { name: 'Rescue zone icon', colours: [HIGHLIGHT, WARN], layoutColours: [['Icon', 'IconColor', 'HudIcon_Green'], ['Flash', 'FlashColor', 'HudIcon_Red']] },
+  HudScenarioIcon: { name: 'Objective icon', colours: [['Icon', 'Hostage_Yellow', 'Bomb site / hostage icon by the timer']], layoutColours: [['Icon', 'IconColor', 'Hostage_Yellow']] },
+  HudWeaponSelection: { name: 'Weapon selection', hit: ['r640', '16', '640', '100'], settings: [['Box size', 'SmallBoxSize', 'num', '60'],
+    ['Picked box width', 'LargeBoxWide', 'num', '108'], ['Picked box height', 'LargeBoxTall', 'num', '80'], ['Gap between boxes', 'BoxGap', 'num', '8'],
+    ['Slot number X', 'SelectionNumberXPos', 'num', '4'], ['Slot number Y', 'SelectionNumberYPos', 'num', '4'], ['Icon X', 'IconXPos', 'num', '8'],
+    ['Icon Y', 'IconYPos', 'num', '0'], ['Name Y', 'TextYPos', 'num', '68'], ['Grow time', 'SelectionGrowTime', 'time', '0.4', 'Seconds the picked box takes to grow'],
+    ['Scroll sound', 'PlaySelectSounds', 'onoff', '0']], colours: [
     ['Weapon icons', 'FgColor', ''], ['Weapon names', 'SelectionTextFg', ''], ['Slot numbers', 'SelectionNumberFg', ''],
     ['Slot background', 'SelectionBoxBg|SelectionEmptyBoxBg', ''], ['Highlighted slot', 'SelectionSelectedBoxBg', ''] ],
     // its own colour settings take the scheme colour once, at startup; named in HudLayout they're looked up again on a reload
     // ("SelectedBoxClor" is spelt that way in the game)
     links: { NumberColor: 'SelectionNumberFg', BoxColor: 'SelectionBoxBg', EmptyBoxColor: 'SelectionEmptyBoxBg', SelectedBoxClor: 'SelectionSelectedBoxBg' }, rounded: true },
-  HudDeathNotice: { name: 'Kill feed', hit: ['r260', '12', '248', '100'], layoutColours: [['CT names', 'CTTextColor', 'CT_Blue'], ['T names', 'TerroristTextColor', 'T_Red']] },
+  HudDeathNotice: { name: 'Kill feed', hit: ['r260', '12', '248', '100'], layoutColours: [['CT names', 'CTTextColor', 'CT_Blue'], ['T names', 'TerroristTextColor', 'T_Red']],
+    settings: [['Lines', 'MaxDeathNotices', 'num', '4', 'How many kills show at once'], ['Line height', 'LineHeight', 'num', '22'],
+      ['Side', 'RightJustify', [['1', 'Right'], ['0', 'Left']], '1']], fontKeys: [['Names font', 'TextFont', 'Default']] },
   // the chat reads ChatScheme; its message colours (names in team colours, yellow server lines) are the game's own
   HudChat: { name: 'Chat', scheme: CH, rounded: true, colours: [['Background', 'DullWhite', 'Behind the chat while typing; the game sets how see-through it is'],
     ['Typing text', 'Chat.TypingText', ''], ['"Say :" text', 'Label.TextColor', ''], ['Typing box', 'TextEntry.BgColor', '']] },
-  HudHintDisplay: { name: 'Timer / hint text', fit: true, rounded: true, roundOnly: true, note: 'Font HudHintText', colours: [['Text', 'HintMessageFg', 'Also the right-side text'], ['Background', 'HintMessageBg', '']] },
-  HudHintKeyDisplay: { name: 'Right-side text', fit: true, note: 'Font HudHintTextSmall', colours: [['Text', 'HintMessageFg', 'Shared with the timer text (the game ignores HudLayout "TextColor" here)']] },
+  HudHintDisplay: { name: 'Timer / hint text', fit: true, rounded: true, roundOnly: true, note: 'Font HudHintText', colours: [['Text', 'HintMessageFg', 'Also the right-side text'], ['Background', 'HintMessageBg', '']],
+    // (center_x/center_y only move the box away from the text, and HintSize is the box's width as a fraction: checked in game)
+    settings: [['Space beside the text', 'text_xpos', 'num', '8', 'Left and right, inside the box'], ['Space above and below', 'text_ypos', 'num', '8', 'Inside the box']] },
+  HudHintKeyDisplay: { name: 'Right-side text', fit: true, note: 'Font HudHintTextSmall', colours: [['Text', 'HintMessageFg', 'Shared with the timer text (the game ignores HudLayout "TextColor" here)']],
+    settings: [['Text X', 'text_xpos', 'num', '8', 'Moves the text inside its area'], ['Text Y', 'text_ypos', 'num', '8', 'Moves the text inside its area']] },
   CCenterStringLabel: { name: 'Small speed', fixed: 'The game always draws this text white, so no HUD can recolour it. Its font (below) can change.', note: 'Centre print (PrintCenterText) from server plugins; font Trebuchet24',
     middle: [120, 30] },
   HudMessage: { name: 'Large speed', fixed: 'Its colour and position come from the server plugin, not the HUD. Its font (below) can change. The record times in the top left are the same kind of text.', note: 'ShowHudText / game_text from server plugins and maps; font CenterPrintText',
@@ -314,9 +334,17 @@ const HUD = {
     ['Title', 'MenuColor', 'Also options that can\'t be picked'], ['Options', 'ItemColor', 'The numbered choices'], ['Background', 'MenuBoxBg', ''] ],
     links: { MenuColor: 'MenuColor', MenuItemColor: 'ItemColor', MenuBoxColor: 'MenuBoxBg' },
     fontKeys: [['Title font', 'TextFont', 'Default'], ['Options font', 'ItemFont|ItemFontPulsing', 'Default']] },
-  HudProgressBar: { name: 'Plant / defuse bar', colours: [['Bar', 'ProgressBarFg', '']] },
-  HudHistoryResource: { name: 'Pickup history', hit: ['r160', '250', '150', '130'], colours: [['Items', 'Yellowish', ''], ['Slot full', 'Caution', '']] },
-  HudVoiceStatus: { name: 'Voice chat list', quiet: true },
+  HudProgressBar: { name: 'Plant / defuse bar', colours: [['Bar', 'ProgressBarFg', '']], settings: [['Border thickness', 'BorderThickness', 'num', '1']] },
+  HudHistoryResource: { name: 'Pickup history', hit: ['r160', '250', '150', '130'], colours: [['Items', 'Yellowish', ''], ['Slot full', 'Caution', '']],
+    settings: [['Gap between rows', 'history_gap', 'num', '50']] },
+  HudVoiceStatus: { name: 'Voice chat list', quiet: true, settings: [['Avatars', 'show_avatar', 'onoff', '1'], ['Friend icon', 'show_friend', 'onoff', '1'],
+    ['Speaker icon', 'show_voice_icon', 'onoff', '0'], ['Dead icon', 'show_dead_icon', 'onoff', '1'], ['Row height', 'item_tall', 'num', '16'],
+    ['Row width', 'item_wide', 'num', '195'], ['Gap between rows', 'item_spacing', 'num', '2'], ['Avatar X', 'avatar_xpos', 'num', '14'],
+    ['Avatar Y', 'avatar_ypos', 'num', '0'], ['Avatar size', 'avatar_wide|avatar_tall', 'num', '16'], ['Dead icon X', 'dead_xpos', 'num', '0'],
+    ['Dead icon Y', 'dead_ypos', 'num', '0'], ['Dead icon size', 'dead_wide|dead_tall', 'num', '16'], ['Name X', 'text_xpos', 'num', '42'],
+    ['Fade in', 'fade_in_time', 'time', '0.07', 'Seconds'], ['Fade out', 'fade_out_time', 'time', '1.0', 'Seconds after they stop talking']] },
+  // its HudLayout colours and sizes (DmgColorLeft, dmg_xpos...) are Half-Life 2's and do nothing here: checked in game
+  HudDamageIndicator: { name: 'Damage arrows', quiet: true, fixed: 'The red arrows round the crosshair when you take damage. They are pictures, so here they can only be faded or hidden.' },
   WinPanel_Round: { name: 'Round end panel' },
   HudAchievementTracker: { name: 'Achievement tracker', quiet: true },
 };
@@ -866,6 +894,74 @@ function windowPartRows(sel) {
   return parts.map(([label, block]) => showRow(f, block, `Show ${label}`));
 }
 
+// ---------- command buttons ----------
+// Team and class select run whatever command a button sends (the menu closes and the game runs it as if typed in the
+// console), so a HUD can add its own: blocks named hudeditor_cmd<n>, which the plugin makes in a running game.
+const CMD_WINDOWS = new Set(['team', 'class_ct', 'class_ter']);
+const CMD_PRESETS = [['say !r', 'Restart'], ['say !rtv', 'Rock the vote'], ['say !nominate', 'Nominate'], ['say !spec', 'Spectate'],
+  ['say !stop', 'Stop timer'], ['say !top', 'Top times'], ['say !wr', 'World record'], ['say !pr', 'Personal record'], ['say !cp', 'Checkpoints'],
+  ['say !hide', 'Hide players'], ['say !style', 'Styles'], ['say !settings', 'Settings'], ['say !rank', 'Rank'], ['timeleft', 'Time left']];
+const cmdBlocks = f => f.parsed.sections.filter(s => s.path.length === 2 && /^hudeditor_cmd/i.test(s.path[1])).map(s => s.path[1]);
+// Takes the block `name` under sub out of f's own file (whole lines).
+function dropBlock(f, sub, name) {
+  const text = f.text, s = f.parsed.sections.find(s => samePath(s.path.slice(1), [...sub, name]));
+  if (!s) return text;
+  const a = text.lastIndexOf('\n', s.kstart - 1) + 1, nl = text.indexOf('\n', s.close), end = nl < 0 ? text.length : nl + 1;
+  return text.slice(0, a) + text.slice(end);
+}
+// A new button copies the look of the window's most customised button (its own colours, border, font, size) and goes
+// under the lowest one, a row further down. Returns [block name, its settings], or null without a button to copy.
+function commandBlock(f, text, command) {
+  const blocks = f.parsed.sections.filter(s => s.path.length === 2).map(s => s.path[1]);
+  const buttons = blocks.map(b => layoutProps(f, b)).filter(p => /button$/i.test(p.controlname || ''));
+  if (!buttons.length) return null;
+  const num = v => { const m = /^\s*[rc]?\s*(-?[\d.]+)\s*$/i.exec(v || ''); return m ? +m[1] : null; };
+  const look = [...buttons].sort((a, b) => Object.keys(b).length - Object.keys(a).length)[0];
+  const low = [...buttons].sort((a, b) => (num(b.ypos) ?? 0) - (num(a.ypos) ?? 0))[0];
+  const ys = buttons.map(p => num(p.ypos)).filter(y => y !== null).sort((a, b) => a - b);
+  const gaps = ys.slice(1).map((y, i) => y - ys[i]).filter(d => d > 0), step = gaps.length ? Math.min(...gaps) : (num(low.tall) ?? 20) + 8;
+  let n = 1;
+  while (blocks.some(b => b.toLowerCase() === `hudeditor_cmd${n}`)) n++;
+  const name = `hudeditor_cmd${n}`;
+  const skip = new Set(['controlname', 'fieldname', 'labeltext', 'command', 'xpos', 'ypos', 'xpos_hudeditor', 'ypos_hudeditor', 'default', 'selected', 'tabposition', 'visible', 'enabled']);
+  return [name, [['ControlName', 'Button'], ['fieldName', name], ['xpos', low.xpos || '0'], ['ypos', shifted(low.ypos, step) ?? '0'],
+    ...Object.entries(look).filter(([k]) => !skip.has(k)), ['visible', '1'], ['enabled', '1'], ['labelText', text], ['command', command]]];
+}
+function addCommandButton(f, text, command) {
+  const b = commandBlock(f, text, command);
+  if (!b) return status('This window has no button to copy the look of.');
+  save(f, b[0], b[1], []);
+  refreshSoon();
+}
+function commandRows(sel) {
+  const f = sel.res, clean = s => s.replace(/["\\]/g, '').trim();
+  if (!f) return [];
+  if (!$('cmdpresets')) document.body.append(el('datalist', { id: 'cmdpresets' }));
+  $('cmdpresets').replaceChildren(...CMD_PRESETS.map(([c, t]) => el('option', { value: c, label: t })));
+  const inputs = (text, cmd) => {
+    const t = el('input', { value: text, placeholder: 'Button text', title: 'Button text, shown as typed' }), c = el('input', { value: cmd, placeholder: 'Command, like say !rtv', title: 'What the button runs, as typed in the console' });
+    t.setAttribute('aria-label', 'Button text'), c.setAttribute('aria-label', 'Command'), c.setAttribute('list', 'cmdpresets');
+    return [t, c];
+  };
+  const rows = cmdBlocks(f).map(block => {
+    const p = layoutProps(f, block), row = el('div', { className: 'row cmdbtn' }), [t, c] = inputs(p.labeltext || '', p.command || '');
+    t.oninput = () => save(f, 'labelText', clean(t.value), block);
+    c.oninput = () => { if (clean(c.value)) save(f, 'command', clean(c.value), block); };
+    row.append(t, c, el('button', { textContent: '✕', title: 'Remove this button', onclick: () => { commit(f, `${f.name}/${block}/remove`, () => dropBlock(f, [], block)); refreshSoon(); } }));
+    row.dataset.q = `command button ${p.labeltext || ''} ${p.command || ''}`.toLowerCase();
+    return row;
+  });
+  const add = el('div', { className: 'row menuadd' }), [t, c] = inputs('', '');
+  t.className = 'wide';
+  c.oninput = () => { const preset = CMD_PRESETS.find(([cmd]) => cmd === c.value); if (preset && !t.value) t.value = preset[1]; };
+  add.append(el('div', { className: 'meta', textContent: 'Add a button that runs a command' }), t, c, el('button', { className: 'primary', textContent: 'Add button', onclick: () => {
+    if (!clean(c.value)) return status('Type what the button runs, like say !rtv.');
+    addCommandButton(f, clean(t.value) || clean(c.value), clean(c.value));
+  } }));
+  add.dataset.q = 'command button add say rtv spec';
+  return [...rows, add, noteRow('A click closes the menu and runs the command as if typed in the console. Click the new button in the preview to move it or change its look.')];
+}
+
 // ---------- scoreboard: everything it draws, in one place ----------
 // Its fonts are ClientScheme's: the .res names most of them, the game picks ScoreboardBody_1-3 for player rows
 // (the smaller ones for long names) and ScoreboardMVP.
@@ -1401,6 +1497,22 @@ function hudRows(id, hud) {
   for (const [k, label] of [['xpos', 'X position'], ['ypos', 'Y position'], ['wide', 'Width'], ['tall', 'Height']])
     if ((k in p || ((hud.pos || canHide(id)) && k.endsWith('pos'))) && !(hud.lockX && k === 'xpos')) rows.push(numRow(lay, id, k, label, p[k]));
   return rows;
+}
+
+// A part's own settings (hud.settings, see INSIDE), each at the HUD's value or the game's default.
+function hudSettingRows(id, hud) {
+  const lay = F(L);
+  if (!lay || !hud.settings) return [];
+  const p = layoutProps(lay, id);
+  return hud.settings.map(([label, keys, kind, dflt, note = '']) => {
+    const ks = keys.split('|'), now = p[ks[0].toLowerCase()] ?? dflt, set = v => ks.forEach(k => save(lay, k, v, id));
+    const row = kind === 'onoff' ? toggleRow(label, now !== '0', on => set(on ? '1' : '0'), note)
+      : Array.isArray(kind) ? selectRow(label, kind.some(([v]) => v === now) ? kind : [...kind, [now, now]], now, set, ks)
+      : inputRow(label, now, set, { type: 'number', step: kind === 'time' ? 0.05 : 1, ...(note ? { title: note } : {}) });
+    row.dataset.keys = ks.join(' + ');
+    row.dataset.q += ` ${ks.join(' ').toLowerCase()}`;
+    return row;
+  });
 }
 
 // ---------- hiding HUD parts ----------
@@ -2123,6 +2235,7 @@ function selectionSections(sel) {
   }
   if (info.kind === 'hud') {
     add('colour', info.name, hudRows(info.id, info.hud));
+    add('other', `${info.name}: settings`, hudSettingRows(info.id, info.hud));
     if (info.id === 'HudChat' && sel.res) add('other', 'Chat: space inside', chatPaddingRows(sel));
     add('other', `${info.name}: hidden parts`, windowPartRows(sel)); // parts moved off screen (the chat's Filters button) can't be clicked any more
   } else {
@@ -2134,6 +2247,7 @@ function selectionSections(sel) {
       if (frame) add('border', 'Border: window edge (every window)', [windowCornerRow(S), ...borderRows(S, 'FrameBorder')]);
     }
     if (EXTRA[info.id]) add('colour', `Colours: ${info.name.toLowerCase()}`, schemeRows(S, EXTRA[info.id]).concat(info.file === C ? schemeRows(C, EXTRA[info.id]) : []));
+    if (CMD_WINDOWS.has(info.id)) add('other', 'Command buttons', commandRows(sel));
     add('other', `${info.name}: show or hide parts`, windowPartRows(sel));
     // the game's MOTD is 4:3 wide from the screen's left edge, so it sits left of centre on wide screens
     if (info.id === 'info' && sel.res) {
@@ -2888,6 +3002,14 @@ function parserCheck() {
   check(at(40, 30)?.info.id === 'HudMessage' && at(1150, 560)?.info.id === 'HudMessage' && schemeOf(at(40, 30).thing) === C, 'click the top-left or large speed server text');
   check(onScreen().map(t => t.info.name).join() === 'Server message (MOTD),Main menu,Console,Health,Timer / hint text,Small speed,Large speed', 'on screen list: windows first, no always-on overlays');
   live = null;
+  const tmText = '"r"\n{\n\t"terbutton"\n\t{\n\t\t"ControlName" "Button"\n\t\t"xpos" "76"\n\t\t"ypos" "116"\n\t\t"wide" "148"\n\t\t"tall" "20"\n\t\t"defaultBgColor_override" "1 2 3 255"\n\t}\n'
+    + '\t"CancelButton"\n\t{\n\t\t"ControlName" "Button"\n\t\t"xpos" "76"\n\t\t"ypos" "148"\n\t\t"command" "vguicancel"\n\t}\n\t"hudeditor_cmd1"\n\t{\n\t}\n}\n';
+  const tm = { name: 'tm', text: tmText, parsed: parse(tmText), bases: [] }, [cbName, cbBody] = commandBlock(tm, 'RTV', 'say !rtv');
+  const cb = Object.fromEntries(cbBody);
+  check(cbName === 'hudeditor_cmd2' && cb.ypos === '180' && cb.xpos === '76' && cb.defaultbgcolor_override === '1 2 3 255' && cb.command === 'say !rtv' && cb.ControlName === 'Button',
+    `a command button copies a button's look and goes a row under the lowest (${JSON.stringify(cb)})`);
+  const dropped = dropBlock(tm, [], 'CancelButton');
+  check(!/CancelButton|vguicancel/.test(dropped) && /terbutton/.test(dropped) && /hudeditor_cmd1/.test(dropped), 'a block is taken out whole');
 }
 if (location.hash === '#test') { try { parserCheck(); status('Self-check passed.'); } catch (err) { status(err.message); } }
 else if (host && location.hash !== '#hosttest') start();
@@ -2978,6 +3100,8 @@ if (host && location.hash === '#hosttest') (async () => {
     const tg = toggleRow('Outline', false, on => { flip = on; });
     tg.querySelectorAll('.seg button')[1].onclick();
     check(flip === true && tg.querySelectorAll('[aria-pressed="true"]')[0].textContent === 'On', 'on/off rows switch');
+    const hs = hudSettingRows('HudVoiceStatus', HUD.HudVoiceStatus).map(r => r.dataset.keys);
+    check(hs.length === HUD.HudVoiceStatus.settings.length && hs.includes('avatar_wide + avatar_tall'), `a part's own HudLayout settings are listed (${hs.length})`);
     check(JSON.stringify(left) === '{"xpos":"1"}' && JSON.stringify(corner) === '{"xpos":"r101","ypos":"r61"}',
       `dragging snaps to edges 1 unit in (${JSON.stringify(left)} ${JSON.stringify(corner)})`);
     const boxTick = sbSections[0][1][1].querySelector('input'); // "Colour box behind the scoreboard" (not in the page, so no click events)

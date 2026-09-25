@@ -31,6 +31,7 @@
 #include <limits.h>
 #include "vgui/IPanel.h"
 #include "vgui/ISurface.h"
+#include "vgui/IVGui.h"
 #include "Color.h"
 #include <stdio.h>
 #include <unordered_map>
@@ -53,6 +54,7 @@ static IVEngineClient *g_pEngineClient;
 static IEngineVGui *g_pEngineVGui;
 static ISchemeManager *g_pSchemeMgr;
 static IPanel *g_pVPanel;
+static IVGui *g_pVGui;
 static ISurface *g_pSurface;
 static bool g_bLevelActive;
 static bool g_bDisabled;
@@ -815,6 +817,16 @@ static VPANEL FindNamed( VPANEL p, const char *name, int depth )
 	return 0;
 }
 
+// For testing without the mouse: a button acts as if clicked (vgui's "PressButton").
+CON_COMMAND( schemereload_press, "schemereload_press <panel name>: clicks that button" )
+{
+	VPANEL p = args.ArgC() > 1 && g_pVGui ? FindNamed( TopPanel(), args.Arg( 1 ), 0 ) : 0;
+	if ( p )
+		g_pVGui->PostMessage( p, new KeyValues( "PressButton" ), 0 );
+	else
+		Msg( "[schemereload] no panel named %s\n", args.Arg( 1 ) );
+}
+
 // A reload knocks the main menu about. The logo (GameMenuButton, GameMenuButton2) is left see-through, and the menu
 // only fades it back in when a dialog opens or closes. The items get their own defaults (MenuLarge, 12 pixels) in place
 // of the larger font and item height the menu gave them at startup. So keep what they had. Label::SetFont/GetFont,
@@ -924,6 +936,30 @@ static void ApplyOne()
 	( (ApplySettingsFn)( *(void ***)g_ApplyPanel )[g_ApplySlot] )( g_ApplyPanel, g_ApplyKeys );
 }
 static CUtlStringList g_ApplyBroken; // "window/block" whose settings crashed once: left alone until a restart
+
+// Controls the editor adds to these windows (blocks named hudeditor..., e.g. command buttons): when the game has none by
+// that name, made the way the game makes a .res file's controls (BuildGroup::NewControl): the window's control factory,
+// parented to the window, which also gets a button's commands (team and class select run them). ApplySettings then
+// names and places it.
+int SlotCreateControlByName();
+int SlotSetParent();
+int SlotAddActionSignalTarget();
+typedef void *( *CreateControlFn )( void *, const char * );
+typedef void ( *PanelVPanelFn )( void *, VPANEL );
+static void *g_MakeIn, *g_Made;
+static VPANEL g_MakeInV;
+static const char *g_MakeClass;
+static void MakeOne()
+{
+	g_Made = ( (CreateControlFn)( *(void ***)g_MakeIn )[SlotCreateControlByName()] )( g_MakeIn, g_MakeClass );
+	if ( !g_Made )
+		return;
+	void **vt = *(void ***)g_Made;
+	( (PanelVPanelFn)vt[SlotSetParent()] )( g_Made, g_MakeInV );
+	( (PanelVPanelFn)vt[SlotAddActionSignalTarget()] )( g_Made, g_MakeInV );
+}
+static bool IsEditorBlock( const char *name ) { return !Q_strnicmp( name, "hudeditor", 9 ); }
+
 static void ReapplyLayouts()
 {
 	static const char *s_Res[][2] = { { "team", "Resource/UI/TeamMenu.res" }, { "class_ct", "Resource/UI/ClassMenu_CT.res" },
@@ -931,14 +967,32 @@ static void ReapplyLayouts()
 	int slot = g_ApplySlot = SlotApplySettings();
 	if ( slot <= 0 || SlotLabelSetFont() != 0x710 / 8 )
 		return;
+	bool canMake = SlotCreateControlByName() > 0 && SlotSetParent() > 0 && SlotAddActionSignalTarget() > 0;
 	for ( int i = 0; i < ARRAYSIZE( s_Res ); ++i )
 	{
 		VPANEL win = FindNamed( TopPanel(), s_Res[i][0], 0 );
 		KeyValues *res = win ? LoadFresh( s_Res[i][1] ) : NULL;
+		// the editor's controls whose block was taken out
+		for ( int c = win ? g_pVPanel->GetChildCount( win ) - 1 : -1; c >= 0 && res; --c )
+		{
+			VPANEL ch = g_pVPanel->GetChild( win, c );
+			if ( IsEditorBlock( g_pVPanel->GetName( ch ) ) && !res->FindKey( g_pVPanel->GetName( ch ) ) && g_pVGui )
+				g_pVGui->MarkPanelForDeletion( ch );
+		}
 		for ( KeyValues *b = res ? res->GetFirstTrueSubKey() : NULL; b; b = b->GetNextTrueSubKey() )
 		{
 			VPANEL p = FindNamed( win, b->GetName(), 0 );
 			void *panel = p ? g_pVPanel->GetPanel( p, "ClientDLL" ) : NULL;
+			bool mine = IsEditorBlock( b->GetName() );
+			if ( !panel && mine && canMake && *b->GetString( "ControlName" ) && ( g_MakeIn = g_pVPanel->GetPanel( win, "ClientDLL" ) ) != NULL )
+			{
+				g_MakeInV = win;
+				g_MakeClass = b->GetString( "ControlName" );
+				g_Made = NULL;
+				if ( !SR_SafeCall( MakeOne ) )
+					canMake = false, Warning( "[schemereload] making %s/%s crashed; new controls show after a restart\n", s_Res[i][0], b->GetName() );
+				panel = g_Made;
+			}
 			if ( !panel )
 				continue;
 			char id[256];
@@ -948,8 +1002,8 @@ static void ReapplyLayouts()
 				broken = !Q_stricmp( g_ApplyBroken[j], id );
 			if ( broken )
 				continue;
-			for ( const char *k : { "labelText", "text" } )
-				if ( KeyValues *t = b->FindKey( k ) )
+			for ( const char *k : { "labelText", "text" } ) // the game's texts stay as it set them; the editor's own are the file's
+				if ( KeyValues *t = mine ? NULL : b->FindKey( k ) )
 					b->RemoveSubKey( t ), t->deleteThis();
 			g_ApplyPanel = panel;
 			g_ApplyKeys = b;
@@ -1560,6 +1614,7 @@ bool CSchemeReloadPlugin::Load( CreateInterfaceFn interfaceFactory, CreateInterf
 	{
 		g_pSchemeMgr = (ISchemeManager *)vguiFactory( VGUI_SCHEME_INTERFACE_VERSION, NULL );
 		g_pVPanel = (IPanel *)vguiFactory( VGUI_PANEL_INTERFACE_VERSION, NULL );
+		g_pVGui = (IVGui *)vguiFactory( VGUI_IVGUI_INTERFACE_VERSION, NULL );
 	}
 	if ( CreateInterfaceFn surfaceFactory = Sys_GetFactory( "vguimatsurface.dll" ) )
 	{
