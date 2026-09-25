@@ -2218,7 +2218,7 @@ function mainMenuSections() {
   add.dataset.q = 'background picture image wallpaper import';
   const buttons = menuRows();
   if (buttons.length) out.push(['Main menu: buttons', buttons]);
-  out.push(['Main menu: background', [add,noteRow('PNG, JPG, WebP... It is cropped to fill the screen. The game loads it at startup: restart it to see a new one.')]]);
+  out.push(['Main menu: background', [add, noteRow('PNG, JPG, WebP... It is cropped to fill the screen, and shows straight away.')]]);
   const h = s && tables(s).base.get('mainmenu.menuitemheight');
   if (h) out.push(['Main menu: items', [inputRow('Item height', h.value, v => save(s, 'MainMenu.MenuItemHeight', v, ['BaseSettings']),
     { type: 'number', min: 8, max: 80, step: 1, title: 'Scaled to your screen; the game\'s is 22. The text size is the MenuLarge font below' })]]);
@@ -2374,13 +2374,16 @@ async function setBackground(file) {
     await img.decode();
     status('Making the background...');
     for (const [name, w, h, aspect] of [['background01', 1024, 1024, 4 / 3], ['background01_widescreen', 2048, 1024, 16 / 9]]) {
-      const path = `materials/console/${name}`;
-      await call('writebin', `${path}.vtf`, await base64(backgroundVtf(img, w, h, aspect)));
-      await call('write', `${path}.vmt`, `"UnlitGeneric"\n{\n\t"$basetexture"\t"console/${name}"\n\t"$vertexcolor"\t"1"\n\t"$vertexalpha"\t"1"\n`
+      // the picture goes under a name the running game hasn't loaded (it keeps a texture once loaded), taking turns
+      // between two so old ones don't pile up; the material the game asks for points at it
+      const vmt = `materials/console/${name}.vmt`, tex = new RegExp(`${name}_a"`).test(await readHud(vmt) || '') ? `${name}_b` : `${name}_a`;
+      await call('writebin', `materials/console/${tex}.vtf`, await base64(backgroundVtf(img, w, h, aspect)));
+      await call('write', vmt, `"UnlitGeneric"\n{\n\t"$basetexture"\t"console/${tex}"\n\t"$vertexcolor"\t"1"\n\t"$vertexalpha"\t"1"\n`
         + `\t"$ignorez"\t"1"\n\t"$no_fullbright"\t"1"\n\t"$nolod"\t"1"\n}\n`);
     }
+    await call('cmd', '', 'mat_reloadmaterial background01').catch(() => {});
     setDirty(true);
-    status('Background set. Save the HUD, then restart the game to see it.');
+    status('Background set. Click Done or Save HUD to keep it.');
   } catch (err) {
     status(`Couldn't use that picture: ${err.message}`);
   } finally {
@@ -3004,6 +3007,7 @@ async function openHud(path) {
     for (const o of [loadedColours, loadedPos]) for (const k in o) delete o[k]; // Undo buttons go back to this HUD as opened
     setDirty(false);
     await loadAll();
+    call('cmd', '', 'mat_reloadmaterial background01').catch(() => {}); // this HUD's menu background (or the game's), not the last one's
     // the game's name colours to this HUD's (or back to config.cfg's after discarding a HUD's new cfg)
     if (F(CVAR_CFG) || cvarStart) { cvarValues = null; await loadCvars(); applyCvars(F(CVAR_CFG) && F(CVAR_CFG).text); }
     status(live ? `Editing ${hudName}. Click anything in the preview to edit it.` : `Editing ${hudName}.`);
