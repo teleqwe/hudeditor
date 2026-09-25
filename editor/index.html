@@ -519,6 +519,7 @@ async function loadAll() {
   files = (await Promise.all([C, S, L, CH].map(loadFile))).filter(Boolean);
   const gm = (await readHud(GM)) ?? GAME_MENU; // written into the HUD on the first change
   files.push({ name: GM, path: GM, text: gm, parsed: parse(gm), bases: [] });
+  await Promise.all(SB_PAGES.map(uiFile));
   squareAll = (await readHud(CORNER_VMT(1)) || '').includes('vgui/white');
   render();
   drawBoxes();
@@ -655,7 +656,10 @@ let selected = null; // { thing: panel-like, info, control: panel|null }
 const STARTUP_RES = new Set(['team', 'class_ct', 'class_ter', 'info', 'buy_ct', 'buy_ter']);
 const UI_RES = { scores: 'resource/UI/scoreboard.res', specgui: 'resource/UI/spectator.res', specmenu: 'resource/UI/bottomspectator.res',
   team: 'resource/UI/TeamMenu.res', class_ct: 'resource/UI/ClassMenu_CT.res', class_ter: 'resource/UI/ClassMenu_TER.res', info: 'resource/UI/TextWindow.res',
-  buy_ct: 'resource/UI/BuyMenu.res', buy_ter: 'resource/UI/BuyMenu.res' };
+  buy_ct: 'resource/UI/BuyMenu.res', buy_ter: 'resource/UI/BuyMenu.res',
+  // the chat's Filters button. The game has no file of its own; its code sizes the history and typing line to the
+  // chat (HudLayout HudChat), so the default only places the button, in 480-line units inside the chat
+  hudchat: 'resource/UI/BaseChat.res' };
 // A HUD without the file starts from the game's own copy (written into the HUD on the first change).
 async function uiFile(path) {
   if (!path) return null;
@@ -1526,6 +1530,45 @@ function mainMenuSections() {
   return out;
 }
 
+// Scroll bars' width: ScrollBar.Wide in each scheme (the game's is 17), applied again on a reload.
+function scrollWideRow(file) {
+  const f = F(file), v = f && tables(f).base.get('scrollbar.wide');
+  if (!f) return null;
+  const row = inputRow('Scroll bar width', v ? v.value : '17', w => save(f, 'ScrollBar.Wide', w, ['BaseSettings']),
+    { type: 'number', min: 2, max: 40, step: 1, title: `${file === CH ? 'The chat' : file === C ? 'In-game windows' : 'Menus'}; the game's is 17` });
+  row.dataset.q = 'scroll bar width thin scrollbar';
+  return row;
+}
+
+// The server browser's pages (Internet uses CustomGamesPage, the other tabs InternetGamesPage). They're made at
+// startup, so hiding a part shows after a restart.
+const SB_PAGES = ['servers/InternetGamesPage.res', 'servers/CustomGamesPage.res'];
+function serverBrowserRows() {
+  const fs = SB_PAGES.map(F).filter(Boolean);
+  if (!fs.length) return [];
+  const row = checkRow('Show the Filters button', !fs.some(f => partHidden(f, 'Filter')), on => {
+    for (const f of fs) setPartHidden(f, 'Filter', !on);
+    writing = writing.then(() => status('Changed. The server browser shows it after a game restart.'));
+  });
+  row.dataset.q = 'filters button server browser';
+  return [row, noteRow('The server browser reads its layout when the game starts: restart it to see this.')];
+}
+
+// Space inside the chat (BaseChat.res, 480-line units; the game's is 10). The history and typing line start this
+// far in; their widths come from the chat's (HudLayout HudChat wide), since "f" widths count from the screen. The
+// game places the typing line's height and sizes the history down to it itself.
+function chatPaddingRows(sel) {
+  const f = sel.res, lay = F(L);
+  if (!f || !lay) return [];
+  const row = inputRow('Padding', layoutProps(f, 'HudChatHistory').xpos || '10', v => {
+    const n = Math.max(0, Math.round(+v)), w = Math.max(20, (parseInt(layoutProps(lay, 'HudChat').wide, 10) || 320) - 2 * n);
+    for (const b of ['HudChatHistory', 'ChatInputLine']) save(f, 'xpos', String(n), b), save(f, 'wide', String(w), b);
+    save(f, 'ypos', String(n), 'HudChatHistory');
+  }, { type: 'number', min: 0, max: 40, step: 1, title: 'Around the messages and typing line; the game\'s is 10. Set it again after changing the chat\'s width' });
+  row.dataset.q = 'chat padding space inside';
+  return [row];
+}
+
 // The main menu's buttons: resource/GameMenu.res, numbered blocks in order. The game reads it once at startup (a
 // scheme reload doesn't rebuild the menu). GAME_MENU is the game's own list, to put buttons back from.
 const GM = 'resource/GameMenu.res';
@@ -1644,14 +1687,20 @@ function selectionSections(sel) {
     out.push([`${what} (every ${what.toLowerCase()} in ${file === C ? 'in-game windows' : file === CH ? 'the chat' : 'menus'})`, [
       // the chat keeps its scroll bar once it holds more lines than fit, even closed; the default colours are see-through
       ...(file === CH && ctl.startsWith('ScrollBar') ? [noteRow('The chat shows this scroll bar even while it is closed. Keep it see-through (low opacity) or it stays on screen.')] : []),
-      ...schemeRows(file, keys)]]);
+      ...schemeRows(file, keys), ...(ctl.startsWith('ScrollBar') ? [scrollWideRow(file)].filter(Boolean) : [])]]);
     for (const [label, name] of BORDER_USE[ctl] || []) out.push([`${what}: ${label.toLowerCase()}`, borderRows(file, name)]);
   }
-  if (info.kind === 'hud') out.push([info.name, hudRows(info.id, info.hud)]);
+  if (info.kind === 'hud') {
+    out.push([info.name, hudRows(info.id, info.hud)]);
+    if (info.id === 'HudChat' && sel.res) out.push(['Chat: inside', chatPaddingRows(sel)]);
+    const hidden = windowPartRows(sel); // parts moved off screen (the chat's Filters button) can't be clicked any more
+    if (hidden.length) out.push([`${info.name}: hidden parts`, hidden]);
+  }
   else {
     out.push([`${info.name}: parts on screen`, windowPartRows(sel)]);
     if (info.id === 'scores') out.push(...scoreboardSections(sel, fonts.map(([, n]) => n)));
     if (info.id === 'gamemenu') out.push(...mainMenuSections());
+    if (/serverbrowser/.test(info.id) && serverBrowserRows().length) out.push(['Server browser: buttons', serverBrowserRows()]);
     if (info.id !== 'gamemenu') { // the main menu isn't a window frame
       // menu windows paint their frame's background and edge; in-game ones (team select...) draw their own panels
       const frame = info.file === S;
@@ -1746,6 +1795,8 @@ function renderList() {
       ...CONTROLS.flatMap(([, what, keys]) => [[`${what} (in-game windows)`, schemeRows(C, keys)], [`${what} (menus)`, schemeRows(S, keys)],
         [`${what} (chat)`, schemeRows(CH, keys)]]),
       ['Main menu', mainMenuSections().flatMap(([, rows]) => rows)],
+      ['Server browser', serverBrowserRows()],
+      ['Scroll bars', [C, S, CH].map(scrollWideRow).filter(Boolean)],
       ['Other colours', [...otherRows(C, 'In game'), ...otherRows(S, 'Menus'), ...otherRows(CH, 'Chat')]],
       ...FONT_FILES.map(([file, where]) => [`Fonts (${where})`, fontNames(file).map(n => fontFold(file, n, ''))]),
     ];
