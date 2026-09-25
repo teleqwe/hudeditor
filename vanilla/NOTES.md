@@ -53,3 +53,14 @@ Not in custom: a folder there with full vanilla files would cover every HUD that
 - The buttons come from resource/GameMenu.res (numbered blocks: label, command, OnlyInGame), read once at startup:
   scheme_reload doesn't rebuild the menu. Labels that aren't #tokens show as typed (the game's own are upper case).
   "engine connect ip:port" as the command makes a join-server button.
+
+## Server browser (checked in game)
+- Its tabs read servers/InternetGamesPage.res (CustomGamesPage.res for Internet) from platform_misc.vpk, but a copy in
+  a custom folder wins. Read when the game starts. The Filters button is the "Filter" block.
+
+## Chat layout (checked in game)
+- resource/UI/BaseChat.res (the game has none) is applied on every scheme reload: blocks HudChatHistory,
+  ChatInputLine, ChatFiltersButton by name. Positions and widths are used; "f" widths count from the screen, not the
+  chat. The typing line's y is set by code (46 px above the chat's bottom at 1440p) and the history's height runs
+  down to it. The chat's background is DullWhite's colour at alpha 127 (code), the history's black at alpha 90.
+- ScrollBar.Wide is in 480-line units in ChatScheme (4 = 12 px at 1440p).

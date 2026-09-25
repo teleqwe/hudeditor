@@ -66,6 +66,12 @@ packed inside it. Needs Windows 10 or 11 (it uses the WebView2 runtime that ship
        (uncompressed VTFs). The game loads it at startup, so restart it to see a new one.
        **Buttons** (`resource/GameMenu.res`): remove, reorder, put back any of the game's own buttons, or add one that
        joins a server (type the IP:port). Also read at startup only.
+     - **Server browser:** show or hide the Filters button (`servers/InternetGamesPage.res`, `CustomGamesPage.res`;
+       read at startup).
+     - **Chat:** click its parts in the preview to move or hide them (`resource/UI/BaseChat.res`, e.g. the Filters
+       button), and set the padding inside it. Hidden parts are listed under "Chat: hidden parts" to bring back.
+     - **Scroll bar width** (`ScrollBar.Wide`) shows with scroll bar colours, or search "scroll", for in-game windows,
+       menus and the chat.
      - **Show on screen** to hide the control. It moves off screen and its position is kept in `xpos_hudeditor`. The
        game sets window parts' visibility itself, so `visible` can't hide them.
      - **Spectator bars:** show or hide the top and bottom bar, keeping their text. The game sizes these two from the
