@@ -739,13 +739,16 @@ function setPartHidden(f, block, hide) {
   const [key, off] = hideHow(block);
   moveOff(f, block, key, off, hide);
 }
-const showRow = (f, block, label) => checkRow(label, !partHidden(f, block), on => { setPartHidden(f, block, !on); refreshSoon(); });
+// parts hidden and shown again in this session: they stay listed, so the tick can go back
+const partsListed = new Set();
+const showRow = (f, block, label) => checkRow(label, !partHidden(f, block), on => { partsListed.add(`${f.name}/${block}`); setPartHidden(f, block, !on); refreshSoon(); });
 // The window's own bars, plus every part hidden here (they can't be clicked in the preview any more).
 function windowPartRows(sel) {
   const f = sel.res, parts = (WINDOW_PARTS[sel.info.id] || []).map(([label, block]) => [label.toLowerCase(), block]);
   if (!f) return [];
   for (const s of f.parsed.sections)
-    if (s.path.length === 2 && !parts.some(([, b]) => b === s.path[1]) && partHidden(f, s.path[1])) parts.push([prettify(s.path[1]), s.path[1]]);
+    if (s.path.length === 2 && !parts.some(([, b]) => b === s.path[1]) && (partHidden(f, s.path[1]) || partsListed.has(`${f.name}/${s.path[1]}`)))
+      parts.push([prettify(s.path[1]), s.path[1]]);
   return parts.map(([label, block]) => showRow(f, block, `Show ${label}`));
 }
 
@@ -1377,6 +1380,9 @@ function resRows(f, block, defaults, schemeFile, ctl) {
     const deflt = CONTROL_FONTS[ctl] && CONTROL_FONTS[ctl][0][1];
     if (!CODE_FONTS[block.toLowerCase()] && (p.font || deflt)) rows.push(inputRow('Font', p.font || deflt, v => save(f, 'font', v, block),
       { list: fontList(schemeFile), title: `Just this one; any font in ${schemeFile}` }));
+    // its words ("#..." is the game's translated text). Texts the game fills in (map name, scores) replace these
+    if ('labeltext' in p) rows.push(inputRow('Text', p.labeltext, v => save(f, 'labelText', v, block),
+      { title: p.labeltext.startsWith('#') ? 'Type your own words over the game\'s' : 'What it says' }));
   }
   for (const [k, label] of POS) if (k in p || k.endsWith('pos')) rows.push(numRow(f, block, k, label, p[k]));
   return rows;
@@ -2021,7 +2027,23 @@ function moveTarget(sel) {
   const p = f && layoutProps(f, block);
   if (!p || !Object.keys(p).length || 'xpos_hudeditor' in p) return null; // hidden parts sit off screen
   const wide = /^\s*\d+\s*$/.test(p.wide || '') ? +p.wide : 0, s = panel && wide && panel.w ? panel.w / wide : live.H / 480;
-  return { f, block, p, s, lockX: sel.info.kind === 'hud' && !sel.control && !!sel.info.hud.lockX };
+  return { f, block, p, s, panel, hud: sel.info.kind === 'hud' && !sel.control, lockX: sel.info.kind === 'hud' && !sel.control && !!sel.info.hud.lockX };
+}
+// Magnet: within 12 preview pixels of an edge of the screen (a window's control: of its window) or its middle, a
+// dragged part snaps there. At an edge it stops 1 unit short (positions are whole units of screen height / 480, so
+// that is the smallest gap: 3 px at 1440p), anchored to that edge ("r" for right and bottom), in the middle "c".
+// r = the panel's rect moved by the mouse, changed in place; returns the positions to write for the snapped sides.
+function snapTo(r, t) {
+  const b = !t.hud && t.panel && t.panel.parent || { x: 0, y: 0, w: live.W, h: live.H }, out = {};
+  const near = 12 * live.W / ($('boxes').getBoundingClientRect().width || live.W);
+  for (const [k, pos, size, sizeKey] of [['xpos', 'x', 'w', 'wide'], ['ypos', 'y', 'h', 'tall']]) {
+    if (k === 'xpos' && t.lockX) continue;
+    const u = /^\s*\d+\s*$/.test(t.p[sizeKey] || '') ? +t.p[sizeKey] : Math.round(r[size] / t.s), start = b[pos], len = b[size];
+    const spots = [[start + t.s, '1'], [start + len - (u + 1) * t.s, `r${u + 1}`], [start + len / 2 - Math.round(u / 2) * t.s, `c${-Math.round(u / 2)}`]];
+    const [gap, at, v] = spots.map(([at, v]) => [Math.abs(at - r[pos]), at, v]).sort((a, c) => a[0] - c[0])[0];
+    if (gap < near) { r[pos] = at; out[k] = v; }
+  }
+  return out;
 }
 // A position moved by d units ("r" counts from the right or bottom, so it goes the other way); null for "f" or junk.
 function shifted(raw, d) {
@@ -2053,12 +2075,13 @@ window.addEventListener('mousemove', e => {
       if (!d.target) { status('This one can\'t be moved: the game places it itself.'); if (drag === d) drag = null; }
     })();
   }
-  const hb = $('hoverbox');
+  const hb = $('hoverbox'), t = drag.target;
   const lockX = drag.hit.info.hud?.lockX && !drag.hit.control;
-  if (hb) { hb.hidden = false; hb.classList.add('drag'); place(hb, { ...drag.rect, x: drag.rect.x + (lockX ? 0 : dx), y: drag.rect.y + dy }); }
-  const t = drag.target;
+  // the panel's own box snaps (what was clicked can be a part of it); the dashed box follows by as much
+  const base = t && t.panel || drag.rect, r = { ...base, x: base.x + (lockX ? 0 : dx), y: base.y + dy }, snap = t ? snapTo(r, t) : {};
+  if (hb) { hb.hidden = false; hb.classList.add('drag'); place(hb, { ...drag.rect, x: drag.rect.x + r.x - base.x, y: drag.rect.y + r.y - base.y }); }
   if (!t) return;
-  const x = t.lockX ? null : shifted(t.p.xpos, dx / t.s), y = shifted(t.p.ypos, dy / t.s);
+  const x = t.lockX ? null : snap.xpos || shifted(t.p.xpos, dx / t.s), y = snap.ypos || shifted(t.p.ypos, dy / t.s);
   if (x !== null) save(t.f, 'xpos', x, t.block);
   if (y !== null) save(t.f, 'ypos', y, t.block);
 });
@@ -2501,6 +2524,14 @@ if (host && location.hash === '#hosttest') (async () => {
     const centred = layoutProps(sb, 'MapName').xpos;
     undoBtn.onclick(); await sleep(400); await writing;
     check(centred === 'c-30' && layoutProps(sb, 'MapName').xpos === 'c-290', `Centre on a position, and its Undo (${centred})`);
+    check(resRows(sb, 'MapName', [], C, 'Label').some(r => r.firstElementChild.textContent === 'Text' && r.querySelector('input:not([type])')?.value === '%mapname%'),
+      'a control\'s own words are editable');
+    const liveWas = live;
+    live = { W: 2560, H: 1440, panels: [] };
+    const snapT = { p: { wide: '100', tall: '60' }, s: 3, hud: true }, left = snapTo({ x: 10, y: 600, w: 300, h: 180 }, snapT), corner = snapTo({ x: 2250, y: 1250, w: 300, h: 180 }, snapT);
+    live = liveWas;
+    check(JSON.stringify(left) === '{"xpos":"1"}' && JSON.stringify(corner) === '{"xpos":"r101","ypos":"r61"}',
+      `dragging snaps to edges 1 unit in (${JSON.stringify(left)} ${JSON.stringify(corner)})`);
     const boxTick = sbSections[0][1][1].querySelector('input'); // "Colour box behind the scoreboard" (not in the page, so no click events)
     boxTick.checked = true;
     boxTick.onchange({ target: boxTick });

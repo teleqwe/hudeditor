@@ -35,7 +35,9 @@ packed inside it. Needs Windows 10 or 11 (it uses the WebView2 runtime that ship
    once you let go (a map otherwise locks the mouse inside the game).
    **Drag anything in the preview to move it.** HUD parts move in HudLayout, window controls in the window's `.res`
    (`xpos`/`ypos`, keeping `r` and `c` anchors). **Centre** beside X and Y position centres it (in its window, for a
-   window's control), and **Undo** there puts it back. The dashed box shows where it goes, and the game follows once you
+   window's control), and **Undo** there puts it back. Dragged near an edge of the screen (a window's control: of its
+   window) or its middle, a part snaps there, stopping 1 unit short of the edge (positions are whole units of screen
+   height / 480: 3 px at 1440p). The dashed box shows where it goes, and the game follows once you
    pause. What the game places itself (main menu, server browser, window frames) can't be moved, and the radio menu
    only moves up and down (the game keeps it full width). The same X and Y positions are rows on every part that has
    them. The team, class and buy menus and the MOTD read positions at startup, so moves there show after a restart.
@@ -55,7 +57,7 @@ packed inside it. Needs Windows 10 or 11 (it uses the WebView2 runtime that ship
        background colours, the title and option fonts, and the position.
    - **Windows** (team select, buy menu, scoreboard, spectator bars, MOTD, main menu, options, console): the exact
      control you clicked. You get, in this order (colours, then fonts, then borders, then the rest):
-     - its own colour and position (**Just this ...**)
+     - its own colour and position (**Just this ...**), and its words (`labelText`) where the .res has them
      - the colours shared by every control of that type, and the window colours
      - the fonts it uses
      - its borders (normal, focused, pressed...): which sides draw (four tick boxes), thickness and colour. Sides that
