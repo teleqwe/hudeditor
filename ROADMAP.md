@@ -26,8 +26,9 @@ Each step is committed on its own, so work can stop after any of them.
    up or spread them, a 4:3 safe-area overlay.
 5. [x] **Spectator extras**: `spectator.res` (scores, timer, info line, title) and `bottomspectator.res` (drop-downs,
    previous/next buttons).
-6. [ ] **Test values** in the Test tools drop-down: 5 HP, 1000+ HP, $0 / $16000, empty magazine, a round timer over
-   10:00, bots with long names filling the scoreboard, MVP stars.
+6. [x] **Test values** in the Test tools drop-down: 5 HP, 1500 HP, $0 / $16000, empty magazine, a 15:00 round timer,
+   bots with long names filling the scoreboard, kill feed, reset. Still to do: MVP stars (the count isn't a networked
+   field the plugin can set; comes with step 9).
 7. [ ] **Main menu and window settings** (ClientScheme / SourceScheme): main menu and logo position
    (`Main.Menu.X/Y`, `Main.Title1/2/3.X/Y`, `Main.BottomBorder`), window fade time (`Frame.TransitionEffectTime`),
    MOTD web page background (`HTML.BgColor`), tooltips, pop-ups, buy preset boxes.

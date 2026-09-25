@@ -32,6 +32,10 @@
 #include "vgui/IPanel.h"
 #include "vgui/ISurface.h"
 #include "vgui/IVGui.h"
+#include "dt_send.h"
+#include "server_class.h"
+#include "iservernetworkable.h"
+#include "iserverunknown.h"
 #include "Color.h"
 #include <stdio.h>
 #include <unordered_map>
@@ -1451,6 +1455,78 @@ static void TimerTick()
 	{
 		g_bDisabled = true;
 		Warning( "[schemereload] crashed while watching - plugin disabled until the game restarts\n" );
+	}
+}
+
+//-----------------------------------------------------------------------------
+// Test values (the editor's Test tools): the listen server's own player's health, armor, money or magazine, set
+// through the networked fields' offsets (found by name in the server classes' send tables), and a round time
+// beyond mp_roundtime's 1-9 minutes.
+//-----------------------------------------------------------------------------
+void ConVarUnbound( ConVar *cv );
+static int PropOffset( SendTable *t, const char *name, int depth = 0 )
+{
+	for ( int i = 0; t && depth < 8 && i < t->GetNumProps(); ++i )
+	{
+		SendProp *p = t->GetProp( i );
+		if ( !Q_stricmp( p->GetName(), name ) && p->GetType() != DPT_DataTable )
+			return p->GetOffset();
+		if ( p->GetType() == DPT_DataTable && p->GetDataTable() )
+		{
+			int o = PropOffset( p->GetDataTable(), name, depth + 1 );
+			if ( o >= 0 )
+				return p->GetOffset() + o;
+		}
+	}
+	return -1;
+}
+// The field `prop` of entity `index` (or -1), with its edict for marking the change.
+static int *EntityInt( int index, const char *prop, edict_t **out )
+{
+	edict_t *e = g_pEngineServer ? g_pEngineServer->PEntityOfEntIndex( index ) : NULL;
+	IServerNetworkable *n = e && !e->IsFree() ? e->GetNetworkable() : NULL;
+	ServerClass *sc = n ? n->GetServerClass() : NULL;
+	int off = sc ? PropOffset( sc->m_pTable, prop ) : -1;
+	void *ent = off >= 0 && e->GetUnknown() ? e->GetUnknown()->GetBaseEntity() : NULL;
+	*out = e;
+	return ent ? (int *)( (char *)ent + off ) : NULL;
+}
+CON_COMMAND( schemereload_testvalue, "schemereload_testvalue health|armor|money|clip <n> | roundtime <minutes>: sets it for the listen server's own player" )
+{
+	if ( args.ArgC() < 3 )
+		return;
+	const char *what = args.Arg( 1 );
+	if ( !Q_stricmp( what, "roundtime" ) )
+	{
+		if ( ConVar *rt = g_pCVar->FindVar( "mp_roundtime" ) )
+		{
+			ConVarUnbound( rt );
+			rt->SetValue( args.Arg( 2 ) );
+			g_pEngineServer->ServerCommand( "mp_restartgame 1\n" );
+		}
+		return;
+	}
+	static const char *s_Props[][2] = { { "health", "m_iHealth" }, { "armor", "m_ArmorValue" }, { "money", "m_iAccount" }, { "clip", "m_iClip1" } };
+	for ( auto &p : s_Props )
+	{
+		if ( Q_stricmp( what, p[0] ) )
+			continue;
+		int index = 1;
+		edict_t *e;
+		if ( !Q_stricmp( what, "clip" ) ) // the player's weapon in hand
+		{
+			int *h = EntityInt( 1, "m_hActiveWeapon", &e );
+			index = h ? *h & ( ( 1 << MAX_EDICT_BITS ) - 1 ) : 0;
+		}
+		int *v = index ? EntityInt( index, p[1], &e ) : NULL;
+		if ( !v )
+		{
+			Msg( "[schemereload] no %s to set\n", what );
+			return;
+		}
+		*v = atoi( args.Arg( 2 ) );
+		e->m_fStateFlags |= FL_EDICT_CHANGED | FL_FULL_EDICT_CHANGED; // StateChanged() without the engine's change list
+		return;
 	}
 }
 

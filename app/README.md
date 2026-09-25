@@ -31,6 +31,10 @@ packed inside it. Needs Windows 10 or 11 (it uses the WebView2 runtime that ship
      ChatScheme
 
    Rounds never end on the test server (`mp_ignore_round_win_conditions 1`), so windows don't close mid-edit.
+   **Test values** (also in Test tools) put the HUD's numbers at awkward values: 5 HP (the low health colour), 1500 HP
+   (four digits: the game's own box cuts the last one off), $0 and $16000, an empty magazine, a 15:00 round timer (over
+   10:00, as surf/bhop servers run; starts the round again), a full scoreboard of bots with long names, the kill feed
+   filled (every bot killed), and Reset (one frozen bot, 9:00). The plugin sets them on the test server only.
 
    **Scoreboard** keeps the scoreboard open until you click it again, and opens it again when a change reloads the
    HUD. Keys you press with the mouse over the preview (Esc, ~, B...) go to the game. Your chat key opens the chat,
