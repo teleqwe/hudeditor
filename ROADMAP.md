@@ -18,9 +18,10 @@ Each step is committed on its own, so work can stop after any of them.
 2. [x] **Command buttons** in windows (team and class select; the buy menu comes with step 15): an "Add a command button" section after Borders. The new
    button gets a sensible size and copies another button's colours and border. Presets for surf/bhop/ZE servers.
    The plugin creates new buttons live.
-3. [ ] **+ Add to HUD**: pictures (PNG/JPG), animated pictures (GIF), text and colour boxes, in HudLayout
-   - Includes the **sv_pure check**: find out in game which folders' images still load on sv_pure 1/2 servers and
-     write images there (the community uses `materials/vgui/replay/thumbnails`); warn about the editor's other files.
+3. [x] **+ Add to HUD**: pictures (PNG/JPG), animated pictures (GIF), text and colour boxes, in HudLayout
+   - **sv_pure check**: the test server can't show it (its own player isn't checked). The game's cfg files say sv_pure
+     1/2 block every custom material, replay/thumbnails included (TF2 has an exception for that folder, CS:S doesn't).
+     The editor says so under Add to the HUD. Checking on a real sv_pure server is still to do.
 4. [ ] **Nudge and align**: arrow keys move the selection 1 unit (Shift: 10), Ctrl+click several parts to line them
    up or spread them, a 4:3 safe-area overlay.
 5. [ ] **Spectator extras**: `spectator.res` (scores, timer, info line, title) and `bottomspectator.res` (drop-downs,

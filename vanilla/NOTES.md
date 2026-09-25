@@ -110,6 +110,18 @@ Not in custom: a folder there with full vanilla files would cover every HUD that
   the team/class menu's OnCommand, which runs it and closes the menu: `say !rtv` showed in chat.
 - `schemereload_press <name>` (plugin command) clicks a button, for tests without the mouse.
 
+## Added controls and sv_pure (checked in game)
+- HudLayout blocks with a ControlName (ImagePanel, Label, EditablePanel) are made by the game on every HUD reload,
+  as children of the viewport. A Label takes fgcolor_override, font, textAlignment; an ImagePanel image (relative to
+  materials/vgui), scaleImage, drawcolor; an EditablePanel paintbackground, PaintBackgroundType, bgcolor_override.
+- A multi-frame VTF (BGRA8888) with the AnimatedTexture proxy animates in an ImagePanel.
+- sv_pure can't be tested on the test server: with sv_pure 2 and a map change, the host still loads a HUD's own
+  materials (vgui/hudeditor and vgui/replay/thumbnails alike). By the game's cfg files: sv_pure 0 checks only
+  pure_server_minimal.txt (vgui/white, sprites/white, scope_arc, flashbang, smoke...), 1 and 2 use
+  pure_server_full.txt, which has `materials\... trusted_source`. Unlike TF2's, it has no replay/thumbnails exception,
+  so on sv_pure 1/2 servers every HUD material (pictures, square corners, scoreboard highlight) is the game's own;
+  .res files, scripts and fonts aren't listed and load from the HUD.
+
 ## HudLayout settings (checked in game)
 - HudHintDisplay: text_xpos/text_ypos are the space round the text inside the box (both sides). center_x/center_y
   move only the box, away from the text (the text stays centred). HintSize is the box's width as a fraction: 0 = no box.

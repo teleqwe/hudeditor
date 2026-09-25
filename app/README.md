@@ -67,6 +67,11 @@ packed inside it. Needs Windows 10 or 11 (it uses the WebView2 runtime that ship
        flash, the buy zone, bomb, defuse kit and rescue zone icons.
      - **Damage arrows** (under Other HUD parts) can be faded or hidden. They are pictures: HudLayout's DmgColor and
        dmg_ settings are Half-Life 2's and do nothing in CS:S.
+   - **Add to the HUD** (below On screen now): **+ Picture** (PNG, JPG, WebP, or an animated GIF, which plays in
+     game), **+ Text** and **+ Colour box**. Each is added in the middle of the screen and selected: drag it, size it,
+     and set its opacity, layer (in front of or behind other parts), tint or text colour, font and alignment. Pictures
+     are written to `materials/vgui/replay/thumbnails` in the HUD. Servers with sv_pure 1 or 2 block every material a
+     HUD brings (pictures, square corners, the scoreboard highlight); texts, boxes, colours and fonts show everywhere.
    - **Windows** (team select, buy menu, scoreboard, spectator bars, MOTD, main menu, options, console): the exact
      control you clicked. You get, in this order (colours, then fonts, then borders, then the rest):
      - its own colour and position (**Just this ...**)

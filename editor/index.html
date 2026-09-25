@@ -825,6 +825,7 @@ function thingOf(p) {
 function thingInfo(t) {
   const hud = HUD[t.name] || Object.entries(HUD).find(([k]) => k.toLowerCase() === t.key)?.[1];
   if (hud) return { kind: 'hud', id: t.name, name: hud.name, hud };
+  if (/^hudeditor_/i.test(t.name)) { const c = customInfo(t.name); if (c) return c; }
   const win = WINDOWS[t.key];
   if (win || t.frame) return { kind: 'window', id: t.key, name: win || prettify(t.name), file: schemeOf(t) };
   return null;
@@ -960,6 +961,129 @@ function commandRows(sel) {
   } }));
   add.dataset.q = 'command button add say rtv spec';
   return [...rows, add, noteRow('A click closes the menu and runs the command as if typed in the console. Click the new button in the preview to move it or change its look.')];
+}
+
+// ---------- things added to the HUD ----------
+// Pictures, texts and colour boxes: HudLayout blocks named hudeditor_<kind><n>. The game makes any control a HudLayout
+// block names (ControlName) when it reloads the HUD. Pictures go in materials/vgui/replay/thumbnails, where HUD makers
+// put theirs (TF2 lets that folder past sv_pure; CS:S's pure_server_full.txt doesn't name it, so on sv_pure 1/2
+// servers pictures are blocked like any material). An animated one (GIF) plays with the AnimatedTexture proxy.
+const PICTURES = 'materials/vgui/replay/thumbnails';
+const CUSTOM = {
+  imagepanel: { word: 'Picture', layoutColours: [['Tint', 'drawcolor', '255 255 255 255']], settings: [['Layer', 'zpos', 'num', '1', 'Higher is in front']] },
+  label: { word: 'Text', layoutColours: [['Text', 'fgcolor_override', '255 255 255 255']], fontKeys: [['Font', 'font', 'Default']],
+    settings: [['Align', 'textAlignment', [['west', 'Left'], ['center', 'Centre'], ['east', 'Right']], 'west'], ['Layer', 'zpos', 'num', '2', 'Higher is in front']] },
+  editablepanel: { word: 'Colour box', settings: [['Layer', 'zpos', 'num', '-1', 'Higher is in front; below 0 is behind most HUD parts']] },
+};
+function customInfo(name) {
+  const lay = F(L), c = lay && CUSTOM[(layoutProps(lay, name).controlname || '').toLowerCase()];
+  if (!c) return null;
+  const label = `${c.word} ${/\d+$/.exec(name)?.[0] || ''}`.trim();
+  return { kind: 'hud', id: name, name: label, hud: { ...c, name: label, custom: true, pos: true } };
+}
+// VTF 7.2, BGRA8888 (see-through kept, no compression), one mip level, one frame per picture of an animation.
+function pictureVtf(frames, w, h) {
+  const out = new Uint8Array(80 + w * h * 4 * frames.length), v = new DataView(out.buffer);
+  out.set([86, 84, 70]);
+  v.setUint32(4, 7, true), v.setUint32(8, 2, true), v.setUint32(12, 80, true), v.setUint16(16, w, true), v.setUint16(18, h, true);
+  v.setUint32(20, 0x4 | 0x8 | 0x100 | 0x200 | 0x2000, true); // clamp S and T, no mipmaps, no LOD, 8-bit alpha
+  v.setUint16(24, frames.length, true), v.setFloat32(48, 1, true), v.setUint32(52, 12, true); // frames, bumpmap scale, BGRA8888
+  out[56] = 1, v.setInt32(57, -1, true), v.setUint16(63, 1, true);
+  let o = 80;
+  for (const px of frames) for (let i = 0; i < px.length; i += 4, o += 4) out[o] = px[i + 2], out[o + 1] = px[i + 1], out[o + 2] = px[i], out[o + 3] = px[i + 3];
+  return out;
+}
+// A picture file's frames (one for a still picture) and each one's time in ms.
+async function pictureFrames(file) {
+  const type = file.type || 'image/png';
+  if (window.ImageDecoder && await ImageDecoder.isTypeSupported(type).catch(() => false)) {
+    const dec = new ImageDecoder({ data: await file.arrayBuffer(), type }), out = [];
+    await dec.tracks.ready;
+    const n = Math.min(120, Math.max(1, dec.tracks.selectedTrack.frameCount));
+    for (let i = 0; i < n; i++) { const { image } = await dec.decode({ frameIndex: i }); out.push({ image, ms: (image.duration || 0) / 1000 }); }
+    dec.close();
+    return out;
+  }
+  const img = new Image(), url = URL.createObjectURL(file);
+  try { img.src = url; await img.decode(); } finally { URL.revokeObjectURL(url); }
+  return [{ image: img, ms: 0 }];
+}
+// Writes the picture as <name>.vtf/.vmt (power-of-two sizes up to 512, smaller for long animations) and returns its
+// ImagePanel "image" and its width/height.
+async function importPicture(file, name) {
+  const frames = await pictureFrames(file), first = frames[0].image;
+  const iw = first.displayWidth || first.naturalWidth || first.width, ih = first.displayHeight || first.naturalHeight || first.height;
+  const pow2 = n => 2 ** Math.round(Math.log2(Math.max(4, n)));
+  let w = Math.min(512, pow2(iw)), h = Math.min(512, pow2(ih));
+  while (w * h * 4 * frames.length > 8 << 20 && w * h > 256) w = Math.max(16, w / 2), h = Math.max(16, h / 2);
+  const cv = el('canvas', { width: w, height: h }), g = cv.getContext('2d', { willReadFrequently: true }), pixels = [];
+  g.imageSmoothingQuality = 'high';
+  for (const { image } of frames) { g.clearRect(0, 0, w, h); g.drawImage(image, 0, 0, w, h); pixels.push(g.getImageData(0, 0, w, h).data); image.close?.(); }
+  const path = `${PICTURES}/${name}`, material = path.replace(/^materials\//, '');
+  const ms = frames.reduce((s, f) => s + (f.ms || 100), 0) / frames.length, fps = Math.max(1, Math.min(60, Math.round(1000 / ms)));
+  await call('writebin', `${path}.vtf`, await base64(pictureVtf(pixels, w, h)));
+  await call('write', `${path}.vmt`, `"UnlitGeneric"\n{\n\t"$basetexture"\t"${material}"\n\t"$translucent"\t"1"\n\t"$vertexcolor"\t"1"\n\t"$vertexalpha"\t"1"\n`
+    + `\t"$ignorez"\t"1"\n\t"$no_fullbright"\t"1"\n\t"$nolod"\t"1"\n` + (frames.length > 1 ? `\t"Proxies"\n\t{\n\t\t"AnimatedTexture"\n\t\t{\n\t\t\t"animatedtexturevar"\t"$basetexture"\n`
+    + `\t\t\t"animatedtextureframenumvar"\t"$frame"\n\t\t\t"animatedtextureframerate"\t"${fps}"\n\t\t}\n\t}\n` : '') + '}\n');
+  return { image: material.replace(/^vgui\//, ''), aspect: iw / ih, frames: frames.length };
+}
+const pictureName = () => `${(hudName || 'hud').toLowerCase().replace(/[^a-z0-9]+/g, '_')}_${Date.now().toString(36)}`;
+async function addToHud(kind, file) {
+  const lay = F(L);
+  if (!lay) return;
+  let n = 1;
+  while (Object.keys(layoutProps(lay, `hudeditor_${kind}${n}`)).length) n++;
+  const name = `hudeditor_${kind}${n}`, at = (w, h) => [['xpos', `c${-Math.round(w / 2)}`], ['ypos', `c${-Math.round(h / 2)}`], ['wide', `${w}`], ['tall', `${h}`]];
+  let body;
+  try {
+    if (kind === 'pic') {
+      status('Making the picture...');
+      const pic = await importPicture(file, pictureName()), h = 60, w = Math.max(4, Math.round(h * pic.aspect));
+      body = [['ControlName', 'ImagePanel'], ['fieldName', name], ...at(w, h), ['zpos', '1'], ['image', pic.image], ['scaleImage', '1'], ['drawcolor', '255 255 255 255']];
+    } else if (kind === 'text') {
+      body = [['ControlName', 'Label'], ['fieldName', name], ...at(200, 30), ['zpos', '2'], ['labelText', 'Text'], ['font', 'Default'],
+        ['textAlignment', 'center'], ['fgcolor_override', '255 255 255 255'], ['paintbackground', '0']];
+    } else {
+      body = [['ControlName', 'EditablePanel'], ['fieldName', name], ...at(120, 40), ['zpos', '-1'], ['paintbackground', '1'], ['PaintBackgroundType', '2'], ['bgcolor_override', '0 0 0 160']];
+    }
+  } catch (err) { return status(`Couldn't use that picture: ${err.message}`); }
+  save(lay, name, [...body, ['visible', '1'], ['enabled', '1']], []);
+  await sleep(400);
+  await writing;
+  select({ thing: { name, key: name.toLowerCase() }, info: customInfo(name), control: null });
+}
+// What an added thing shows (its text, its picture) and taking it out again.
+function customRows(id) {
+  const lay = F(L), p = layoutProps(lay, id), rows = [];
+  if ((p.controlname || '').toLowerCase() === 'label') {
+    const r = inputRow('Text', p.labeltext || '', v => save(lay, 'labelText', v.replace(/["\\]/g, ''), id));
+    r.querySelector('input').style.width = '100%';
+    rows.push(r);
+  }
+  if ((p.controlname || '').toLowerCase() === 'imagepanel') {
+    const pick = el('input', { type: 'file', accept: 'image/png,image/jpeg,image/gif,image/webp', hidden: true });
+    pick.onchange = async () => {
+      if (!pick.files[0]) return;
+      try { status('Making the picture...'); save(lay, 'image', (await importPicture(pick.files[0], pictureName())).image, id); }
+      catch (err) { status(`Couldn't use that picture: ${err.message}`); }
+    };
+    const r = el('div', { className: 'row action' });
+    r.append(pick, el('button', { textContent: 'Change picture...', title: 'PNG, JPG, GIF (animated too) or WebP', onclick: () => pick.click() }));
+    rows.push(r);
+  }
+  const r = el('div', { className: 'row action' });
+  r.append(el('button', { className: 'ghost', textContent: 'Remove from the HUD', onclick: () => { commit(lay, `${lay.name}/${id}/remove`, () => dropBlock(lay, [], id)); select(null); } }));
+  rows.push(r);
+  return rows;
+}
+function addRows() {
+  const pick = el('input', { type: 'file', accept: 'image/png,image/jpeg,image/gif,image/webp', hidden: true });
+  pick.onchange = () => { if (pick.files[0]) addToHud('pic', pick.files[0]); };
+  const r = el('div', { className: 'row action' });
+  r.append(pick, el('button', { textContent: '+ Picture', title: 'PNG, JPG, GIF (animated too) or WebP', onclick: () => pick.click() }),
+    el('button', { textContent: '+ Text', onclick: () => addToHud('text') }), el('button', { textContent: '+ Colour box', onclick: () => addToHud('box') }));
+  r.dataset.q = 'add picture image gif logo text label box colour background';
+  return [r, noteRow('Pictures are materials, which servers with sv_pure 1 or 2 replace with the game\'s own, so there they don\'t show. Texts, boxes, colours and fonts show everywhere.')];
 }
 
 // ---------- scoreboard: everything it draws, in one place ----------
@@ -2234,6 +2358,7 @@ function selectionSections(sel) {
     for (const [label, name] of BORDER_USE[ctl] || []) add('border', `Border: ${label.toLowerCase()} in ${where}`, borderRows(file, name));
   }
   if (info.kind === 'hud') {
+    if (info.hud.custom) add('colour', `${info.name}: what it shows`, customRows(info.id));
     add('colour', info.name, hudRows(info.id, info.hud));
     add('other', `${info.name}: settings`, hudSettingRows(info.id, info.hud));
     if (info.id === 'HudChat' && sel.res) add('other', 'Chat: space inside', chatPaddingRows(sel));
@@ -2458,6 +2583,7 @@ function renderList() {
   };
   const parts = things.length ? things.map(partRow) : [el('p', { className: 'meta', style: 'padding: 8px 12px; margin: 0', textContent: 'Nothing editable on screen right now.' })];
   list.append(card(live ? 'On screen now' : 'HUD parts', parts));
+  if (F(L)) list.append(card('Add to the HUD', addRows()));
   // parts that only show now and then (kill feed, pickup history, weapon selection...), so they can be hidden too
   if (live && F(L)) {
     const shown = new Set(things.map(t => t.info.id));
@@ -3010,6 +3136,8 @@ function parserCheck() {
     `a command button copies a button's look and goes a row under the lowest (${JSON.stringify(cb)})`);
   const dropped = dropBlock(tm, [], 'CancelButton');
   check(!/CancelButton|vguicancel/.test(dropped) && /terbutton/.test(dropped) && /hudeditor_cmd1/.test(dropped), 'a block is taken out whole');
+  const vt = pictureVtf([new Uint8ClampedArray([1, 2, 3, 4, 5, 6, 7, 8]), new Uint8ClampedArray(8)], 2, 1), vd = new DataView(vt.buffer);
+  check(vt.length === 96 && vd.getUint32(52, true) === 12 && vd.getUint16(24, true) === 2 && [...vt.slice(80, 88)].join() === '3,2,1,4,7,6,5,8', 'pictures are written as BGRA VTFs, one frame after another');
 }
 if (location.hash === '#test') { try { parserCheck(); status('Self-check passed.'); } catch (err) { status(err.message); } }
 else if (host && location.hash !== '#hosttest') start();
