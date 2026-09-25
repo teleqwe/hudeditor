@@ -33,6 +33,7 @@ packed inside it. Needs Windows 10 or 11 (it uses the WebView2 runtime that ship
    HUD. Keys you press with the mouse over the preview (Esc, ~, B...) go to the game. Your chat key opens the chat,
    and it stays open for editing. The game comes to the front while the key is down and the editor takes the front back
    once you let go (a map otherwise locks the mouse inside the game).
+**Drag anything in the preview to move it.** HUD parts move in HudLayout, window controls in the window's `.res`   (`xpos`/`ypos`, keeping `r` and `c` anchors). The dashed box shows where it goes, and the game follows once you   pause. What the game places itself (main menu, server browser, window frames) can't be moved, and the radio menu   only moves up and down (the game keeps it full width). The same X and Y positions are rows on every part that   has them. The team, class and buy menus and the MOTD read positions at startup, so moves there show after a restart.
 4. **Click anything in the preview** to edit it:
    - **HUD parts:** show/hide and opacity, colours, position and size, the font it uses, and its box:
      - **Corners:** rounded or square. Where the game can't draw one of them (the timer's box is always rounded) the
