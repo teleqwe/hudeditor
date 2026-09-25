@@ -100,7 +100,7 @@ packed inside it. Needs Windows 10 or 11 (it uses the WebView2 runtime that ship
        height (`MainMenu.MenuItemHeight`, scaled to your screen) and the menu text colours. The item text size is the
        MenuLarge font. **Import a picture** (also found by searching "background") sets the menu background: it is
        cropped to fill the screen and written as `materials/console/background01` (4:3) and `background01_widescreen`
-       (uncompressed VTFs). The game loads it at startup, so restart it to see a new one.
+       (uncompressed VTFs, under names that take turns so the running game loads the new one: it shows straight away).
        **Buttons** (`resource/GameMenu.res`): remove, reorder, put back any of the game's own buttons, or add one that
        joins a server (type the IP:port). Also read at startup only.
      - **Server browser:** show or hide the Filters button (`servers/InternetGamesPage.res`, `CustomGamesPage.res`;

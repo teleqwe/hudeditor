@@ -33,7 +33,8 @@ Each step is committed on its own, so work can stop after any of them.
    (`Main.Menu.X/Y`, `Main.Title1/2.X/Y`, `Main.BottomBorder`, live), window fade time (`Frame.TransitionEffectTime`),
    MOTD web page background (`HTML.BgColor`), tooltips. Buy preset boxes go with step 15; `Popup.BgColor` and
    `Main.Title3` weren't found drawing anything, so they stay under All other colours.
-8. [ ] **Fewer restarts**: new menu background picture shows straight away; buy menu layout live like team select.
+8. [x] **Fewer restarts**: a new menu background picture shows straight away (and opening or discarding a HUD shows its own).
+   The buy menu going live moved to step 15, which needs the same look at how its pages are made.
 9. [ ] **MVP star picture** (e.g. a flower): `hud/scoreboard_mvp` and the round-end panel's star. Needs testing.
 10. [ ] **Loading screen** (`resource/LoadingDialog.res`): position, progress bar, hide lines. Tested by reloading the map.
 11. [ ] **HUD check-up**: fonts not installed or not in the HUD, missing images and font files, duplicate blocks,
