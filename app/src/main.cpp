@@ -12,12 +12,18 @@
 #include <vector>
 #include <algorithm>
 #include <filesystem>
+#include <mutex>
+#include <d3d11.h>
+#include <dxgi.h>
+#include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.Graphics.Capture.h>
+#include <winrt/Windows.Graphics.DirectX.Direct3D11.h>
+#include <windows.graphics.capture.interop.h>
+#include <windows.graphics.directx.direct3d11.interop.h>
 #include "WebView2.h"
-#include "WebView2EnvironmentOptions.h"
 
 using Microsoft::WRL::Callback;
 using Microsoft::WRL::ComPtr;
-using Microsoft::WRL::Make;
 using std::string;
 using std::wstring;
 
@@ -229,19 +235,6 @@ static void Revert()
 	std::error_code ec;
 	if ( ok )
 		std::filesystem::remove_all( g_unsaved, ec );
-}
-
-// Closing the editor. Not with DestroyWindow: that has WebView2 hide its window in the browser process, whose UI
-// thread can at that moment be waiting on a thread making a thumbnail of this window (the capture picker), which
-// waits on this one, and all hang. Unsaved changes are put back, then the browser process and this one just end.
-static void Quit()
-{
-	Revert();
-	UINT32 pid = 0;
-	HANDLE browser = g_web && SUCCEEDED( g_web->get_BrowserProcessId( &pid ) ) && pid ? OpenProcess( PROCESS_TERMINATE, FALSE, pid ) : NULL;
-	if ( browser )
-		TerminateProcess( browser, 0 );
-	TerminateProcess( GetCurrentProcess(), g_exitCode );
 }
 
 // Hint texts play ui/hint.wav on every update and the test server sends ten a second. Stopping the sound after it
@@ -590,8 +583,180 @@ static HWND GameWindow()
 	return found;
 }
 
-// While the preview captures the game, Chromium puts a "hud.editor is sharing a window. Stop sharing / Hide" bar at
-// the bottom of the game's screen, over the HUD. Hide it, as its own Hide link does.
+// ---------- the preview: the game's window, captured here with Windows.Graphics.Capture ----------
+// Aimed at the game's window itself (no picker, nothing else on screen is looked at). Frames arrive on a pool thread,
+// at most about 40 a second, are halved when over 2000 px wide (the preview is never that big) and go into a buffer
+// shared with the page: 16 bytes (frame count, width, height), then RGBA pixels. A new size needs a new buffer,
+// made on the UI thread.
+namespace wgc = winrt::Windows::Graphics::Capture;
+static const UINT WM_CAPTURE_SIZE = WM_APP + 1, WM_CAPTURE_ENDED = WM_APP + 2;
+static struct
+{
+	ComPtr< ID3D11Device > dev;
+	ComPtr< ID3D11DeviceContext > ctx;
+	ComPtr< ID3D11Texture2D > staging;
+	winrt::Windows::Graphics::DirectX::Direct3D11::IDirect3DDevice device{ nullptr };
+	wgc::Direct3D11CaptureFramePool pool{ nullptr };
+	wgc::GraphicsCaptureSession session{ nullptr };
+	winrt::Windows::Graphics::SizeInt32 poolSize{};
+	std::mutex lock; // the frame thread writing vs the UI thread swapping the buffer or stopping
+	ComPtr< ICoreWebView2SharedBuffer > buf;
+	BYTE *mem = NULL;
+	UINT w = 0, h = 0, seq = 0, wantW = 0, wantH = 0;
+	ULONGLONG last = 0;
+} g_cap;
+
+static void CopyFrame( wgc::Direct3D11CaptureFrame const &frame )
+{
+	auto size = frame.ContentSize();
+	if ( size.Width != g_cap.poolSize.Width || size.Height != g_cap.poolSize.Height ) // the game changed resolution
+	{
+		g_cap.poolSize = size;
+		g_cap.pool.Recreate( g_cap.device, winrt::Windows::Graphics::DirectX::DirectXPixelFormat::B8G8R8A8UIntNormalized, 2, size );
+		return;
+	}
+	ULONGLONG now = GetTickCount64();
+	if ( now - g_cap.last < 25 )
+		return;
+	g_cap.last = now;
+	UINT cw = size.Width, ch = size.Height, s = cw > 2000 ? 2 : 1, ow = cw / s, oh = ch / s;
+	if ( !cw || !ch )
+		return;
+	if ( ow != g_cap.w || oh != g_cap.h || !g_cap.mem )
+	{
+		if ( ow != g_cap.wantW || oh != g_cap.wantH )
+		{
+			g_cap.wantW = ow, g_cap.wantH = oh;
+			PostMessageW( g_hwnd, WM_CAPTURE_SIZE, 0, 0 );
+		}
+		return;
+	}
+	ComPtr< ID3D11Texture2D > tex;
+	auto access = frame.Surface().as< ::Windows::Graphics::DirectX::Direct3D11::IDirect3DDxgiInterfaceAccess >();
+	if ( FAILED( access->GetInterface( IID_PPV_ARGS( &tex ) ) ) )
+		return;
+	D3D11_TEXTURE2D_DESC d = {};
+	if ( g_cap.staging )
+		g_cap.staging->GetDesc( &d );
+	if ( !g_cap.staging || d.Width != cw || d.Height != ch )
+	{
+		d = {};
+		d.Width = cw, d.Height = ch, d.MipLevels = d.ArraySize = 1, d.Format = DXGI_FORMAT_B8G8R8A8_UNORM, d.SampleDesc.Count = 1;
+		d.Usage = D3D11_USAGE_STAGING, d.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+		g_cap.staging.Reset();
+		if ( FAILED( g_cap.dev->CreateTexture2D( &d, NULL, &g_cap.staging ) ) )
+			return;
+	}
+	D3D11_BOX box = { 0, 0, 0, cw, ch, 1 };
+	g_cap.ctx->CopySubresourceRegion( g_cap.staging.Get(), 0, 0, 0, 0, tex.Get(), 0, &box );
+	D3D11_MAPPED_SUBRESOURCE m;
+	if ( FAILED( g_cap.ctx->Map( g_cap.staging.Get(), 0, D3D11_MAP_READ, 0, &m ) ) )
+		return;
+	BYTE *out = g_cap.mem + 16;
+	for ( UINT y = 0; y < oh; ++y )
+	{
+		const BYTE *a = (const BYTE *)m.pData + (size_t)y * s * m.RowPitch, *b = a + ( s - 1 ) * m.RowPitch;
+		for ( UINT x = 0; x < ow; ++x, out += 4 )
+		{
+			// BGRA in, RGBA out; halved, the average of each 2x2 (at full size the same pixel four times)
+			const BYTE *p = a + x * s * 4, *q = b + x * s * 4, *p2 = p + ( s - 1 ) * 4, *q2 = q + ( s - 1 ) * 4;
+			for ( int c = 0; c < 3; ++c )
+				out[c] = (BYTE)( ( p[2 - c] + p2[2 - c] + q[2 - c] + q2[2 - c] + 2 ) / 4 );
+			out[3] = 255;
+		}
+	}
+	g_cap.ctx->Unmap( g_cap.staging.Get(), 0 );
+	UINT *head = (UINT *)g_cap.mem;
+	head[1] = ow, head[2] = oh, head[0] = ++g_cap.seq;
+}
+
+// UI thread: a buffer of the size the frames need, handed to the page (which lets its old one go)
+static void MakeFrameBuffer()
+{
+	ComPtr< ICoreWebView2Environment12 > env;
+	ComPtr< ICoreWebView2_17 > web;
+	ComPtr< ICoreWebView2SharedBuffer > buf;
+	BYTE *mem = NULL;
+	UINT w, h;
+	{
+		std::lock_guard< std::mutex > hold( g_cap.lock );
+		w = g_cap.wantW, h = g_cap.wantH;
+	}
+	if ( !w || !h || FAILED( g_env.As( &env ) ) || FAILED( g_web.As( &web ) ) || FAILED( env->CreateSharedBuffer( 16 + (UINT64)w * h * 4, &buf ) ) || FAILED( buf->get_Buffer( &mem ) ) )
+		return;
+	{
+		std::lock_guard< std::mutex > hold( g_cap.lock );
+		g_cap.buf = buf, g_cap.mem = mem, g_cap.w = w, g_cap.h = h;
+	}
+	web->PostSharedBufferToScript( buf.Get(), COREWEBVIEW2_SHARED_BUFFER_ACCESS_READ_ONLY, NULL );
+}
+
+static void StopCapture()
+{
+	wgc::GraphicsCaptureSession session{ nullptr };
+	wgc::Direct3D11CaptureFramePool pool{ nullptr };
+	{
+		std::lock_guard< std::mutex > hold( g_cap.lock );
+		std::swap( session, g_cap.session );
+		std::swap( pool, g_cap.pool );
+		g_cap.buf.Reset(), g_cap.mem = NULL, g_cap.w = g_cap.h = g_cap.wantW = g_cap.wantH = 0;
+	}
+	// closed outside the lock: closing can wait for a frame being copied, which takes it
+	if ( session )
+		session.Close();
+	if ( pool )
+		pool.Close();
+}
+
+static wstring StartCapture()
+{
+	if ( g_cap.session )
+		return L"";
+	HWND game = GameWindow();
+	if ( !game )
+		return L"no game window";
+	if ( IsIconic( game ) ) // a minimised window sends no frames: restore it without taking the front
+		ShowWindowAsync( game, SW_SHOWNOACTIVATE );
+	try
+	{
+		if ( !g_cap.dev )
+		{
+			winrt::check_hresult( D3D11CreateDevice( NULL, D3D_DRIVER_TYPE_HARDWARE, NULL, D3D11_CREATE_DEVICE_BGRA_SUPPORT, NULL, 0, D3D11_SDK_VERSION, &g_cap.dev, NULL, &g_cap.ctx ) );
+			ComPtr< IDXGIDevice > dxgi;
+			winrt::check_hresult( g_cap.dev.As( &dxgi ) );
+			winrt::com_ptr< ::IInspectable > device;
+			winrt::check_hresult( CreateDirect3D11DeviceFromDXGIDevice( dxgi.Get(), device.put() ) );
+			g_cap.device = device.as< winrt::Windows::Graphics::DirectX::Direct3D11::IDirect3DDevice >();
+		}
+		auto interop = winrt::get_activation_factory< wgc::GraphicsCaptureItem, IGraphicsCaptureItemInterop >();
+		wgc::GraphicsCaptureItem item{ nullptr };
+		winrt::check_hresult( interop->CreateForWindow( game, winrt::guid_of< wgc::GraphicsCaptureItem >(), winrt::put_abi( item ) ) );
+		std::lock_guard< std::mutex > hold( g_cap.lock );
+		g_cap.poolSize = item.Size();
+		g_cap.pool = wgc::Direct3D11CaptureFramePool::CreateFreeThreaded( g_cap.device, winrt::Windows::Graphics::DirectX::DirectXPixelFormat::B8G8R8A8UIntNormalized, 2, g_cap.poolSize );
+		g_cap.pool.FrameArrived( []( wgc::Direct3D11CaptureFramePool const &pool, auto && ) {
+			std::lock_guard< std::mutex > hold( g_cap.lock );
+			if ( auto frame = pool.TryGetNextFrame() )
+			{
+				if ( g_cap.pool == pool )
+					CopyFrame( frame );
+				frame.Close();
+			}
+		} );
+		item.Closed( []( auto &&, auto && ) { PostMessageW( g_hwnd, WM_CAPTURE_ENDED, 0, 0 ); } );
+		g_cap.session = g_cap.pool.CreateCaptureSession( item );
+		g_cap.session.IsCursorCaptureEnabled( false );
+		try { g_cap.session.IsBorderRequired( false ); } catch ( ... ) {} // no yellow frame round the game (Windows 11)
+		g_cap.session.StartCapture();
+	}
+	catch ( winrt::hresult_error const &e )
+	{
+		StopCapture();
+		return L"Couldn't capture the game window: " + wstring( e.message() );
+	}
+	return L"";
+}
+
 // A key sent to the game brings it to the front, and in a map the game then locks the mouse inside its window. Once
 // the key is let go, the editor takes the front back. Windows only lets the program the user last typed into change
 // the front window, so this borrows the game's input state for the call.
@@ -606,16 +771,6 @@ static void BringEditorBack()
 		AttachThreadInput( me, fgThread, FALSE );
 	if ( g_ctl )
 		g_ctl->MoveFocus( COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC );
-}
-
-static void HideSharingBar()
-{
-	EnumWindows( []( HWND w, LPARAM ) -> BOOL {
-		wchar_t title[256];
-		if ( IsWindowVisible( w ) && GetWindowTextW( w, title, 256 ) && wcsstr( title, L"hud.editor is sharing" ) )
-			ShowWindow( w, SW_HIDE );
-		return TRUE;
-	}, 0 );
 }
 
 static wstring NameOf( const wstring &path )
@@ -830,22 +985,11 @@ static void OnMessage( const wstring &msg )
 			}
 		} );
 	}
-	else if ( op == L"gamewindow" ) // is the game's window up yet (screen capture picks it by title)
+	else if ( op == L"capture" ) // start sending the game's window to the page (see StartCapture)
 	{
-		// a minimised window isn't offered for capture, which leaves the page on the "Choose what to share" dialog:
-		// restore it first, without taking the front. Async: a game busy restoring (a fullscreen one resets its display)
-		// would otherwise hold up the editor's window until it answers
-		HWND w = GameWindow();
-		if ( !w )
-			fail( L"no game window" );
-		else if ( IsIconic( w ) )
-		{
-			ShowWindowAsync( w, SW_SHOWNOACTIVATE );
-			for ( int i = 0; i < 40 && IsIconic( w ); ++i )
-				Sleep( 50 );
-			if ( IsIconic( w ) )
-				fail( L"the game window is minimised" );
-		}
+		wstring err = StartCapture();
+		if ( !err.empty() )
+			fail( err );
 	}
 	else if ( op == L"key" ) // arg = scan code (hex), then " down" or " up" for half a press: bring the game to the front and press the key there
 	{
@@ -900,7 +1044,10 @@ static void OnMessage( const wstring &msg )
 			ShellExecuteW( NULL, L"open", g_hudPath.c_str(), NULL, NULL, SW_SHOWNORMAL );
 	}
 	else if ( op == L"quit" )
-		Quit();
+	{
+		DestroyWindow( g_hwnd );
+		return;
+	}
 	else if ( op == L"done" ) // --selftest result
 	{
 		WriteAll( g_selftestOut, Utf8( body ) );
@@ -932,7 +1079,7 @@ static HRESULT OnController( HRESULT hr, ICoreWebView2Controller *ctl )
 	g_ctl->get_CoreWebView2( &g_web );
 	Fit();
 
-	// The page is served from inside the exe at https://hud.editor/ (a secure origin, so screen capture works).
+	// The page is served from inside the exe at https://hud.editor/.
 	g_web->AddWebResourceRequestedFilter( L"https://hud.editor/*", COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL );
 	g_web->add_WebResourceRequested( Callback< ICoreWebView2WebResourceRequestedEventHandler >(
 		[]( ICoreWebView2 *, ICoreWebView2WebResourceRequestedEventArgs *args ) -> HRESULT {
@@ -983,11 +1130,6 @@ static LRESULT CALLBACK WndProc( HWND h, UINT m, WPARAM w, LPARAM l )
 		if ( g_ctl )
 			g_ctl->NotifyParentWindowPositionChanged();
 		return 0;
-	case WM_PRINT:
-		// The capture picker makes thumbnails of every window with PrintWindow, this one too, from a WebView2 thread
-		// its UI thread waits on. Passed on to the child, that would wait on the same UI thread: both hang (the empty
-		// "Choose what to share" dialog). The thumbnail goes without the page.
-		return DefWindowProcW( h, m, w, l & ~PRF_CHILDREN );
 	case WM_CLOSE: // let the page ask about unsaved changes; a second click within 5 s closes anyway
 		if ( g_web && g_selftestOut.empty() && GetTickCount() - s_closeAsked > 5000 )
 		{
@@ -995,15 +1137,16 @@ static LRESULT CALLBACK WndProc( HWND h, UINT m, WPARAM w, LPARAM l )
 			g_web->PostWebMessageAsString( L"!close" );
 			return 0;
 		}
-		if ( g_selftestOut.empty() )
-			Quit();
 		break;
+	case WM_CAPTURE_SIZE:
+		MakeFrameBuffer();
+		return 0;
+	case WM_CAPTURE_ENDED: // the game window closed
+		StopCapture();
+		if ( g_web )
+			g_web->PostWebMessageAsString( L"!captureended" );
+		return 0;
 	case WM_TIMER:
-		if ( w == 2 )
-		{
-			HideSharingBar();
-			return 0;
-		}
 		if ( w == 3 )
 		{
 			if ( !( GetAsyncKeyState( g_keyVk ) & 0x8000 ) )
@@ -1019,6 +1162,7 @@ static LRESULT CALLBACK WndProc( HWND h, UINT m, WPARAM w, LPARAM l )
 		DestroyWindow( h );
 		return 0;
 	case WM_DESTROY:
+		StopCapture();
 		Revert(); // unsaved changes (the page asked about them first)
 		PostQuitMessage( g_exitCode );
 		return 0;
@@ -1061,17 +1205,11 @@ int WINAPI wWinMain( HINSTANCE inst, HINSTANCE, LPWSTR, int show )
 	RegisterClassW( &wc );
 	g_hwnd = CreateWindowW( wc.lpszClassName, L"CS:S HUD Editor", WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, 1500, 900, NULL, NULL, inst, NULL );
 	if ( g_selftestOut.empty() )
-	{
 		ShowWindow( g_hwnd, show );
-		SetTimer( g_hwnd, 2, 1000, NULL ); // HideSharingBar
-	}
 	else
 		SetTimer( g_hwnd, 1, 30000, NULL );
 
-	// Screen capture picks the game window by itself instead of asking every time.
-	auto options = Make< CoreWebView2EnvironmentOptions >();
-	options->put_AdditionalBrowserArguments( ( wstring( L"--auto-select-desktop-capture-source=\"" ) + GAME_TITLE + L"\"" ).c_str() );
-	HRESULT hr = CreateCoreWebView2EnvironmentWithOptions( NULL, data.c_str(), options.Get(), Callback< ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler >( OnEnvironment ).Get() );
+	HRESULT hr = CreateCoreWebView2EnvironmentWithOptions( NULL, data.c_str(), NULL, Callback< ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler >( OnEnvironment ).Get() );
 	if ( FAILED( hr ) )
 		OnEnvironment( hr, NULL );
 
