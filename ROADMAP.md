@@ -22,7 +22,7 @@ Each step is committed on its own, so work can stop after any of them.
    - **sv_pure check**: the test server can't show it (its own player isn't checked). The game's cfg files say sv_pure
      1/2 block every custom material, replay/thumbnails included (TF2 has an exception for that folder, CS:S doesn't).
      The editor says so under Add to the HUD. Checking on a real sv_pure server is still to do.
-4. [ ] **Nudge and align**: arrow keys move the selection 1 unit (Shift: 10), Ctrl+click several parts to line them
+4. [x] **Nudge and align**: arrow keys move the selection 1 unit (Shift: 10), Ctrl+click several parts to line them
    up or spread them, a 4:3 safe-area overlay.
 5. [ ] **Spectator extras**: `spectator.res` (scores, timer, info line, title) and `bottomspectator.res` (drop-downs,
    previous/next buttons).

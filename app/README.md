@@ -36,7 +36,9 @@ packed inside it. Needs Windows 10 or 11 (it uses the WebView2 runtime that ship
    HUD. Keys you press with the mouse over the preview (Esc, ~, B...) go to the game. Your chat key opens the chat,
    and it stays open for editing. The game comes to the front while the key is down and the editor takes the front back
    once you let go (a map otherwise locks the mouse inside the game).
-   **Drag anything in the preview to move it.** HUD parts move in HudLayout, window controls in the window's `.res`
+   **Drag anything in the preview to move it**, or press the arrow keys (1 unit, 10 with Shift). **Ctrl+click** more
+   parts to move them together and to line them up with the first one (left edges, centres, tops...) or spread them
+   evenly. **4:3 edges** in Test tools draws where a 4:3 screen's picture ends. HUD parts move in HudLayout, window controls in the window's `.res`
    (`xpos`/`ypos`, keeping `r` and `c` anchors). **Centre** beside X and Y position centres it (in its window, for a
    window's control: `c` and `r` count from the screen even there, so inside a window smaller than the screen it writes
    a plain number from the window's edge), and **Undo** there puts it back where it was when the HUD was opened. Dragged near an edge of the screen (a window's control: of its

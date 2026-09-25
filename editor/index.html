@@ -55,6 +55,9 @@
   .row.sides label { display: flex; align-items: center; gap: 4px; cursor: pointer; }
   .row.menuitem { grid-template-columns: 1fr repeat(3, 30px); gap: 4px; }
   .row.cmdbtn { grid-template-columns: 1fr 1.3fr 30px; gap: 6px; }
+  .row.lineup { grid-template-columns: 54px repeat(4, 1fr); gap: 4px; }
+  .row.lineup button { padding: 3px 2px; font-size: 11px; }
+  .box.guide { opacity: 1; top: 0; bottom: 0; width: 0; border: none; border-left: 1px dashed rgba(245, 197, 66, .8); }
   .row.menuadd { grid-template-columns: 1fr auto; gap: 6px 8px; padding: 10px 12px; }
   .row.menuadd > .meta, .row.menuadd > .wide { grid-column: 1 / -1; }
   .row.menuadd > .meta { color: var(--text); font-size: 12px; font-weight: 600; }
@@ -242,6 +245,10 @@
       <button data-bit="4" title="Large speed text under it, like jhud (font CenterPrintText, ClientScheme)">Large speed</button>
       <button data-bit="8" title="Record times in the top left corner (font CenterPrintText, ClientScheme)">Top left</button>
       <button data-bit="16" title="A chat line every few seconds (font ChatFont, ChatScheme)">Chat lines</button>
+    </div>
+    <div class="tline">
+      <span class="glabel">Guides</span>
+      <button id="guide43" aria-pressed="false" title="Dashed lines where a 4:3 screen (1024x768, 1280x960...) ends: parts outside them are off screen there">4:3 edges</button>
     </div>
   </div>
   </div>
@@ -834,6 +841,8 @@ const prettify = n => n.replace(/^Hud/, '').replace(/([a-z])([A-Z])/g, '$1 $2').
 
 // ---------- selection ----------
 let selected = null; // { thing: panel-like, info, control: panel|null }
+let also = []; // more parts Ctrl+clicked with it (see lineUp)
+let guide43 = false; // Test tools: 4:3 screen edges over the preview
 
 // A window's own .res file, where single controls get their own colours and positions.
 // The buy menu reads its .res once, when the game makes it (the plugin reads the team, class and MOTD ones again on a
@@ -1211,6 +1220,7 @@ function scoreboardSections(sel, shownFonts) {
 }
 
 async function select(sel) {
+  also = []; // parts Ctrl+clicked with the last selection
   // loaded before it becomes the selection: the panel poll copies the selection, and a copy made while this waited
   // would never get the file
   if (sel) sel.res = await uiFile(UI_RES[sel.thing.key]);
@@ -2558,6 +2568,7 @@ function renderList() {
     crumbs.prepend(back);
     crumbs.append(done);
     list.append(crumbs);
+    if (also.length) list.append(card(`Line up ${also.length + 1} parts`, lineUpRows()));
     const sections = selectionSections(selected);
     for (const [kind, name] of [['colour', 'Colours'], ['font', 'Fonts'], ['border', 'Borders'], ['other', 'More']]) {
       const mine = sections.filter(s => s[2] === kind);
@@ -2613,7 +2624,7 @@ function boxList() {
       for (const r of clickRects(p, info, live.W, live.H))
         if (r.w * r.h <= 0.9 * live.W * live.H && r.x < live.W && r.y < live.H && r.x + r.w > 0 && r.y + r.h > 0) boxes.push({ thing: p, info, r, cls: 'thing' });
     }
-    if (sel && sel.control) boxes.push({ thing: sel.thing, info: sel.info, r: sel.control, cls: 'sel', label: controlIn(sel.control, sel.thing)[1] });
+    for (const s of [sel, ...also]) if (s && s.control) boxes.push({ thing: s.thing, info: s.info, r: s.control, cls: 'sel', label: controlIn(s.control, s.thing)[1] });
     return { W: live.W, H: live.H, boxes };
   }
   const v = $('video'), W = v.hidden ? 1920 : v.width || 1920, H = v.hidden ? 1080 : v.height || 1080;
@@ -2626,11 +2637,17 @@ function drawBoxes() {
   $('stage').style.setProperty('--aspect', W / H);
   host.innerHTML = '';
   for (const b of boxes) {
-    const isSel = selected && (b.cls === 'sel' || (!selected.control && selected.info.id === b.info.id));
+    const isSel = selected && (b.cls === 'sel' || [selected, ...also].some(s => !s.control && s.info.id === b.info.id));
     const d = el('div', { className: `box ${b.cls}${isSel ? ' sel' : ''}` });
     Object.assign(d.style, { left: `${b.r.x / W * 100}%`, top: `${b.r.y / H * 100}%`, width: `${b.r.w / W * 100}%`, height: `${b.r.h / H * 100}%` });
     d.append(el('span', { textContent: b.label || b.info.name }));
     host.append(d);
+  }
+  // where a 4:3 screen's picture ends: HUD positions are in units of the screen's height, so a 4:3 screen is the middle
+  if (guide43 && W / H > 4 / 3 + 0.01) for (const x of [(W - H * 4 / 3) / 2, (W + H * 4 / 3) / 2]) {
+    const g = el('div', { className: 'box guide' });
+    g.style.left = `${x / W * 100}%`;
+    host.append(g);
   }
   const hover = el('div', { className: 'box hover', id: 'hoverbox', hidden: true });
   hover.append(el('span'));
@@ -2744,8 +2761,69 @@ $('boxes').onmousemove = e => {
   hb.firstChild.textContent = hit.control ? `${hit.info.name} › ${controlIn(hit.control, hit.thing)[1]}` : hit.info.name;
 };
 $('boxes').onmouseleave = () => { if ($('hoverbox') && !drag) $('hoverbox').hidden = true; };
-// a drag ends with a click too: that one mustn't pick something else
-$('boxes').onclick = e => { if (Date.now() - dragEnded < 300) return; const hit = pickAt(...stagePoint(e)); if (hit) { $('search').value = ''; select(hit); } };
+// a drag ends with a click too: that one mustn't pick something else. Ctrl+click adds a part to the selection (or takes
+// it out), to line them up or move them together.
+$('boxes').onclick = async e => {
+  if (Date.now() - dragEnded < 300) return;
+  const hit = pickAt(...stagePoint(e));
+  if (hit && e.ctrlKey && selected && !sameSel(hit, selected)) {
+    if (!movable(hit)) return status('That one can\'t be moved: the game places it itself.');
+    const i = also.findIndex(a => sameSel(a, hit));
+    if (i >= 0) also.splice(i, 1);
+    else { hit.res = await uiFile(UI_RES[hit.thing.key]); also.push(hit); }
+    render(); drawBoxes();
+    return;
+  }
+  if (hit) { $('search').value = ''; select(hit); }
+};
+
+// ---------- nudging and lining up ----------
+// Parts Ctrl+clicked with the selection. Arrow keys move them all 1 unit (Shift: 10); the Line up buttons move the
+// others to the selection (the first one picked), or spread them evenly between the outermost two.
+const nudged = {};
+window.addEventListener('keydown', e => {
+  const d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+  if (!d || !selected || !$('picker').hidden || /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement?.tagName)) return;
+  const ts = [selected, ...also].map(moveTarget).filter(Boolean);
+  if (!ts.length) return;
+  e.preventDefault();
+  e.stopImmediatePropagation(); // not to the game, as other keys over the preview are
+  for (const t of ts) for (const [key, dd] of [['xpos', d[0]], ['ypos', d[1]]]) {
+    if (!dd || (key === 'xpos' && t.lockX)) continue;
+    const id = `${t.f.name}/${t.block}/${key}`;
+    nudged[id] = (nudged[id] || 0) + dd * (e.shiftKey ? 10 : 1);
+    // worked out when written: presses faster than the write add up
+    save(t.f, key, () => { const now = layoutProps(t.f, t.block)[key], v = shifted(now, nudged[id]); nudged[id] = 0; return v ?? now; }, t.block);
+  }
+  refreshSoon();
+}, true);
+function lineUp(how) {
+  const items = [selected, ...also].map(moveTarget).filter(t => t && t.panel && Number.isFinite(t.panel.x));
+  if (items.length < 2) return status('Ctrl+click parts that can be moved to line them up.');
+  const edge = { left: r => r.x, centre: r => r.x + r.w / 2, right: r => r.x + r.w, top: r => r.y, middle: r => r.y + r.h / 2, bottom: r => r.y + r.h };
+  const move = (t, key, px) => { const d = Math.round(px / t.s), v = d && !(key === 'xpos' && t.lockX) ? shifted(t.p[key], d) : null; if (v !== null) save(t.f, key, v, t.block); };
+  if (edge[how]) {
+    const key = /left|centre|right/.test(how) ? 'xpos' : 'ypos';
+    for (const t of items.slice(1)) move(t, key, edge[how](items[0].panel) - edge[how](t.panel));
+  } else {
+    const [pos, size, key] = how === 'across' ? ['x', 'w', 'xpos'] : ['y', 'h', 'ypos'];
+    const sorted = [...items].sort((a, b) => a.panel[pos] - b.panel[pos]), first = sorted[0].panel, last = sorted[sorted.length - 1].panel;
+    const gap = (last[pos] + last[size] - first[pos] - sorted.reduce((s, t) => s + t.panel[size], 0)) / (sorted.length - 1);
+    let at = first[pos];
+    for (const t of sorted) { move(t, key, at - t.panel[pos]); at += t.panel[size] + gap; }
+  }
+  refreshSoon();
+}
+function lineUpRows() {
+  const r = (label, buttons) => {
+    const row = el('div', { className: 'row lineup' });
+    row.append(el('div', { textContent: label }), ...buttons.map(([how, text]) => el('button', { textContent: text, onclick: () => lineUp(how) })));
+    return row;
+  };
+  return [r('Across', [['left', 'Left edges'], ['centre', 'Centres'], ['right', 'Right edges'], ['across', 'Spread']]),
+    r('Down', [['top', 'Tops'], ['middle', 'Middles'], ['bottom', 'Bottoms'], ['down', 'Spread']]),
+    noteRow(`They line up with ${selected.info.name}. Ctrl+click a part in the preview to add it or take it out; arrow keys move them all.`)];
+}
 
 // ---------- the game: live panel list, capture, test server ----------
 let pendingRender = false, captured = false, autoTried = false;
@@ -2943,6 +3021,7 @@ if (host) {
     if (e.ctrlKey && !e.shiftKey && e.code === 'KeyZ' && !typing) { e.preventDefault(); undo(); }
   });
   $('explore').onclick = () => call('explore');
+  $('guide43').onclick = () => { guide43 = !guide43; $('guide43').setAttribute('aria-pressed', guide43); drawBoxes(); };
   $('testserver').onclick = testServer;
   $('toolsbtn').onclick = () => showTools($('tools').hidden);
   // held open like Tab does, as Tab can't be held down while clicking in the editor
