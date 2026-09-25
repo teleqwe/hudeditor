@@ -19,6 +19,7 @@
   .box.thing { opacity: 0; }
   #stage:hover .box.thing, .schematic .box.thing { opacity: 1; }
   .box.hover { opacity: 1; border: 2px solid var(--accent); background: rgba(255, 176, 0, .12); }
+  .box.hover.drag { border-style: dashed; background: rgba(255, 176, 0, .2); }
   .box.sel { opacity: 1; border: 2px solid var(--sel); background: rgba(77, 163, 255, .15); }
   .box.sel span { color: var(--sel); }
   .box.hover span, .box.sel span { display: block; }
@@ -199,7 +200,8 @@ const HUD = {
     hit: [['c-60', '178', '120', '30'], ['4', '2', '230', '60']] },
   TargetID: { name: 'Player name when aiming', quiet: true, colours: [['Counter-Terrorists', 'CT_Blue', 'Also kill feed names unless set there'], ['Terrorists', 'T_Red', 'Also kill feed names unless set there'], ['Hostages', 'Hostage_Yellow', ''] ] },
   // radio menus, and SourceMod menus on bhop/surf servers (checkpoints, timer menus)
-  HudMenu: { name: 'Radio and server menus', hit: ['0', 'c-100', '220', '200'], pos: true, colours: [
+  // the game keeps its panel full width at x 0, so it only moves up and down
+  HudMenu: { name: 'Radio and server menus', hit: ['0', 'c-100', '220', '200'], pos: true, lockX: true, colours: [
     ['Title', 'MenuColor', 'Also options that can\'t be picked'], ['Options', 'ItemColor', 'The numbered choices'], ['Background', 'MenuBoxBg', ''] ],
     links: { MenuColor: 'MenuColor', MenuItemColor: 'ItemColor', MenuBoxColor: 'MenuBoxBg' },
     fontKeys: [['Title font', 'TextFont', 'Default'], ['Options font', 'ItemFont|ItemFontPulsing', 'Default']] },
@@ -804,7 +806,11 @@ async function select(sel) {
 // draws, or ("fit") the area its child panels cover: the hint box is a label sized to the text in a much larger panel.
 function clickRects(p, info, W, H) {
   if (p !== p.thing || !info.hud) return [p];
-  if (info.hud.hit) return (Array.isArray(info.hud.hit[0]) ? info.hud.hit : [info.hud.hit]).map(h => rectOf({}, W, H, h));
+  if (info.hud.hit) {
+    // a full-screen panel draws at a fixed place inside itself, so its areas move with the panel (xpos/ypos)
+    const ox = p.w >= W * 0.95 ? p.x : 0, oy = p.h >= H * 0.95 ? p.y : 0;
+    return (Array.isArray(info.hud.hit[0]) ? info.hud.hit : [info.hud.hit]).map(h => { const r = rectOf({}, W, H, h); return { ...r, x: r.x + ox, y: r.y + oy }; });
+  }
   const kids = info.hud.fit && live ? live.panels.filter(q => q.parent === p && q.w * q.h > 0) : [];
   if (!kids.length) return [p];
   const x = Math.min(...kids.map(q => q.x)), y = Math.min(...kids.map(q => q.y));
@@ -1018,7 +1024,7 @@ function hudRows(id, hud) {
       v => { ks.forEach(k => save(lay, k, v, id)); refreshSoon(); }, [ks[0]]));
   }
   for (const [k, label] of [['xpos', 'X position'], ['ypos', 'Y position'], ['wide', 'Width'], ['tall', 'Height']])
-    if (k in p || (hud.pos && k.endsWith('pos'))) rows.push(numRow(lay, id, k, label, p[k]));
+    if ((k in p || ((hud.pos || canHide(id)) && k.endsWith('pos'))) && !(hud.lockX && k === 'xpos')) rows.push(numRow(lay, id, k, label, p[k]));
   return rows;
 }
 
@@ -1285,7 +1291,7 @@ function resRows(f, block, defaults, schemeFile, ctl) {
     if (p.font || deflt) rows.push(inputRow('Font', p.font || deflt, v => save(f, 'font', v, block),
       { list: fontList(schemeFile), title: `Just this one; any font in ${schemeFile}` }));
   }
-  for (const [k, label] of POS) if (k in p) rows.push(numRow(f, block, k, label, p[k]));
+  for (const [k, label] of POS) if (k in p || k.endsWith('pos')) rows.push(numRow(f, block, k, label, p[k]));
   return rows;
 }
 
@@ -1639,8 +1645,8 @@ function renderList() {
   if (selected) {
     const crumbs = el('div', { className: 'crumbs' });
     crumbs.append(el('span', { className: 'what', textContent: selected.info.name }));
-    if (selected.control) crumbs.append(el('span', { className: 'meta', textContent: `  ›  ${controlIn(selected.control, selected.thing)[1]}${selected.control.name ? ` "${selected.control.name}"` : ''}` }));
-    const back = el('button', { className: 'back', textContent: '‹ Back', title: 'Back to the list (changes stay unsaved until Save HUD)' });
+    if (selected.control) crumbs.append(el('span', { className: 'meta', textContent: `  â€º  ${controlIn(selected.control, selected.thing)[1]}${selected.control.name ? ` "${selected.control.name}"` : ''}` }));
+    const back = el('button', { className: 'back', textContent: 'â€¹ Back', title: 'Back to the list (changes stay unsaved until Save HUD)' });
     back.onclick = () => select(null);
     const done = el('button', { className: 'done primary', textContent: 'Done', title: 'Save the changes into the HUD and go back to the list' });
     done.onclick = async () => {
@@ -1691,7 +1697,7 @@ function renderList() {
   other.append(el('summary', { textContent: 'All other colours' }), ...otherRows(C, 'In game'), ...otherRows(S, 'Menus'), ...otherRows(CH, 'Chat'));
   list.append(other, allFonts());
   // the list's hint, unless a message ("Saved...") went up just now
-  if (!selected && Date.now() - statusAt > 5000) status(live ? 'Click anything in the preview to edit it. Keys pressed over it go to the game, e.g. your chat key opens the chat.' : 'Pick a HUD part below, or start the game to click things in the preview.');
+  if (!selected && Date.now() - statusAt > 5000) status(live ? 'Click anything in the preview to edit it, or drag it to move it. Keys pressed over it go to the game, e.g. your chat key opens the chat.' : 'Pick a HUD part below, or start the game to click things in the preview.');
 }
 
 // ---------- preview boxes ----------
@@ -1730,18 +1736,85 @@ function drawBoxes() {
 }
 
 const stagePoint = e => { const r = $('boxes').getBoundingClientRect(); return [(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height]; };
+// ---------- dragging: moves what is under the mouse ----------
+// What places a selection: a HudLayout block (HUD parts) or its own block in the window's .res (window controls), and
+// how many screen pixels one unit is (worked out from the panel's real width, else the height / 480 the game scales
+// by). null where the game places it itself (the main menu, the server browser...).
+function moveTarget(sel) {
+  if (!sel || !live) return null;
+  let f, block, panel;
+  if (sel.info.kind === 'hud' && !sel.control) {
+    f = F(L); block = sel.info.id; panel = sel.thing;
+  } else {
+    const own = sel.res && sel.node && ownBlock(sel);
+    if (!own) return null;
+    f = sel.res; block = own.block;
+    panel = live.panels.find(q => q.thing === sel.thing && q.name && q.name.toLowerCase() === block.toLowerCase());
+  }
+  const p = f && layoutProps(f, block);
+  if (!p || !Object.keys(p).length || 'xpos_hudeditor' in p) return null; // hidden parts sit off screen
+  const wide = /^\s*\d+\s*$/.test(p.wide || '') ? +p.wide : 0, s = panel && wide && panel.w ? panel.w / wide : live.H / 480;
+  return { f, block, p, s, lockX: sel.info.kind === 'hud' && !sel.control && !!sel.info.hud.lockX };
+}
+// A position moved by d units ("r" counts from the right or bottom, so it goes the other way); null for "f" or junk.
+function shifted(raw, d) {
+  const m = /^\s*([rc]?)\s*(-?[\d.]+)\s*$/i.exec(raw ?? '0');
+  return m ? m[1] + Math.round(+m[2] + (m[1].toLowerCase() === 'r' ? -d : d)) : null;
+}
+const movable = hit => hit.info.kind === 'hud' && !hit.control ? canHide(hit.info.id) && !isHidden(hit.info.id) : !!UI_RES[hit.thing.key] && !!(hit.control || hit.node);
+const hitRect = hit => hit.control || hit.node || clickRects(hit.thing, hit.info, live.W, live.H)[0];
+const sameSel = (a, b) => a && b && a.thing === b.thing && (a.control || null) === (b.control || null) && (a.node || null) === (b.node || null);
+
+let drag = null, dragEnded = 0;
+const place = (el, r) => { const { W, H } = live; Object.assign(el.style, { left: `${r.x / W * 100}%`, top: `${r.y / H * 100}%`, width: `${r.w / W * 100}%`, height: `${r.h / H * 100}%` }); };
+$('boxes').onmousedown = e => {
+  if (e.button !== 0 || !live) return;
+  const hit = pickAt(...stagePoint(e));
+  if (hit && movable(hit)) drag = { at: stagePoint(e), hit, rect: hitRect(hit), moved: false, target: undefined };
+};
+window.addEventListener('mousemove', e => {
+  if (!drag) return;
+  const [fx, fy] = stagePoint(e), dx = (fx - drag.at[0]) * live.W, dy = (fy - drag.at[1]) * live.H;
+  if (!drag.moved) {
+    if (Math.hypot(dx, dy) < 6) return;
+    drag.moved = true;
+    const d = drag;
+    // the part becomes the selection (its window file loads with it), then it can move
+    (async () => {
+      if (!sameSel(selected, d.hit)) { $('search').value = ''; await select(d.hit); }
+      d.target = moveTarget(selected);
+      if (!d.target) { status('This one can\'t be moved: the game places it itself.'); if (drag === d) drag = null; }
+    })();
+  }
+  const hb = $('hoverbox');
+  const lockX = drag.hit.info.hud?.lockX && !drag.hit.control;
+  if (hb) { hb.hidden = false; hb.classList.add('drag'); place(hb, { ...drag.rect, x: drag.rect.x + (lockX ? 0 : dx), y: drag.rect.y + dy }); }
+  const t = drag.target;
+  if (!t) return;
+  const x = t.lockX ? null : shifted(t.p.xpos, dx / t.s), y = shifted(t.p.ypos, dy / t.s);
+  if (x !== null) save(t.f, 'xpos', x, t.block);
+  if (y !== null) save(t.f, 'ypos', y, t.block);
+});
+window.addEventListener('mouseup', () => {
+  if (!drag) return;
+  if (drag.moved) { dragEnded = Date.now(); refreshSoon(); }
+  drag = null;
+  $('hoverbox')?.classList.remove('drag');
+});
 $('boxes').onmousemove = e => {
   const hit = pickAt(...stagePoint(e)), hb = $('hoverbox');
-  if (!hb) return;
+  $('boxes').style.cursor = hit && movable(hit) ? 'move' : '';
+  if (!hb || drag?.moved) return;
   hb.hidden = !hit;
   if (!hit) return;
-  const { W, H } = boxList(), p = hit.control || hit.thing;
+  const { W, H } = boxList();
   const r = live ? (hit.control || (hit.node ? clickRects(hit.thing, hit.info, W, H)[0] : hit.r)) : rectOf(layoutProps(F(L), hit.info.id), W, H, hit.info.hud.hit);
   Object.assign(hb.style, { left: `${r.x / W * 100}%`, top: `${r.y / H * 100}%`, width: `${r.w / W * 100}%`, height: `${r.h / H * 100}%` });
-  hb.firstChild.textContent = hit.control ? `${hit.info.name} › ${controlIn(hit.control, hit.thing)[1]}` : hit.info.name;
+  hb.firstChild.textContent = hit.control ? `${hit.info.name} â€º ${controlIn(hit.control, hit.thing)[1]}` : hit.info.name;
 };
-$('boxes').onmouseleave = () => { if ($('hoverbox')) $('hoverbox').hidden = true; };
-$('boxes').onclick = e => { const hit = pickAt(...stagePoint(e)); if (hit) { $('search').value = ''; select(hit); } };
+$('boxes').onmouseleave = () => { if ($('hoverbox') && !drag) $('hoverbox').hidden = true; };
+// a drag ends with a click too: that one mustn't pick something else
+$('boxes').onclick = e => { if (Date.now() - dragEnded < 300) return; const hit = pickAt(...stagePoint(e)); if (hit) { $('search').value = ''; select(hit); } };
 
 // ---------- the game: live panel list, capture, test server ----------
 let pendingRender = false, captured = false, autoTried = false;
@@ -1841,7 +1914,7 @@ async function showPicker(canCancel) {
   box.innerHTML = '';
   for (const [name, path, where] of huds) {
     const b = el('button', { className: 'hud' + (path.toLowerCase() === current.toLowerCase() ? ' primary' : ''), textContent: name });
-    b.append(el('span', { className: 'meta', textContent: `${where === 'custom' ? 'In your custom folder' : 'Recent'} · ${path}` }));
+    b.append(el('span', { className: 'meta', textContent: `${where === 'custom' ? 'In your custom folder' : 'Recent'} Â· ${path}` }));
     b.onclick = () => openHud(path);
     box.append(b);
   }
@@ -2062,7 +2135,7 @@ function parserCheck() {
   hit = at(600, 370);
   const res = { name: 'r', text: '', parsed: parse('"Resource/UI/x.res" { "urban" { "fgcolor_override" "1 2 3 255" "xpos" "10" } }'), bases: [] };
   const own = ownBlock({ ...hit, res });
-  check(own && own.block === 'urban' && own.what === 'button' && resRows(res, own.block, own.defaults, C).length === 3, 'the clicked control\'s own .res block (show, text + x position)');
+  check(own && own.block === 'urban' && own.what === 'button' && resRows(res, own.block, own.defaults, C).length === 4, 'the clicked control\'s own .res block (show, text, x and y position)');
   const sb = { name: 's', text: '', parsed: parse('"Resource/UI/scoreboard.res" { "CTPlayerLatency0" { "xpos" "1" } "CTPlayerName0" { "font" "X" } }'), bases: [] };
   const scores = { key: 'scores' };
   check(ownBlock({ thing: scores, node: { name: '_CT_playerping0', cls: 'Label', parent: scores }, res: sb }).block === 'CTPlayerLatency0'
