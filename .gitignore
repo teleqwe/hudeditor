@@ -2,10 +2,9 @@
 hudreload/sdk/
 app/webview2/
 
-# Build output; the exe goes up as a release download instead
+# Build output (app/CSSHudEditor.exe is kept in the repo as the download)
 hudreload/build/
 app/build/
-app/CSSHudEditor.exe
 *.tmp
 
 # Working notes

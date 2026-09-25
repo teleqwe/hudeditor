@@ -1,6 +1,6 @@
 # CS:S HUD Editor
 
-One file, `CSSHudEditor.exe`, with nothing to install: the live-reload plugin, the editor and the default files are
+One file, `CSSHudEditor.exe`, with nothing to install (download it from this folder: `app/CSSHudEditor.exe`): the live-reload plugin, the editor and the default files are
 packed inside it. Needs Windows 10 or 11 (it uses the WebView2 runtime that ships with Windows 11).
 
 ## Use
