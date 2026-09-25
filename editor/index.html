@@ -37,7 +37,6 @@
   #hudbtn { flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   input[type=search], input[type=number], .row input:not([type]) { min-width: 0; background: #16181c; color: var(--text); border: 1px solid #3a3f49; border-radius: 4px; padding: 6px 8px; font: inherit; }
   input[type=search] { flex: 1; }
-  #status { padding: 6px 12px; color: var(--dim); border-bottom: 1px solid var(--line); min-height: calc(2.8em + 12px); box-sizing: border-box; } /* two lines, so the list below doesn't jump when the message changes */
   #list { flex: 1; overflow: auto; }
   h3 { margin: 0; padding: 14px 12px 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--accent); border-bottom: 1px solid var(--line); }
   .crumbs { padding: 8px 12px; font-weight: 600; font-size: 14px; border-bottom: 1px solid var(--line); }
@@ -62,6 +61,33 @@
   .row.action button { flex: 1; padding: 8px 10px; }
   button.ghost { background: transparent; border-style: dashed; border-color: #4a505b; color: var(--dim); }
   button.ghost:hover { color: var(--text); }
+  /* colour rows: RGB over the picker, opacity over its swatch, then the name and what it's for */
+  .row.colour { grid-template-columns: 66px 40px 1fr; gap: 10px; align-items: center; }
+  .row.colour .pick { display: grid; gap: 3px; justify-items: stretch; }
+  .row.colour .val { font: 10px/1 ui-monospace, Consolas, monospace; color: var(--dim); text-align: center; white-space: nowrap; }
+  .row.colour input[type=color] { width: 100%; height: 26px; }
+  .aswatch { height: 26px; padding: 0; border: 1px solid #3a3f49; border-radius: 4px; position: relative; overflow: hidden;
+    background: linear-gradient(var(--c), var(--c)), repeating-conic-gradient(#4a4e57 0 25%, #2b2e35 0 50%) 0 0 / 10px 10px; }
+  .aswatch:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .row.colour .name { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .row.colour .meta { margin-top: 1px; }
+  .alphapop { position: fixed; z-index: 20; width: 220px; padding: 10px; background: var(--panel); border: 1px solid #3a3f49; border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, .5); display: grid; gap: 6px; }
+  .alphapop .strip { position: relative; height: 22px; border-radius: 4px; cursor: ew-resize; touch-action: none; border: 1px solid #3a3f49;
+    background: linear-gradient(to right, var(--c), transparent), repeating-conic-gradient(#4a4e57 0 25%, #2b2e35 0 50%) 0 0 / 10px 10px; }
+  .alphapop .knob { position: absolute; top: -3px; bottom: -3px; width: 6px; margin-left: -3px; border-radius: 3px; background: #fff; box-shadow: 0 0 0 1px #000, 0 1px 4px rgba(0, 0, 0, .6); pointer-events: none; }
+  .alphapop .meta { display: flex; justify-content: space-between; }
+  /* renamed words: a small way back */
+  .unrename { margin-left: 4px; padding: 0 5px; font-size: 11px; line-height: 16px; color: var(--dim); background: transparent; border: 1px solid transparent; border-radius: 4px; vertical-align: 1px; }
+  .unrename:hover { color: var(--accent); border-color: #3a3f49; }
+  /* cards fold from the chevron in their title */
+  .card > .sub { display: flex; align-items: center; gap: 6px; }
+  .card > .sub > .renamed-wrap { flex: 1; }
+  .fold-btn { flex: none; width: 22px; height: 22px; padding: 0; display: grid; place-items: center; background: transparent; border: 1px solid transparent; border-radius: 6px; color: var(--dim); }
+  .fold-btn:hover { background: #2c3038; border-color: #3a3f49; color: var(--text); }
+  .fold-btn svg { width: 12px; height: 12px; transition: transform .15s; }
+  .card.folded .fold-btn svg { transform: rotate(-90deg); }
+  .card.folded > :not(.sub) { display: none; }
+  .card.folded > .sub { border-bottom: 0; }
   .rename[contenteditable="plaintext-only"] { outline: 1px solid var(--accent); outline-offset: 1px; border-radius: 2px; cursor: text; }
   .row .reset { margin-left: 8px; padding: 0 6px; font-size: 11px; color: var(--dim); }
   .row.pick { grid-template-columns: 1fr minmax(0, 190px); }
@@ -106,7 +132,19 @@
   .top .line button { padding: 5px 9px; }
   #texts button { padding: 3px 9px; border-radius: 12px; font-size: 12px; }
   .bar { padding: 8px 10px; border-bottom: 0; }
-  #status { margin: 0 10px 8px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
+  /* messages: a note that pops up at the bottom of the sidebar and fades */
+  aside { position: relative; }
+  #status { position: absolute; left: 10px; right: 10px; bottom: 12px; z-index: 5; padding: 9px 12px; border: 1px solid #3a3f49; border-radius: 8px;
+    background: rgba(40, 44, 52, .97); color: var(--text); box-shadow: 0 8px 24px rgba(0, 0, 0, .45); pointer-events: none;
+    opacity: 0; transform: translateY(8px); transition: opacity .2s, transform .2s; }
+  #status.show { opacity: 1; transform: none; }
+  /* test tools: folded under the Test server button */
+  .toolsbtn { display: inline-flex; align-items: center; gap: 6px; }
+  .toolsbtn svg { width: 12px; height: 12px; transition: transform .15s; }
+  .toolsbtn[aria-expanded="true"] { border-color: var(--accent); }
+  .toolsbtn[aria-expanded="true"] svg { transform: rotate(180deg); }
+  #tools { display: grid; gap: 8px; padding: 10px; background: var(--card); border: 1px solid var(--line); border-radius: 8px; }
+  #tools .tline { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
   #list { padding: 0 10px 16px; }
   #list h3 { border: 0; padding: 4px 2px 8px; }
   .card, #list > details { background: var(--card); border: 1px solid var(--line); border-radius: 8px; margin: 0 0 10px; overflow: hidden; }
@@ -141,19 +179,25 @@
     <button id="explore" title="Open the HUD's folder">Folder</button>
   </div>
   <div class="line">
-    <span class="glabel">Game</span>
     <button id="testserver" title="Offline game with a frozen bot and bhop/surf-style timer texts on screen">Test server</button>
-    <button id="scores" aria-pressed="false" title="Keep the scoreboard open to edit it. Click again (or press Tab in the game) to close it.">Scoreboard</button>
+    <button id="toolsbtn" class="toolsbtn" aria-expanded="false" title="Scoreboard and the sample texts on the test server">Test tools
+      <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
     <button id="capture" hidden>Capture game</button>
     <button id="launch" hidden>Launch game</button>
   </div>
-  <div class="line" id="texts">
-    <span class="glabel">Test text</span>
-    <button data-bit="1" title="Timer box (font HudHintText) and right-side text (HudHintTextSmall)">Timer</button>
-    <button data-bit="2" title="Centre print speed (font Trebuchet24, SourceScheme)">1 Speed</button>
-    <button data-bit="4" title="jhud under it (font CenterPrintText, ClientScheme)">2 jhud</button>
-    <button data-bit="8" title="Record times in the top left corner (font CenterPrintText, ClientScheme)">3 Top left</button>
-    <button data-bit="16" title="A chat line every few seconds (font ChatFont, ChatScheme)">Chat</button>
+  <div id="tools" hidden>
+    <div class="tline">
+      <span class="glabel">Keep open</span>
+      <button id="scores" aria-pressed="false" title="Keep the scoreboard open to edit it. Click again (or press Tab in the game) to close it.">Scoreboard</button>
+    </div>
+    <div class="tline" id="texts">
+      <span class="glabel">Sample text</span>
+      <button data-bit="1" title="Timer box (font HudHintText) and right-side text (HudHintTextSmall)">Timer</button>
+      <button data-bit="2" title="Centre print speed (font Trebuchet24, SourceScheme)">1 Speed</button>
+      <button data-bit="4" title="jhud under it (font CenterPrintText, ClientScheme)">2 jhud</button>
+      <button data-bit="8" title="Record times in the top left corner (font CenterPrintText, ClientScheme)">3 Top left</button>
+      <button data-bit="16" title="A chat line every few seconds (font ChatFont, ChatScheme)">Chat</button>
+    </div>
   </div>
   </div>
   <div class="bar"><input type="search" id="search" placeholder="Search everything, e.g. health, timer, button"></div>
@@ -516,7 +560,15 @@ let hudName = null, files = [], writing = Promise.resolve(), dirty = false;
 const $ = id => document.getElementById(id);
 const F = name => files.find(f => f.name === name);
 let statusAt = 0;
-const status = msg => { $('status').textContent = msg; statusAt = Date.now(); };
+// Messages pop up at the bottom of the sidebar for a few seconds (longer ones stay longer).
+let statusHide = 0;
+const status = msg => {
+  const s = $('status');
+  s.textContent = msg; statusAt = Date.now();
+  s.classList.toggle('show', !!msg);
+  clearTimeout(statusHide);
+  statusHide = setTimeout(() => s.classList.remove('show'), Math.max(3500, msg.length * 70));
+};
 const readHud = path => call('read', path).catch(() => null);
 
 async function loadFile(name) {
@@ -876,7 +928,7 @@ function scoreboardSections(sel, shownFonts) {
     ...SCOREBOARD_CVARS.map(([label, prefix, def]) => {
       const now = cvarColour(prefix, def), reset = () => { setCvarColour(prefix, `${def} 255`); refreshSoon(); };
       const r = colorRow(label, prefix, now, v => setCvarColour(prefix, v), [], now === `${def} 255` ? null : reset);
-      r.querySelector('input[type=range]').hidden = true; // no opacity
+      r.querySelector('.alpha').hidden = true; // no opacity
       return r;
     })];
   const fonts = SCOREBOARD_FONTS.filter(([name]) => !shownFonts.includes(name) && hasFont(C, name)).map(([name, what]) => fontFold(C, name, what));
@@ -939,11 +991,21 @@ function pickAt(fx, fy) {
 
 // ---------- list ----------
 // The sidebar's own words (section titles, row names, descriptions) can be renamed: double-click one. Kept in this
-// browser by the original text, so a rename shows wherever that text does; emptied, it goes back. Not in the HUD.
+// browser by the original text, so a rename shows wherever that text does; ↺ (or emptying it) puts the original back.
+// Not in the HUD.
 let renamed = {};
 try { renamed = JSON.parse(localStorage.getItem('renamed') || '{}'); } catch {}
 function renameable(text) {
-  const s = el('span', { className: 'rename', textContent: renamed[text] ?? text, title: 'Double-click to rename' });
+  const wrap = el('span', { className: 'renamed-wrap' });
+  const s = el('span', { className: 'rename', title: 'Double-click to rename' });
+  const back = el('button', { className: 'unrename', textContent: '↺', title: `Back to "${text}"`, tabIndex: -1 });
+  const keep = t => {
+    if (t && t !== text) renamed[text] = t; else delete renamed[text];
+    try { localStorage.setItem('renamed', JSON.stringify(renamed)); } catch {}
+    show();
+  };
+  const show = () => { s.textContent = renamed[text] ?? text; back.hidden = !(text in renamed); };
+  back.onclick = e => { e.preventDefault(); e.stopPropagation(); keep(''); };
   s.ondblclick = e => {
     e.preventDefault(); e.stopPropagation();
     s.contentEditable = 'plaintext-only';
@@ -953,31 +1015,68 @@ function renameable(text) {
       if (k.key === 'Enter') { k.preventDefault(); s.blur(); }
       else if (k.key === 'Escape') { s.textContent = renamed[text] ?? text; s.blur(); }
     };
-    s.onblur = () => {
-      s.contentEditable = 'false';
-      const t = s.textContent.trim();
-      if (t && t !== text) renamed[text] = t; else delete renamed[text];
-      s.textContent = renamed[text] ?? text;
-      try { localStorage.setItem('renamed', JSON.stringify(renamed)); } catch {}
-    };
+    s.onblur = () => { s.contentEditable = 'false'; keep(s.textContent.trim()); };
   };
-  return s;
+  show();
+  wrap.append(s, back);
+  return wrap;
 }
 
+// Opacity: a second swatch (the colour over a checkerboard, as see-through as it is) that opens a strip fading the
+// colour from 100% to 0%: click or drag along it. Arrow keys on the swatch step by 5%.
+let alphaPop = null;
+const closeAlpha = () => { if (alphaPop) { alphaPop.remove(); alphaPop = null; } };
+document.addEventListener('pointerdown', e => { if (alphaPop && !alphaPop.contains(e.target) && !e.target.closest('.alpha button')) closeAlpha(); });
+function openAlpha(anchor, rgb, alpha, onPick) {
+  closeAlpha();
+  const pop = alphaPop = el('div', { className: 'alphapop' }), strip = el('div', { className: 'strip' }), knob = el('div', { className: 'knob' });
+  const val = el('div', { className: 'meta' });
+  strip.style.setProperty('--c', `rgb(${rgb.join(' ')})`);
+  strip.append(knob);
+  pop.append(strip, val);
+  const show = a => { knob.style.left = `${(1 - a / 255) * 100}%`; val.textContent = `${Math.round(a / 2.55)}% opaque`; };
+  const at = e => { const r = strip.getBoundingClientRect(), a = Math.round(255 * (1 - Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)))); show(a); onPick(a); };
+  strip.onpointerdown = e => { strip.setPointerCapture(e.pointerId); at(e); strip.onpointermove = at; };
+  strip.onpointerup = () => { strip.onpointermove = null; };
+  show(alpha);
+  document.body.append(pop);
+  const r = anchor.getBoundingClientRect();
+  pop.style.left = `${Math.max(8, Math.min(r.left, innerWidth - pop.offsetWidth - 8))}px`;
+  pop.style.top = `${r.bottom + pop.offsetHeight + 12 > innerHeight ? r.top - pop.offsetHeight - 6 : r.bottom + 6}px`;
+}
+
+// A colour: its RGB over the colour picker, its opacity over the opacity swatch, then its name and what it's for.
 function colorRow(label, note, value, onChange, keys = [], onReset = null) {
-  const rgba = toRgba(value);
-  const row = document.createElement('div');
-  row.className = 'row';
-  row.innerHTML = `<input type="color" value="${toHex(rgba)}"><div><div></div><div class="meta"></div></div>
-    <input type="range" min="0" max="255" value="${rgba[3]}" title="Opacity">`;
-  const [color, alpha] = row.querySelectorAll('input');
+  let rgba = toRgba(value);
+  const row = el('div', { className: 'row colour' });
+  const rgbText = el('div', { className: 'val' }), color = el('input', { type: 'color', value: toHex(rgba) });
+  const aText = el('div', { className: 'val' }), aBtn = el('button', { className: 'aswatch' });
+  const pick = el('div', { className: 'pick' }), alpha = el('div', { className: 'pick alpha' }), name = el('div', { className: 'name' }), meta = el('div', { className: 'meta' });
+  const show = () => {
+    rgbText.textContent = rgba.slice(0, 3).join(' ');
+    aText.textContent = `${Math.round(rgba[3] / 2.55)}%`;
+    aBtn.style.setProperty('--c', `rgb(${rgba.slice(0, 3).join(' ')} / ${rgba[3] / 255})`);
+    aBtn.title = `Opacity ${aText.textContent}: click to change`;
+  };
+  const changed = () => { show(); onChange(rgba.join(' ')); };
   color.setAttribute('aria-label', `${label} colour`);
-  alpha.setAttribute('aria-label', `${label} opacity`);
-  row.children[1].firstElementChild.append(renameable(label));
-  if (note) row.querySelector('.meta').append(renameable(note));
-  if (keys.length) row.querySelector('.meta').append(el('span', { className: 'setting', textContent: keys.join(' + ') }));
-  if (onReset) row.children[1].firstElementChild.append(el('button', { className: 'reset', textContent: 'Default', title: 'Back to the default colour', onclick: onReset }));
-  color.oninput = alpha.oninput = () => onChange(fromHex(color.value, +alpha.value));
+  aBtn.setAttribute('aria-label', `${label} opacity`);
+  color.oninput = () => { rgba = [...toRgba(fromHex(color.value, rgba[3]))]; changed(); };
+  aBtn.onclick = () => alphaPop ? closeAlpha() : openAlpha(aBtn, rgba.slice(0, 3), rgba[3], a => { rgba[3] = a; changed(); });
+  aBtn.onkeydown = e => {
+    const d = { ArrowRight: 13, ArrowUp: 13, ArrowLeft: -13, ArrowDown: -13 }[e.key];
+    if (d) { e.preventDefault(); rgba[3] = Math.max(0, Math.min(255, rgba[3] + d)); changed(); }
+  };
+  pick.append(rgbText, color);
+  alpha.append(aText, aBtn);
+  name.append(renameable(label));
+  if (onReset) name.append(el('button', { className: 'reset', textContent: 'Default', title: 'Back to the default colour', onclick: onReset }));
+  if (note) meta.append(renameable(note));
+  if (keys.length) meta.append(el('span', { className: 'setting', textContent: keys.join(' + ') }));
+  const text = el('div');
+  text.append(name, meta);
+  row.append(pick, alpha, text);
+  show();
   row.dataset.q = `${label} ${note} ${keys.join(' ')}`.toLowerCase();
   return row;
 }
@@ -1892,7 +1991,7 @@ function otherRows(name, where) {
   const t = tables(f), seen = new Map();
   for (const [k, v] of [...t.base, ...t.colors]) if (!LISTED.has(`${name}:${k}`)) seen.set(k, v.name);
   return [...seen.values()].sort((a, b) => a.localeCompare(b)).map(key => [key, resolve(t, key)]).filter(([, v]) => v)
-    .map(([key, v]) => { const r = colorRow(key, where, v, v2 => save(f, key, v2)); r.children[1].firstElementChild.className = 'key'; r.dataset.q += ` ${key.toLowerCase()}`; return r; });
+    .map(([key, v]) => { const r = colorRow(key, where, v, v2 => save(f, key, v2)); r.querySelector('.name').classList.add('key'); r.dataset.q += ` ${key.toLowerCase()}`; return r; });
 }
 
 const el = (tag, props) => Object.assign(document.createElement(tag), props);
@@ -1915,10 +2014,22 @@ function render() {
 }
 
 // A bordered group of rows with a title.
+// It folds with the chevron top right (remembered by title); a search shows everything it finds anyway.
+let folded = new Set();
+try { folded = new Set(JSON.parse(localStorage.getItem('folded') || '[]')); } catch {}
 function card(title, rows) {
   const c = el('section', { className: 'card' });
   const sub = el('div', { className: 'sub' });
-  sub.append(renameable(title));
+  const fold = el('button', { className: 'fold-btn', title: 'Fold or unfold', innerHTML: '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>' });
+  const set = on => { c.classList.toggle('folded', on); fold.setAttribute('aria-expanded', !on); };
+  fold.onclick = () => {
+    const on = !c.classList.contains('folded');
+    set(on);
+    on ? folded.add(title) : folded.delete(title);
+    try { localStorage.setItem('folded', JSON.stringify([...folded])); } catch {}
+  };
+  set(folded.has(title) && !$('search').value.trim());
+  sub.append(renameable(title), fold);
   c.append(sub, ...rows);
   return c;
 }
@@ -1963,9 +2074,8 @@ function renderList() {
     done.onclick = async () => {
       await sleep(300); // a change still being typed
       await writing;
-      const saved = dirty && await saveHud(), msg = $('status').textContent;
+      if (dirty) await saveHud();
       await select(null);
-      if (saved) status(msg); // the list's hint would replace it
     };
     crumbs.prepend(back);
     crumbs.append(done);
@@ -2007,8 +2117,6 @@ function renderList() {
   const other = el('details');
   other.append(el('summary', { textContent: 'All other colours' }), ...otherRows(C, 'In game'), ...otherRows(S, 'Menus'), ...otherRows(CH, 'Chat'));
   list.append(other, allFonts());
-  // the list's hint, unless a message ("Saved...") went up just now
-  if (!selected && Date.now() - statusAt > 5000) status(live ? 'Click anything in the preview to edit it, or drag it to move it. Keys pressed over it go to the game, e.g. your chat key opens the chat.' : 'Pick a HUD part below, or start the game to click things in the preview.');
 }
 
 // ---------- preview boxes ----------
@@ -2243,8 +2351,12 @@ async function toggleText(bit) {
   await call('cmd', '', `schemereload_testtext ${texts}`);
 }
 
+// The scoreboard and sample text toggles fold under the Test server button; starting a test game opens them.
+function showTools(on) { $('tools').hidden = !on; $('toolsbtn').setAttribute('aria-expanded', on); }
+
 async function testServer() {
   if (!live) { status('Start the game first.'); return; }
+  showTools(true);
   status('Starting an offline test game on de_dust2...');
   await call('cmd', '', `schemereload_testtext ${texts}; ${TEST_SETUP}`);
   // once the team menu (or MOTD) shows up, join CT and close the menus
@@ -2346,6 +2458,7 @@ if (host) {
   });
   $('explore').onclick = () => call('explore');
   $('testserver').onclick = testServer;
+  $('toolsbtn').onclick = () => showTools($('tools').hidden);
   // held open like Tab does, as Tab can't be held down while clicking in the editor
   $('scores').onclick = () => {
     if (!live) return status('Start the game first.');
@@ -2592,9 +2705,13 @@ if (host && location.hash === '#hosttest') (async () => {
     live = liveWas;
     check(spans[0] === 640 && spans[1] === null && mid.xpos === '256' && mid.ypos === 'c-10', `inside a window, centring counts from its edge (${spans} ${JSON.stringify(mid)})`);
     renamed['Colours: the window'] = 'Window colours';
-    const renamedOk = card('Colours: the window', []).textContent === 'Window colours';
+    const renamedOk = card('Colours: the window', []).querySelector('.rename').textContent === 'Window colours';
     delete renamed['Colours: the window'];
-    check(renamedOk && card('Colours: the window', []).textContent === 'Colours: the window', 'sidebar titles can be renamed');
+    check(renamedOk && card('Colours: the window', []).querySelector('.rename').textContent === 'Colours: the window', 'sidebar titles can be renamed');
+    let picked = '';
+    const cr = colorRow('Test', 'note', '10 20 30 128', v => { picked = v; }), crVals = [...cr.querySelectorAll('.val')].map(v => v.textContent).join('|');
+    cr.querySelector('.aswatch').onkeydown({ key: 'ArrowRight', preventDefault() {} });
+    check(crVals === '10 20 30|50%' && picked === '10 20 30 141', `colour rows show RGB and opacity, opacity steps from its swatch (${crVals}, ${picked})`);
     check(JSON.stringify(left) === '{"xpos":"1"}' && JSON.stringify(corner) === '{"xpos":"r101","ypos":"r61"}',
       `dragging snaps to edges 1 unit in (${JSON.stringify(left)} ${JSON.stringify(corner)})`);
     const boxTick = sbSections[0][1][1].querySelector('input'); // "Colour box behind the scoreboard" (not in the page, so no click events)
