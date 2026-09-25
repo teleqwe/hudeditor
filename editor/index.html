@@ -67,20 +67,47 @@
   .row.colour .acts { display: grid; gap: 4px; justify-items: stretch; }
   .row.colour .acts .reset { margin: 0; padding: 1px 8px; }
   .row.colour .val { font: 10px/1 ui-monospace, Consolas, monospace; color: var(--dim); text-align: center; white-space: nowrap; }
-  .row.colour input[type=color], .aswatch { width: 40px; height: 26px; }
-  .row.colour input[type=color] { padding: 0; border: 1px solid #3a3f49; border-radius: 4px; overflow: hidden; }
-  .row.colour input[type=color]::-webkit-color-swatch-wrapper { padding: 0; }
-  .row.colour input[type=color]::-webkit-color-swatch { border: 0; border-radius: 0; }
-  .aswatch { height: 26px; padding: 0; border: 1px solid #3a3f49; border-radius: 4px; position: relative; overflow: hidden;
+  .row.colour .swatch { width: 40px; height: 26px; padding: 0; border: 1px solid #3a3f49; border-radius: 4px; cursor: pointer;
     background: linear-gradient(var(--c), var(--c)), repeating-conic-gradient(#4a4e57 0 25%, #2b2e35 0 50%) 0 0 / 10px 10px; }
-  .aswatch:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .row.colour .swatch:hover { border-color: var(--accent); }
+  .swatch:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   .row.colour .name { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
   .row.colour .meta { margin-top: 1px; }
-  .alphapop { position: fixed; z-index: 20; width: 220px; padding: 10px; background: var(--panel); border: 1px solid #3a3f49; border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, .5); display: grid; gap: 6px; }
-  .alphapop .strip { position: relative; height: 22px; border-radius: 4px; cursor: ew-resize; touch-action: none; border: 1px solid #3a3f49;
-    background: linear-gradient(to right, var(--c), transparent), repeating-conic-gradient(#4a4e57 0 25%, #2b2e35 0 50%) 0 0 / 10px 10px; }
-  .alphapop .knob { position: absolute; top: -3px; bottom: -3px; width: 6px; margin-left: -3px; border-radius: 3px; background: #fff; box-shadow: 0 0 0 1px #000, 0 1px 4px rgba(0, 0, 0, .6); pointer-events: none; }
-  .alphapop .meta { display: flex; justify-content: space-between; }
+  /* the colour picker */
+  .cpop { position: fixed; z-index: 20; width: 236px; padding: 12px; display: grid; gap: 10px; background: #262a31; border: 1px solid #3a3f49; border-radius: 10px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, .55); }
+  .cpop .sv { position: relative; height: 140px; border-radius: 6px; cursor: crosshair; touch-action: none;
+    background: linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, var(--h)); }
+  .cpop .bar { position: relative; height: 12px; border-radius: 6px; cursor: ew-resize; touch-action: none; }
+  .cpop .hue { background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); }
+  .cpop .alpha { background: linear-gradient(to right, var(--c), transparent), repeating-conic-gradient(#4a4e57 0 25%, #2b2e35 0 50%) 0 0 / 8px 8px; }
+  .cpop i { position: absolute; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, .6), 0 1px 4px rgba(0, 0, 0, .5); pointer-events: none; }
+  .cpop .bar i { top: 50%; background: transparent; }
+  .cpop .nums { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .cpop .nums label { display: grid; gap: 3px; justify-items: center; font-size: 10px; color: var(--dim); }
+  .cpop .nums input { width: 100%; padding: 4px 2px; text-align: center; background: #16181c; color: var(--text); border: 1px solid #3a3f49; border-radius: 4px; font: 12px ui-monospace, Consolas, monospace; -moz-appearance: textfield; }
+  .cpop .nums input::-webkit-inner-spin-button { -webkit-appearance: none; }
+  .cpop .foot { display: flex; gap: 6px; align-items: center; }
+  .cpop .prev { flex: 0 0 34px; height: 28px; border-radius: 5px; border: 1px solid #3a3f49;
+    background: linear-gradient(var(--c), var(--c)), repeating-conic-gradient(#4a4e57 0 25%, #2b2e35 0 50%) 0 0 / 8px 8px; }
+  .cpop .foot button { flex: 1; padding: 5px 0; }
+  /* on/off rows, as wide as the number boxes */
+  .seg { display: flex; }
+  .seg button { flex: 1; padding: 4px 0; border: 1px solid #3a3f49; border-radius: 0; background: #1b1e23; color: var(--dim); font-size: 12px; }
+  .seg button + button { border-left: 0; }
+  .seg button:first-child { border-radius: 4px 0 0 4px; }
+  .seg button:last-child { border-radius: 0 4px 4px 0; }
+  .seg button[aria-pressed="true"] { background: #2f343d; color: var(--text); border-color: #3a3f49; }
+  .seg button:last-child[aria-pressed="true"] { background: rgba(255, 176, 0, .16); color: var(--accent); }
+  /* + under a font: the settings it can also have */
+  .row.addkey { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .row.addkey .plus { width: 26px; height: 26px; padding: 0; border-radius: 50%; font-size: 16px; line-height: 1; color: var(--dim); }
+  .row.addkey .plus:hover, .row.addkey .plus.open { color: var(--accent); }
+  .row.addkey .chips { display: flex; flex-wrap: wrap; gap: 5px; }
+  .row.addkey .chips button { padding: 2px 9px; border-radius: 12px; font-size: 12px; }
+  .card.fonts .divider { display: flex; align-items: center; gap: 6px; }
+  .card.fonts .divider > .renamed-wrap { flex: 1; }
+  .card.fonts .divider .addfont { margin: 0; font-weight: 400; }
   /* renamed words: a small way back */
   .unrename { margin-left: 4px; padding: 0 5px; font-size: 11px; line-height: 16px; color: var(--dim); background: transparent; border: 1px solid transparent; border-radius: 4px; vertical-align: 1px; }
   .unrename:hover { color: var(--accent); border-color: #3a3f49; }
@@ -210,9 +237,9 @@
     <div class="tline" id="texts">
       <span class="glabel">Sample text</span>
       <button data-bit="1" title="Timer box (font HudHintText) and right-side text (HudHintTextSmall)">Timer</button>
-      <button data-bit="2" title="Centre print speed (font Trebuchet24, SourceScheme)">1 Speed</button>
-      <button data-bit="4" title="jhud under it (font CenterPrintText, ClientScheme)">2 jhud</button>
-      <button data-bit="8" title="Record times in the top left corner (font CenterPrintText, ClientScheme)">3 Top left</button>
+      <button data-bit="2" title="Speed in the centre print (font Trebuchet24, SourceScheme)">Small speed</button>
+      <button data-bit="4" title="Large speed text under it, like jhud (font CenterPrintText, ClientScheme)">Large speed</button>
+      <button data-bit="8" title="Record times in the top left corner (font CenterPrintText, ClientScheme)">Top left</button>
       <button data-bit="16" title="A chat line every few seconds (font ChatFont, ChatScheme)">Chat lines</button>
     </div>
   </div>
@@ -276,8 +303,9 @@ const HUD = {
     ['Typing text', 'Chat.TypingText', ''], ['"Say :" text', 'Label.TextColor', ''], ['Typing box', 'TextEntry.BgColor', '']] },
   HudHintDisplay: { name: 'Timer / hint text', fit: true, rounded: true, roundOnly: true, note: 'Font HudHintText', colours: [['Text', 'HintMessageFg', 'Also the right-side text'], ['Background', 'HintMessageBg', '']] },
   HudHintKeyDisplay: { name: 'Right-side text', fit: true, note: 'Font HudHintTextSmall', colours: [['Text', 'HintMessageFg', 'Shared with the timer text (the game ignores HudLayout "TextColor" here)']] },
-  CCenterStringLabel: { name: 'Centre print text', fixed: 'The game always draws this text white, so no HUD can recolour it. Its font (below) can change.', note: 'PrintCenterText from server plugins; font Trebuchet24' },
-  HudMessage: { name: 'Server HUD text (jhud, top left)', fixed: 'Its colour and position come from the server plugin, not the HUD. Its font (below) can change.', note: 'ShowHudText / game_text from server plugins and maps; font CenterPrintText',
+  CCenterStringLabel: { name: 'Small speed', fixed: 'The game always draws this text white, so no HUD can recolour it. Its font (below) can change.', note: 'Centre print (PrintCenterText) from server plugins; font Trebuchet24',
+    middle: [120, 30] },
+  HudMessage: { name: 'Large speed', fixed: 'Its colour and position come from the server plugin, not the HUD. Its font (below) can change. The record times in the top left are the same kind of text.', note: 'ShowHudText / game_text from server plugins and maps; font CenterPrintText',
     hit: [['c-60', '178', '120', '30'], ['4', '2', '230', '60']] },
   TargetID: { name: 'Player name when aiming', quiet: true, colours: [['Counter-Terrorists', 'CT_Blue', 'Also kill feed names unless set there'], ['Terrorists', 'T_Red', 'Also kill feed names unless set there'], ['Hostages', 'Hostage_Yellow', ''] ] },
   // radio menus, and SourceMod menus on bhop/surf servers (checkpoints, timer menus)
@@ -779,7 +807,9 @@ const prettify = n => n.replace(/^Hud/, '').replace(/([a-z])([A-Z])/g, '$1 $2').
 let selected = null; // { thing: panel-like, info, control: panel|null }
 
 // A window's own .res file, where single controls get their own colours and positions.
-const STARTUP_RES = new Set(['team', 'class_ct', 'class_ter', 'info', 'buy_ct', 'buy_ter']);
+// The buy menu reads its .res once, when the game makes it (the plugin reads the team, class and MOTD ones again on a
+// reload)
+const STARTUP_RES = new Set(['buy_ct', 'buy_ter']);
 const UI_RES = { scores: 'resource/UI/scoreboard.res', specgui: 'resource/UI/spectator.res', specmenu: 'resource/UI/bottomspectator.res',
   team: 'resource/UI/TeamMenu.res', class_ct: 'resource/UI/ClassMenu_CT.res', class_ter: 'resource/UI/ClassMenu_TER.res', info: 'resource/UI/TextWindow.res',
   buy_ct: 'resource/UI/BuyMenu.res', buy_ter: 'resource/UI/BuyMenu.res',
@@ -975,6 +1005,8 @@ async function select(sel) {
 // draws, or ("fit") the area its child panels cover: the hint box is a label sized to the text in a much larger panel.
 function clickRects(p, info, W, H) {
   if (p !== p.thing || !info.hud) return [p];
+  // a wide panel whose text is drawn in its middle: just that area (in 480-line units)
+  if (info.hud.middle) { const [w, h] = info.hud.middle.map(n => n * H / 480); return [{ x: p.x + (p.w - w) / 2, y: p.y + (p.h - h) / 2, w, h }]; }
   if (info.hud.hit) {
     // a full-screen panel draws at a fixed place inside itself, so its areas move with the panel (xpos/ypos)
     const ox = p.w >= W * 0.95 ? p.x : 0, oy = p.h >= H * 0.95 ? p.y : 0;
@@ -1047,70 +1079,143 @@ function renameable(text) {
   return wrap;
 }
 
-// Opacity: a second swatch (the colour over a checkerboard, as see-through as it is) that opens a strip fading the
-// colour from 100% to 0%: click or drag along it. Arrow keys on the swatch step by 5%.
-let alphaPop = null;
-const closeAlpha = () => { if (alphaPop) { alphaPop.remove(); alphaPop = null; } };
-document.addEventListener('pointerdown', e => { if (alphaPop && !alphaPop.contains(e.target) && !e.target.closest('.alpha button')) closeAlpha(); });
-function openAlpha(anchor, rgb, alpha, onPick) {
-  closeAlpha();
-  const pop = alphaPop = el('div', { className: 'alphapop' }), strip = el('div', { className: 'strip' }), knob = el('div', { className: 'knob' });
-  const val = el('div', { className: 'meta' });
-  strip.style.setProperty('--c', `rgb(${rgb.join(' ')})`);
-  strip.append(knob);
-  pop.append(strip, val);
-  const show = a => { knob.style.left = `${(1 - a / 255) * 100}%`; val.textContent = `${Math.round(a / 2.55)}% opaque`; };
-  const at = e => { const r = strip.getBoundingClientRect(), a = Math.round(255 * (1 - Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)))); show(a); onPick(a); };
-  strip.onpointerdown = e => { strip.setPointerCapture(e.pointerId); at(e); strip.onpointermove = at; };
-  strip.onpointerup = () => { strip.onpointermove = null; };
-  show(alpha);
-  document.body.append(pop);
-  const r = anchor.getBoundingClientRect();
-  pop.style.left = `${Math.max(8, Math.min(r.left, innerWidth - pop.offsetWidth - 8))}px`;
-  pop.style.top = `${r.bottom + pop.offsetHeight + 12 > innerHeight ? r.top - pop.offsetHeight - 6 : r.bottom + 6}px`;
+// The colour picker: a square for shade, a bar for hue, a bar fading the colour from 100% to 0% opacity, the numbers,
+// and Copy / Paste ("R G B A", also takes #hex and rgb()). Opens from either swatch of a colour row.
+let cpop = null, colourClip = '';
+const closePicker = () => { if (cpop) { cpop.remove(); cpop = null; } };
+document.addEventListener('pointerdown', e => { if (cpop && !cpop.contains(e.target) && !e.target.closest('.swatch')) closePicker(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closePicker(); });
+const clamp = (n, a = 0, b = 1) => Math.min(b, Math.max(a, n));
+function toHsv([r, g, b]) {
+  [r, g, b] = [r / 255, g / 255, b / 255];
+  const mx = Math.max(r, g, b), d = mx - Math.min(r, g, b);
+  const h = !d ? 0 : mx === r ? ((g - b) / d + 6) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return [h * 60, mx ? d / mx : 0, mx];
+}
+const fromHsv = (h, s, v) => [5, 3, 1].map(n => { const k = (n + h / 60) % 6; return Math.round(255 * v * (1 - s * clamp(Math.min(k, 4 - k)))); });
+// "255 128 0", "255 128 0 200", "255, 128, 0", "#ff8000", "#ff8000c8", "rgb(255 128 0)", "rgba(255, 128, 0, 0.5)"
+function parseColour(s) {
+  s = (s || '').trim();
+  const hex = /^#?([\da-f]{6})([\da-f]{2})?$/i.exec(s);
+  if (hex) return [0, 2, 4].map(i => parseInt(hex[1].slice(i, i + 2), 16)).concat(hex[2] ? parseInt(hex[2], 16) : 255);
+  const n = s.replace(/^rgba?\(|\)$/gi, '').split(/[\s,/]+/).filter(Boolean).map(Number);
+  if ((n.length !== 3 && n.length !== 4) || !n.every(Number.isFinite)) return null;
+  if (n.length === 3) n.push(255);
+  else if (/^rgba?\(/i.test(s) && n[3] <= 1) n[3] *= 255; // css alpha is 0-1
+  return n.map(x => Math.round(clamp(x, 0, 255)));
 }
 
-// Each colour row's own steps back (its Undo), kept across re-renders by what the row is: "label|note|keys" -> values
-// from before each change. Changes less than 0.7 s apart (a drag) are one step.
-const colourSteps = {};
-// A colour: its RGB over the colour, its opacity over a second swatch, then its name and what it's for, and at the
-// far right Undo (this row's last change) and Default.
-function colorRow(label, note, value, onChange, keys = [], onReset = null) {
-  let rgba = toRgba(value), lastAt = 0;
-  const id = `${label}|${note}|${keys.join('+')}`, steps = colourSteps[id] ||= [];
-  const row = el('div', { className: 'row colour' });
-  const rgbText = el('div', { className: 'val' }), color = el('input', { type: 'color', value: toHex(rgba) });
-  const aText = el('div', { className: 'val' }), aBtn = el('button', { className: 'aswatch' });
-  const pick = el('div', { className: 'pick' }), alpha = el('div', { className: 'pick alpha' }), name = el('div', { className: 'name' }), meta = el('div', { className: 'meta' });
-  const undo = el('button', { className: 'reset', textContent: 'Undo', title: 'Undo the last change to this colour' });
-  const show = () => {
-    color.value = toHex(rgba);
-    rgbText.textContent = rgba.slice(0, 3).join(' ');
-    aText.textContent = `${Math.round(rgba[3] / 2.55)}%`;
-    aBtn.style.setProperty('--c', `rgb(${rgba.slice(0, 3).join(' ')} / ${rgba[3] / 255})`);
-    aBtn.title = `Opacity ${aText.textContent}: click to change`;
-    undo.disabled = !steps.length;
+function openPicker(anchor, rgba, onPick, owner) {
+  closePicker();
+  let c = [...rgba], [h, s, v] = toHsv(c);
+  const pop = cpop = el('div', { className: 'cpop' });
+  pop.owner = owner;
+  const sv = el('div', { className: 'sv' }), hue = el('div', { className: 'bar hue' }), alpha = el('div', { className: 'bar alpha' });
+  const knobs = [sv, hue, alpha].map(b => b.appendChild(el('i')));
+  const prev = el('div', { className: 'prev' }), nums = el('div', { className: 'nums' });
+  const fields = ['R', 'G', 'B', 'A %'].map((n, i) => {
+    const input = el('input', { type: 'number', min: 0, max: i < 3 ? 255 : 100, step: 1 });
+    input.setAttribute('aria-label', n);
+    const lab = el('label');
+    lab.append(input, el('span', { textContent: n }));
+    nums.append(lab);
+    return input;
+  });
+  const copy = el('button', { textContent: 'Copy', title: 'Copy as "R G B A"' }), paste = el('button', { textContent: 'Paste', title: 'Paste "R G B A", #hex or rgb()' });
+  const show = from => {
+    const rgb = c.slice(0, 3).join(' ');
+    sv.style.setProperty('--h', `hsl(${h} 100% 50%)`);
+    knobs[0].style.cssText = `left:${s * 100}%;top:${(1 - v) * 100}%;background:rgb(${rgb})`;
+    knobs[1].style.left = `${h / 3.6}%`;
+    knobs[2].style.left = `${(1 - c[3] / 255) * 100}%`;
+    alpha.style.setProperty('--c', `rgb(${rgb})`);
+    prev.style.setProperty('--c', `rgb(${rgb} / ${c[3] / 255})`);
+    fields.forEach((f, i) => { if (f !== from) f.value = i < 3 ? c[i] : Math.round(c[3] / 2.55); });
   };
-  const before = () => { if (Date.now() - lastAt > 700) steps.push(rgba.join(' ')); lastAt = Date.now(); };
-  const changed = () => { show(); onChange(rgba.join(' ')); };
-  color.setAttribute('aria-label', `${label} colour`);
+  const emit = from => { show(from); onPick([...c]); };
+  const drag = (bar, fn) => {
+    const at = e => { const r = bar.getBoundingClientRect(); fn(clamp((e.clientX - r.left) / r.width), clamp((e.clientY - r.top) / r.height)); emit(); };
+    bar.onpointerdown = e => { bar.setPointerCapture(e.pointerId); at(e); bar.onpointermove = at; };
+    bar.onpointerup = () => { bar.onpointermove = null; };
+  };
+  drag(sv, (x, y) => { s = x; v = 1 - y; c = [...fromHsv(h, s, v), c[3]]; });
+  drag(hue, x => { h = x * 360; c = [...fromHsv(h, s, v), c[3]]; });
+  drag(alpha, x => { c[3] = Math.round((1 - x) * 255); }); // 100% at the left, like the swatch strip before
+  fields.forEach((f, i) => f.oninput = () => {
+    if (f.value === '') return;
+    if (i < 3) { c[i] = Math.round(clamp(+f.value, 0, 255)); const n = toHsv(c); if (n[1]) h = n[0]; [s, v] = n.slice(1); }
+    else c[3] = Math.round(clamp(+f.value, 0, 100) * 2.55);
+    emit(f);
+  });
+  const flash = (b, t) => { const was = b.textContent; b.textContent = t; setTimeout(() => { b.textContent = was; }, 900); };
+  copy.onclick = async () => {
+    colourClip = c.join(' ');
+    try { await navigator.clipboard.writeText(colourClip); } catch {} // the editor keeps its own copy too
+    flash(copy, 'Copied');
+  };
+  paste.onclick = async () => {
+    let text = '';
+    try { text = await navigator.clipboard.readText(); } catch {}
+    const p = parseColour(text) || parseColour(colourClip);
+    if (!p) return flash(paste, 'No colour');
+    c = p;
+    const n = toHsv(c);
+    if (n[1]) h = n[0];
+    [s, v] = n.slice(1);
+    emit();
+    flash(paste, 'Pasted');
+  };
+  const foot = el('div', { className: 'foot' });
+  foot.append(prev, copy, paste);
+  pop.append(sv, hue, alpha, nums, foot);
+  show();
+  document.body.append(pop);
+  const r = anchor.getBoundingClientRect();
+  pop.style.left = `${clamp(r.left - 20, 8, innerWidth - pop.offsetWidth - 8)}px`;
+  pop.style.top = `${r.bottom + pop.offsetHeight + 12 > innerHeight ? Math.max(8, r.top - pop.offsetHeight - 6) : r.bottom + 6}px`;
+}
+
+// Each colour row's value when the HUD was opened, by what the row is: its Undo goes back to that (for a new HUD, the
+// defaults it started with). Cleared when a HUD is opened.
+const loadedColours = {};
+// A colour: its RGB over a swatch of it, its opacity over a second swatch (the colour over a checkerboard), both opening
+// the picker, then its name and what it's for, and at the far right Undo and Default. where: the file and block it is
+// in, so rows with the same name in different places keep their own Undo.
+function colorRow(label, note, value, onChange, keys = [], onReset = null, where = '') {
+  let rgba = toRgba(value);
+  const first = loadedColours[`${where}|${label}|${note}|${keys.join('+')}`] ??= rgba.join(' ');
+  const row = el('div', { className: 'row colour' });
+  const rgbText = el('div', { className: 'val' }), swatch = el('button', { className: 'swatch' });
+  const aText = el('div', { className: 'val' }), aBtn = el('button', { className: 'swatch aswatch' });
+  const pick = el('div', { className: 'pick' }), alpha = el('div', { className: 'pick alpha' }), name = el('div', { className: 'name' }), meta = el('div', { className: 'meta' });
+  const undo = el('button', { className: 'reset', textContent: 'Undo', title: `Back to ${first}, as it was when the HUD was opened` });
+  const show = () => {
+    const rgb = rgba.slice(0, 3).join(' ');
+    rgbText.textContent = rgb;
+    aText.textContent = `${Math.round(rgba[3] / 2.55)}%`;
+    swatch.style.setProperty('--c', `rgb(${rgb})`);
+    aBtn.style.setProperty('--c', `rgb(${rgb} / ${rgba[3] / 255})`);
+    swatch.title = `${rgb}: click to change`;
+    aBtn.title = `Opacity ${aText.textContent}: click to change`;
+    undo.disabled = rgba.join(' ') === first;
+  };
+  const set = c => { rgba = c; show(); onChange(rgba.join(' ')); };
+  swatch.setAttribute('aria-label', `${label} colour`);
   aBtn.setAttribute('aria-label', `${label} opacity`);
-  color.oninput = () => { before(); rgba = [...toRgba(fromHex(color.value, rgba[3]))]; changed(); };
-  aBtn.onclick = () => alphaPop ? closeAlpha() : openAlpha(aBtn, rgba.slice(0, 3), rgba[3], a => { before(); rgba[3] = a; changed(); });
+  swatch.onclick = aBtn.onclick = e => cpop && cpop.owner === row ? closePicker() : openPicker(e.currentTarget, rgba, set, row);
   aBtn.onkeydown = e => {
     const d = { ArrowRight: 13, ArrowUp: 13, ArrowLeft: -13, ArrowDown: -13 }[e.key];
-    if (d) { e.preventDefault(); before(); rgba[3] = Math.max(0, Math.min(255, rgba[3] + d)); changed(); }
+    if (d) { e.preventDefault(); set([...rgba.slice(0, 3), clamp(rgba[3] + d, 0, 255)]); }
   };
-  undo.onclick = () => { if (!steps.length) return; rgba = toRgba(steps.pop()); lastAt = 0; changed(); };
-  pick.append(rgbText, color);
+  undo.onclick = () => { closePicker(); set(toRgba(first)); };
+  pick.append(rgbText, swatch);
   alpha.append(aText, aBtn);
   name.append(renameable(label));
   if (note) meta.append(renameable(note));
   const text = el('div'), acts = el('div', { className: 'acts' });
   text.append(name, meta);
   acts.append(undo);
-  if (onReset) acts.append(el('button', { className: 'reset', textContent: 'Default', title: 'Back to the default colour',
-    onclick: () => { steps.push(rgba.join(' ')); onReset(); } }));
+  if (onReset) acts.append(el('button', { className: 'reset', textContent: 'Default', title: 'Back to the default colour', onclick: () => { closePicker(); onReset(); } }));
   row.dataset.keys = keys.join(' + '); // shown over the section's title (see card)
   row.append(pick, alpha, text, acts);
   show();
@@ -1121,32 +1226,31 @@ function colorRow(label, note, value, onChange, keys = [], onReset = null) {
 const ANCHOR = { xpos: { '': 'from the left', r: 'from the right', c: 'from the centre' }, ypos: { '': 'from the top', r: 'from the bottom', c: 'from the centre' },
   wide: { '': '', f: 'less than full width' }, tall: { '': '', f: 'less than full height' } };
 
-// Where positions were before Centre, for their Undo: "file/block/key" -> value. Kept across re-renders.
-const centredFrom = {};
+// Each position's value when the HUD was opened ("file/block/key"), for its Undo; cleared when a HUD is opened.
+const loadedPos = {};
 function numRow(lay, id, key, label, raw) {
   const split = r => { const m = /^\s*([rcf]?)\s*(-?[\d.]+)\s*$/i.exec(r || '0') || [0, '', '0']; return [m[1].toLowerCase(), m[2]]; };
-  let [prefix, num] = split(raw);
-  const row = inputRow(label, num, v => save(lay, key, prefix + v, id), { type: 'number', step: 1 });
+  let [prefix, num] = split(raw), undo = null;
+  const row = inputRow(label, num, v => { num = v; save(lay, key, prefix + v, id); if (undo) undo.disabled = prefix + num === first; }, { type: 'number', step: 1 });
   const input = row.querySelector('input'), meta = row.lastElementChild;
   const show = r => { [prefix, num] = split(r); input.value = num; meta.textContent = ANCHOR[key][prefix] || ''; };
   show(raw);
   row.dataset.q = `${label} position size`.toLowerCase();
+  const at = `${lay.name}/${id}/${key}`, first = loadedPos[at] ??= prefix + num;
   if (key !== 'xpos' && key !== 'ypos') return row;
-  // Centre: "c" minus half the size, in the same units. Undo puts back where it was before
+  // Centre: "c" minus half the size, in the same units. Undo puts back where it was when the HUD was opened
   const size = () => /^\s*\d+(\.\d+)?\s*$/.test(layoutProps(lay, id)[key === 'xpos' ? 'wide' : 'tall'] || '')
     ? +layoutProps(lay, id)[key === 'xpos' ? 'wide' : 'tall'] : null;
-  const at = `${lay.name}/${id}/${key}`, set = r => { show(r); save(lay, key, r, id); };
-  const undo = el('button', { className: 'mini', textContent: 'Undo', title: 'Put it back where it was before Centre', disabled: !(at in centredFrom),
-    onclick: () => { set(centredFrom[at]); delete centredFrom[at]; undo.disabled = true; } });
+  const set = r => { show(r); save(lay, key, r, id); undo.disabled = prefix + num === first; };
+  undo = el('button', { className: 'mini', textContent: 'Undo', title: `Back to ${first}, where it was when the HUD was opened`, disabled: prefix + num === first,
+    onclick: () => set(first) });
   const centre = el('button', { className: 'mini', textContent: 'Centre', disabled: size() === null,
     title: size() === null ? 'Needs a width/height in plain numbers' : `Centre it ${key === 'xpos' ? 'left to right' : 'top to bottom'}`,
     onclick: () => {
       // in a window smaller than the screen, a plain number from its edge (see windowSpan)
       const t = moveTarget(selected), span = t && t.f === lay && t.block.toLowerCase() === id.toLowerCase() ? windowSpan(t, key) : null;
-      const r = span === null ? `c${-Math.round(size() / 2)}` : `${Math.round((span - size()) / 2)}`, was = prefix + num;
-      if (r === was) return;
-      if (!(at in centredFrom)) centredFrom[at] = was;
-      set(r); undo.disabled = false;
+      const r = span === null ? `c${-Math.round(size() / 2)}` : `${Math.round((span - size()) / 2)}`;
+      if (r !== prefix + num) set(r);
     } });
   row.firstElementChild.append(centre, undo);
   return row;
@@ -1265,7 +1369,7 @@ function schemeRows(file, list, after = null) {
     // values the HUD sets itself can go back to the default one from its #base file
     const own = f.parsed.entries.filter(e => e.path.length === 2 && /^(colors|basesettings)$/i.test(e.path[1]) && ks.some(k => k.toLowerCase() === e.key.toLowerCase()));
     const reset = own.length && f.bases.length ? () => { own.forEach(e => save(f, e.key, null, [e.path[1]])); refreshSoon(); } : null;
-    return value && colorRow(label, note || DESCRIBE[ks[0].toLowerCase()] || '', value, v => { ks.forEach(k => save(f, k, v)); if (after) after(ks); }, ks, reset);
+    return value && colorRow(label, note || DESCRIBE[ks[0].toLowerCase()] || '', value, v => { ks.forEach(k => save(f, k, v)); if (after) after(ks); }, ks, reset, file);
   }).filter(Boolean);
 }
 
@@ -1282,7 +1386,7 @@ function hudRows(id, hud) {
   const p = layoutProps(lay, id);
   for (const [label, key, fallback] of hud.layoutColours || []) {
     const v = resolve(t, p[key.toLowerCase()] || fallback);
-    if (v) rows.push(colorRow(label, ` for this part only`, v, v2 => save(lay, key, v2, id), [key]));
+    if (v) rows.push(colorRow(label, ` for this part only`, v, v2 => save(lay, key, v2, id), [key], null, id));
   }
   if (canHide(id)) rows.unshift(...visibilityRows(id));
   // hud.rounded: the game draws the box itself (the chat, the timer, weapon selection); its colour is listed above
@@ -1368,7 +1472,7 @@ function boxRows(lay, id, p, t, hud) {
   const rows = [];
   if (!hud.rounded) {
     const bg = (p.bgcolor_override && resolve(t, p.bgcolor_override)) || resolve(t, 'Panel.BgColor') || '0 0 0 0';
-    rows.push(colorRow('Box background', 'The box drawn behind this part only', bg, v => save(lay, 'bgcolor_override', v, id), ['bgcolor_override']));
+    rows.push(colorRow('Box background', 'The box drawn behind this part only', bg, v => save(lay, 'bgcolor_override', v, id), ['bgcolor_override'], null, id));
   }
   const type = hud.rounded ? '2' : p.paintbackgroundtype || '0';
   const value = type === '0' || (type === '2' && squareTex(p)) ? 'square' : type === '2' ? 'round' : 'other';
@@ -1543,19 +1647,26 @@ const POS = [['xpos', 'X position'], ['ypos', 'Y position'], ['wide', 'Width'], 
 // A single control's settings in a window .res: its own text/background/fill colour (falling back to the
 // scheme colour it would otherwise use) and position/size.
 const OWN_NOTE = { fgcolor_override: 'Text colour of just this one; overrides the shared colour below',
-  bgcolor_override: 'Background of just this one; overrides the shared colour below', fillcolor: 'Colour this shape or image is filled with' };
+  bgcolor_override: 'Background of just this one; overrides the shared colour below', fillcolor: 'Colour this shape or image is filled with',
+  button: 'Just this button; over the shared colour below' };
+// A button paints with its own colour for each state (vgui Button::PerformLayout), which covers fgcolor_override and
+// bgcolor_override: it takes these instead.
+const BUTTON_OWN = [['defaultFgColor_override', 'Text'], ['defaultBgColor_override', 'Background'], ['armedFgColor_override', 'Text (mouse over)'],
+  ['armedBgColor_override', 'Background (mouse over)'], ['depressedFgColor_override', 'Text (clicked)'], ['depressedBgColor_override', 'Background (clicked)']];
 function resRows(f, block, defaults, schemeFile, ctl) {
   const p = layoutProps(f, block), sf = F(schemeFile), t = sf ? tables(sf) : EMPTY_TABLES, rows = [];
   const def = label => { const d = defaults.find(([l]) => l === label); return d && resolve(t, d[1]); };
-  const own = (key, label, fallback) => {
-    const v = (p[key] && resolve(t, p[key])) || fallback;
-    if (v) rows.push(colorRow(label, OWN_NOTE[key], v, v2 => save(f, key, v2, block), [key]));
+  // a button's rows: what the shared colour is for, of just this one
+  const ownNote = label => { const d = defaults.find(([l]) => l === label), s = d && DESCRIBE[d[1].toLowerCase()]; return s ? s.replace(/^Button/, "This button's") : OWN_NOTE.button; };
+  const own = (key, label, fallback, note = OWN_NOTE[key]) => {
+    const v = (p[key.toLowerCase()] && resolve(t, p[key.toLowerCase()])) || fallback;
+    if (v) rows.push(colorRow(label, note, v, v2 => save(f, key, v2, block), [key], null, `${f.name}/${block}`));
   };
   rows.push(showRow(f, block, 'Show on screen'));
   if (PLAYER_ROW.test(block)) rows.push(noteRow('Player rows are placed like this, but coloured from Scoreboard: player rows below.'));
   else {
-    own('fgcolor_override', 'Text', def('Text'));
-    own('bgcolor_override', 'Background', def('Background'));
+    if (ctl === 'Button' || ctl === 'BuyMouseOverPanelButton') { for (const [k, label] of BUTTON_OWN) if (def(label)) own(k, label, def(label), ownNote(label)); }
+    else { own('fgcolor_override', 'Text', def('Text')); own('bgcolor_override', 'Background', def('Background')); }
     if ('fillcolor' in p) own('fillcolor', 'Fill', null);
     // which font this one control draws with: any font in its scheme (the game reads "font" from the .res)
     const deflt = CONTROL_FONTS[ctl] && CONTROL_FONTS[ctl][0][1];
@@ -1702,6 +1813,7 @@ function fontFold(file, font, what, open) {
   d.ontoggle = () => { if (d.open) { openFonts.add(key); fill(); } else openFonts.delete(key); };
   if (open || openFonts.has(key)) { d.open = true; fill(); }
   d.dataset.q = `${font} ${what} font`.toLowerCase();
+  d.dataset.file = file; // for the Fonts card's Add font
   return d;
 }
 
@@ -1727,6 +1839,29 @@ function inputRow(label, value, onChange, attrs = {}) {
   return row;
 }
 
+// On/off, in the same column as the number boxes: Off | On, the lit half is the setting. row.set(on) shows a new value.
+function toggleRow(label, on, onChange, note = '') {
+  const row = el('div', { className: 'row num' }), seg = el('div', { className: 'seg', role: 'group' });
+  const halves = ['Off', 'On'].map((t, i) => el('button', { textContent: t, onclick: () => { if (on !== !!i) { row.set(!!i); onChange(on); } } }));
+  row.set = v => { on = v; halves.forEach((b, i) => b.setAttribute('aria-pressed', String(on === !!i))); };
+  seg.setAttribute('aria-label', label);
+  seg.append(...halves);
+  const name = el('div'), meta = el('div', { className: 'meta' });
+  name.append(renameable(label));
+  if (note) meta.append(renameable(note));
+  row.append(name, seg, meta);
+  row.set(on);
+  row.dataset.q = label.toLowerCase();
+  return row;
+}
+
+// Font entry settings besides name, size, weight and blur, as the game's scheme loader reads them: always shown, and
+// the rest, listed under + until the font has them. [key, label, kind, value when added, note]
+const FONT_FLAGS = [['outline', 'Outline'], ['dropshadow', 'Drop shadow'], ['additive', 'Additive (glow)', 'flag', '1', 'Hides outline and shadow'], ['antialias', 'Anti-aliasing']];
+const FONT_EXTRA = [['italic', 'Italic', 'flag', '1'], ['underline', 'Underline', 'flag', '1'], ['strikeout', 'Strike-through', 'flag', '1'],
+  ['scanlines', 'Scan lines', 'num', '2', 'Dark lines every this many pixels'], ['range', 'Characters', 'text', '0x0000 0x017F', 'Unicode range it covers'],
+  ['symbol', 'Symbol font', 'flag', '1', 'For icon fonts like Marlett'], ['rotary', 'Rotary', 'flag', '1', 'Drawn turned (game effect)'], ['custom', 'Custom', 'flag', '1', 'Game-specific drawing']];
+
 // A font's settings for the current screen height. Edits go to that entry only (fonts have one per resolution).
 function fontRows(file, font) {
   const f = F(file);
@@ -1734,42 +1869,54 @@ function fontRows(file, font) {
   if (!vars || !vars.size) return [];
   const H = live ? live.H : 1080, v = activeVariant(vars, H), p = vars.get(v);
   const put = (key, val) => save(f, key, val, ['Fonts', font, v]);
-  const checks = [['outline', 'Outline'], ['dropshadow', 'Drop shadow'], ['additive', 'Additive (glow): hides outline and shadow'], ['antialias', 'Smooth edges']]
-    .map(([key, label]) => checkRow(label, p[key] === '1', on => {
+  const flags = {};
+  const rowFor = ([key, label, kind = 'flag', , note = '']) => kind !== 'flag'
+    ? inputRow(label, p[key] ?? '', val => put(key, val), kind === 'num' ? { type: 'number', step: 1, min: 0, title: note } : { title: note })
+    : flags[key] = toggleRow(label, +p[key] > 0, on => {
       put(key, on ? '1' : '0');
       // additive text adds light to what's behind it, so black outlines and shadows can't show: turn it off for them
-      const glow = checks[2].firstElementChild;
-      if (on && key !== 'antialias' && key !== 'additive' && glow.checked) {
-        glow.checked = false;
-        put('additive', '0');
-      }
-    }));
+      if (on && (key === 'outline' || key === 'dropshadow') && +(p.additive ?? 0) > 0) { flags.additive.set(false); put('additive', '0'); }
+      p[key] = on ? '1' : '0';
+    }, note);
   const rows = [
     inputRow('Font', p.name || '', val => put('name', val), { list: 'fontfaces', title: 'Installed or in the HUD' }),
     inputRow('Size', p.tall || '', val => put('tall', val), { type: 'number', step: 1 }),
     inputRow('Weight', p.weight || '400', val => put('weight', val), { type: 'number', step: 100, min: 0 }),
     inputRow('Blur', p.blur || '0', val => put('blur', val), { type: 'number', step: 1, min: 0 }),
-    ...checks,
+    ...FONT_FLAGS.map(rowFor),
+    ...FONT_EXTRA.filter(([k]) => k in p).map(rowFor),
   ];
   rows[0].lastElementChild.textContent = vars.size > 1 ? `Entry "${v}", for ${H}p screens` : '';
-  const add = el('div', { className: 'row check' });
-  add.append(el('span'), el('button', { textContent: 'Add a font file (.ttf/.otf)...', onclick: () => addFontFile(f, font, v) }));
-  add.dataset.q = 'font file ttf otf add';
+  // +: the settings this font doesn't have yet; picking one adds it (switched on, or a starting value) and its row
+  const add = el('div', { className: 'row addkey' }), plus = el('button', { className: 'plus', textContent: '+', title: 'Add a font setting' });
+  const menu = el('div', { className: 'chips', hidden: true });
+  const fill = () => menu.replaceChildren(...FONT_EXTRA.filter(([k]) => !(k in p)).map(x => el('button', { textContent: x[1], onclick: () => {
+    p[x[0]] = x[3];
+    put(x[0], x[3]);
+    add.before(rowFor(x));
+    fill();
+    menu.hidden = plus.hidden = !menu.childElementCount;
+  } })));
+  plus.onclick = () => { menu.hidden = !menu.hidden; plus.classList.toggle('open', !menu.hidden); };
+  fill();
+  plus.hidden = !menu.childElementCount;
+  add.append(plus, menu);
+  add.dataset.q = FONT_EXTRA.map(x => x[1]).join(' ').toLowerCase();
   return [...rows, add];
 }
 
-// Copies a font file into the HUD, lists it in CustomFontFiles (the game registers it, live) and switches this font to it.
-async function addFontFile(f, font, v) {
+// Copies a font file into the HUD and lists it in CustomFontFiles of the given schemes (the game registers it, live);
+// then it can be typed into any Font box.
+async function addFontFile(schemes) {
   try {
     const [rel, family] = (await call('addfont')).split('\t');
-    const used = [...f.bases, f.parsed].flatMap(p => p.entries).filter(e => e.path.length === 2 && e.path[1].toLowerCase() === 'customfontfiles').map(e => +e.key);
-    save(f, String(Math.max(0, ...used.filter(n => n > 0)) + 1), rel, ['CustomFontFiles']);
-    save(f, 'name', family, ['Fonts', font, v]);
+    for (const f of schemes.map(F).filter(Boolean)) {
+      const used = [...f.bases, f.parsed].flatMap(p => p.entries).filter(e => e.path.length === 2 && e.path[1].toLowerCase() === 'customfontfiles');
+      if (used.some(e => e.value.replace(/\\/g, '/').toLowerCase() === rel.toLowerCase())) continue;
+      save(f, String(Math.max(0, ...used.map(e => +e.key).filter(n => n > 0)) + 1), rel, ['CustomFontFiles']);
+    }
     $('fontfaces').prepend(el('option', { value: family }));
-    await sleep(400);
-    await writing;
-    render();
-    status(`Added "${family}" and switched ${font} to it.`);
+    status(`Added "${family}". Type it into any Font box to use it.`);
   } catch (err) {
     if (err.message !== 'cancelled') status(err.message);
   }
@@ -1963,7 +2110,7 @@ function selectionSections(sel) {
   const { info, control } = sel, fonts = fontsOf(sel), own = sel.res && ownBlock(sel);
   // what was clicked, on its own: shown or not, position, and its own colours over the shared ones below
   // (these menus read their .res only when the game makes them; the scoreboard and spectator bars read it on a reload)
-  if (own) add('colour', `Just this ${own.what}`, [...(STARTUP_RES.has(info.id) ? [noteRow('This window reads its layout when the game starts: showing, hiding and moving things here appear after a game restart. Colours and fonts change straight away.')] : []),
+  if (own) add('colour', `Just this ${own.what}`, [...(STARTUP_RES.has(info.id) ? [noteRow('This window reads its own settings when the game starts: these show after a game restart. The shared colours and fonts below change straight away.')] : []),
     ...resRows(sel.res, own.block, own.defaults, schemeOf(sel.thing), own.ctl)]);
   if (control) {
     const [ctl, what, keys] = controlIn(control, sel.thing);
@@ -2120,6 +2267,9 @@ function fontsCard(sections) {
     keysTip(line, rows);
     c.append(line, ...rows);
   }
+  // Add font, at the right of the first line: into the schemes these fonts are in
+  const files = [...new Set([...c.querySelectorAll('[data-file]')].map(d => d.dataset.file))];
+  if (files.length) c.firstElementChild.append(el('button', { className: 'mini addfont', textContent: '+ Add font', title: 'Add a .ttf or .otf font file to the HUD', onclick: () => addFontFile(files) }));
   return c;
 }
 
@@ -2492,6 +2642,7 @@ async function openHud(path) {
     selected = null;
     undoSteps.length = 0;
     $('undo').disabled = true;
+    for (const o of [loadedColours, loadedPos]) for (const k in o) delete o[k]; // Undo buttons go back to this HUD as opened
     setDirty(false);
     await loadAll();
     // the game's name colours to this HUD's (or back to config.cfg's after discarding a HUD's new cfg)
@@ -2732,10 +2883,10 @@ function parserCheck() {
   check(hit && hit.info.name === 'Console' && hit.control && controlOf(hit.control.cls)[1] === 'Text box' && schemeOf(hit.control) === S, 'click console text');
   hit = at(150, 630);
   check(hit && hit.info.name === 'Main menu' && !hit.control, 'click a main menu item: main menu colours, not generic menu ones');
-  hit = at(400, 300);
-  check(hit && hit.info.name === 'Centre print text' && schemeOf(hit.thing) === S, 'click the centre text: its fonts are in SourceScheme, as the plugin reports');
-  check(at(40, 30)?.info.id === 'HudMessage' && at(1150, 560)?.info.id === 'HudMessage' && schemeOf(at(40, 30).thing) === C, 'click the top-left or jhud server text');
-  check(onScreen().map(t => t.info.name).join() === 'Server message (MOTD),Main menu,Console,Health,Timer / hint text,Centre print text,Server HUD text (jhud, top left)', 'on screen list: windows first, no always-on overlays');
+  hit = at(1150, 500); // left of the console
+  check(hit && hit.info.name === 'Small speed' && at(400, 300)?.info.id !== 'CCenterStringLabel' && schemeOf(hit.thing) === S, 'click the centre text: its fonts are in SourceScheme, as the plugin reports');
+  check(at(40, 30)?.info.id === 'HudMessage' && at(1150, 560)?.info.id === 'HudMessage' && schemeOf(at(40, 30).thing) === C, 'click the top-left or large speed server text');
+  check(onScreen().map(t => t.info.name).join() === 'Server message (MOTD),Main menu,Console,Health,Timer / hint text,Small speed,Large speed', 'on screen list: windows first, no always-on overlays');
   live = null;
 }
 if (location.hash === '#test') { try { parserCheck(); status('Self-check passed.'); } catch (err) { status(err.message); } }
@@ -2816,7 +2967,17 @@ if (host && location.hash === '#hosttest') (async () => {
     const stepped = picked;
     cr.querySelector('.acts button').onclick();
     check(crVals === '10 20 30|50%' && stepped === '10 20 30 141' && picked === '10 20 30 128' && !cr.querySelector('.setting'),
-      `colour rows: RGB and opacity shown, opacity steps from its swatch, the row's Undo goes back (${crVals}, ${stepped}, ${picked})`);
+      `colour rows: RGB and opacity shown, opacity steps from its swatch, the row's Undo goes back to the value at opening (${crVals}, ${stepped}, ${picked})`);
+    const pasted = ['1 2 3', '1 2 3 4', '#ff8000', '#ff800080', 'rgba(255, 128, 0, 0.5)', '10, 20, 30', 'x'].map(s => String(parseColour(s))).join('|');
+    check(pasted === '1,2,3,255|1,2,3,4|255,128,0,255|255,128,0,128|255,128,0,128|10,20,30,255|null', `Paste reads R G B A, #hex and rgb() (${pasted})`);
+    const btnRes = { name: 'b', text: '', parsed: parse('"x" { "autobutton" { "xpos" "1" } }'), bases: [] };
+    const btnKeys = resRows(btnRes, 'autobutton', CONTROLS.find(([k]) => k === 'Button')[2], C, 'Button').map(r => r.dataset.keys).filter(Boolean).join();
+    check(btnKeys.startsWith('defaultFgColor_override,defaultBgColor_override,armedFgColor_override') && !btnKeys.includes('bgcolor_override,'),
+      `a button's own colours use the keys buttons read (${btnKeys})`);
+    let flip = null;
+    const tg = toggleRow('Outline', false, on => { flip = on; });
+    tg.querySelectorAll('.seg button')[1].onclick();
+    check(flip === true && tg.querySelectorAll('[aria-pressed="true"]')[0].textContent === 'On', 'on/off rows switch');
     check(JSON.stringify(left) === '{"xpos":"1"}' && JSON.stringify(corner) === '{"xpos":"r101","ypos":"r61"}',
       `dragging snaps to edges 1 unit in (${JSON.stringify(left)} ${JSON.stringify(corner)})`);
     const boxTick = sbSections[0][1][1].querySelector('input'); // "Colour box behind the scoreboard" (not in the page, so no click events)
