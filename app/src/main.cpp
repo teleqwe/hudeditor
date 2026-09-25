@@ -820,12 +820,19 @@ static void OnMessage( const wstring &msg )
 	else if ( op == L"gamewindow" ) // is the game's window up yet (screen capture picks it by title)
 	{
 		// a minimised window isn't offered for capture, which leaves the page on the "Choose what to share" dialog:
-		// restore it first, without taking the front
+		// restore it first, without taking the front. Async: a game busy restoring (a fullscreen one resets its display)
+		// would otherwise hold up the editor's window until it answers
 		HWND w = GameWindow();
 		if ( !w )
 			fail( L"no game window" );
 		else if ( IsIconic( w ) )
-			ShowWindow( w, SW_SHOWNOACTIVATE );
+		{
+			ShowWindowAsync( w, SW_SHOWNOACTIVATE );
+			for ( int i = 0; i < 40 && IsIconic( w ); ++i )
+				Sleep( 50 );
+			if ( IsIconic( w ) )
+				fail( L"the game window is minimised" );
+		}
 	}
 	else if ( op == L"key" ) // arg = scan code (hex), then " down" or " up" for half a press: bring the game to the front and press the key there
 	{
