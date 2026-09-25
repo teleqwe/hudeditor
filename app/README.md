@@ -36,7 +36,8 @@ packed inside it. Needs Windows 10 or 11 (it uses the WebView2 runtime that ship
    once you let go (a map otherwise locks the mouse inside the game).
    **Drag anything in the preview to move it.** HUD parts move in HudLayout, window controls in the window's `.res`
    (`xpos`/`ypos`, keeping `r` and `c` anchors). **Centre** beside X and Y position centres it (in its window, for a
-   window's control), and **Undo** there puts it back. Dragged near an edge of the screen (a window's control: of its
+   window's control: `c` and `r` count from the screen even there, so inside a window smaller than the screen it writes
+   a plain number from the window's edge), and **Undo** there puts it back. Dragged near an edge of the screen (a window's control: of its
    window) or its middle, a part snaps there, stopping 1 unit short of the edge (positions are whole units of screen
    height / 480: 3 px at 1440p). The dashed box shows where it goes, and the game follows once you
    pause. What the game places itself (main menu, server browser, window frames) can't be moved, and the radio menu
@@ -58,7 +59,7 @@ packed inside it. Needs Windows 10 or 11 (it uses the WebView2 runtime that ship
        background colours, the title and option fonts, and the position.
    - **Windows** (team select, buy menu, scoreboard, spectator bars, MOTD, main menu, options, console): the exact
      control you clicked. You get, in this order (colours, then fonts, then borders, then the rest):
-     - its own colour and position (**Just this ...**), and its words (`labelText`) where the .res has them
+     - its own colour and position (**Just this ...**)
      - the colours shared by every control of that type, and the window colours
      - the fonts it uses
      - its borders (normal, focused, pressed...): which sides draw (four tick boxes), thickness and colour. Sides that
@@ -124,6 +125,7 @@ packed inside it. Needs Windows 10 or 11 (it uses the WebView2 runtime that ship
      them, every screen size, leaving icon and symbol fonts alone.
 
    "On screen now" lists what's visible; **Done** saves and goes back to it from a selection. Search looks through everything.
+   Double-click a title, name or description in the list to rename it (kept in the editor on this PC, not in the HUD).
    A colour your HUD changed has a **Default** button that puts the game's own colour back, and **Undo** (Ctrl+Z)
    steps back through this session's changes.
 5. **Done** or **Save HUD** keeps your changes. They go into the HUD straight away so the game can show them, and until
