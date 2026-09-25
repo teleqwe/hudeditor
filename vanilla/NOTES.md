@@ -122,6 +122,10 @@ Not in custom: a folder there with full vanilla files would cover every HUD that
   so on sv_pure 1/2 servers every HUD material (pictures, square corners, scoreboard highlight) is the game's own;
   .res files, scripts and fonts aren't listed and load from the HUD.
 
+## Test server
+- Restarting the test server (disconnect; map de_dust2) right after `sv_pure 2` once ended in an Engine Error
+  dialog: "IVP Failed at ...\ivp_utility\ivu_vhash.cxx 157" (physics). OK closes the game.
+
 ## HudLayout settings (checked in game)
 - HudHintDisplay: text_xpos/text_ypos are the space round the text inside the box (both sides). center_x/center_y
   move only the box, away from the text (the text stays centred). HintSize is the box's width as a fraction: 0 = no box.

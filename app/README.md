@@ -104,7 +104,9 @@ packed inside it. Needs Windows 10 or 11 (it uses the WebView2 runtime that ship
        menus and the chat.
      - **Show on screen** to hide the control. It moves off screen and its position is kept in `xpos_hudeditor`. The
        game sets window parts' visibility itself, so `visible` can't hide them.
-     - **Spectator bars:** show or hide the top and bottom bar, keeping their text. The game sizes these two from the
+     - **Spectator bars:** show or hide each part: the top and bottom bar (keeping their text), the title, team
+       scores, timer, info line, divider and player name; in the bottom menu the three drop-downs and the
+       previous/next buttons. Click any of them for its own colours, font and position. The game sizes these two from the
        file, so the top bar is hidden with height 0 and the bottom bar (it runs from its y position to the bottom of
        the screen) with `ypos r0`. Parts hidden in a window are listed with it so they can be shown again.
      - A HUD without that window's `.res` gets the game's own copy on the first change.

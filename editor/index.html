@@ -873,7 +873,11 @@ async function uiFile(path) {
 // bottom bar reaches from its y position to the bottom of the screen (r0 hides it).
 // The MOTD's message is text (TextMessage) or a web page (HTMLMessage), depending on the server: with both hidden,
 // only OK is left.
-const WINDOW_PARTS = { specgui: [['Top bar', 'topbar', 'tall', '0'], ['Bottom bar', 'bottombarblank', 'ypos', 'r0']],
+// ('|' = parts shown and hidden together)
+const WINDOW_PARTS = { specgui: [['Top bar', 'topbar', 'tall', '0'], ['Bottom bar', 'bottombarblank', 'ypos', 'r0'], ['Title (map or server)', 'titlelabel'],
+    ['Team scores', 'CTScoreLabel|CTScoreValue|TERScoreLabel|TERScoreValue'], ['Timer', 'timerclock|timerlabel'], ['Info line', 'extrainfo'],
+    ['Divider', 'DividerBar'], ['Player name', 'playerlabel']],
+  specmenu: [['Settings menu', 'settingscombo'], ['Player menu', 'playercombo'], ['View menu', 'viewcombo'], ['Previous and next buttons', 'specprev|specnext']],
   info: [['Title', 'MessageTitle'], ['Text message', 'TextMessage'], ['Web page message', 'HTMLMessage']] };
 const hideHow = block => {
   const part = Object.values(WINDOW_PARTS).flat().find(([, b]) => b === block);
@@ -893,13 +897,16 @@ function setPartHidden(f, block, hide) {
 }
 // parts hidden and shown again in this session: they stay listed, so the tick can go back
 const partsListed = new Set();
-const showRow = (f, block, label) => checkRow(label, !partHidden(f, block), on => { partsListed.add(`${f.name}/${block}`); setPartHidden(f, block, !on); refreshSoon(); });
+const showRow = (f, block, label) => checkRow(label, !partHidden(f, block.split('|')[0]), on => {
+  for (const b of block.split('|')) { partsListed.add(`${f.name}/${b}`); setPartHidden(f, b, !on); }
+  refreshSoon();
+});
 // The window's own bars, plus every part hidden here (they can't be clicked in the preview any more).
 function windowPartRows(sel) {
   const f = sel.res, parts = (WINDOW_PARTS[sel.info.id] || []).map(([label, block]) => [label.toLowerCase(), block]);
   if (!f) return [];
   for (const s of f.parsed.sections)
-    if (s.path.length === 2 && !parts.some(([, b]) => b === s.path[1]) && (partHidden(f, s.path[1]) || partsListed.has(`${f.name}/${s.path[1]}`)))
+    if (s.path.length === 2 && !parts.some(([, b]) => b.toLowerCase().split('|').includes(s.path[1].toLowerCase())) && (partHidden(f, s.path[1]) || partsListed.has(`${f.name}/${s.path[1]}`)))
       parts.push([prettify(s.path[1]), s.path[1]]);
   return parts.map(([label, block]) => showRow(f, block, `Show ${label}`));
 }
@@ -3249,14 +3256,15 @@ if (host && location.hash === '#hosttest') (async () => {
     check(!isHidden('HudHealth') && !/"alpha"/.test(undone) && /"xpos"\t\t"20"/.test(undone), 'undo puts the file back as it was');
     save(F(C), 'Panel.FgColor', '9 9 9 255');
     const spec = await uiFile('resource/UI/spectator.res');
-    check(spec && windowPartRows({ res: spec, info: { id: 'specgui' } }).length === 2, 'spectator bars start from the game\'s file, with show/hide');
+    check(spec && windowPartRows({ res: spec, info: { id: 'specgui' } }).length === WINDOW_PARTS.specgui.length, 'spectator bars start from the game\'s file, with show/hide for each part');
     setPartHidden(spec, 'topbar', true);
     setPartHidden(spec, 'CTScoreLabel', true);
     await sleep(400);
     await writing;
     const specText = await readHud('resource/UI/spectator.res') || '';
     check(/"topbar"[^}]*"tall"\s+"0"[^}]*"tall_hudeditor"\s+"52"/.test(specText) && /"CTScoreLabel"[^}]*"xpos"\s+"9999"/.test(specText), 'hiding window parts writes a copy of the game\'s file: the top bar 0 high, a label off screen');
-    check(windowPartRows({ res: spec, info: { id: 'specgui' } }).length === 3, 'hidden window parts are listed to show again');
+    const specRows = windowPartRows({ res: spec, info: { id: 'specgui' } });
+    check(specRows.length === WINDOW_PARTS.specgui.length && !specRows.find(r => /team scores/.test(r.textContent)).querySelector('input').checked, 'a hidden spectator part shows unticked in its row');
     setPartHidden(spec, 'CTScoreLabel', false);
     await sleep(400);
     await writing;

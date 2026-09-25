@@ -24,7 +24,7 @@ Each step is committed on its own, so work can stop after any of them.
      The editor says so under Add to the HUD. Checking on a real sv_pure server is still to do.
 4. [x] **Nudge and align**: arrow keys move the selection 1 unit (Shift: 10), Ctrl+click several parts to line them
    up or spread them, a 4:3 safe-area overlay.
-5. [ ] **Spectator extras**: `spectator.res` (scores, timer, info line, title) and `bottomspectator.res` (drop-downs,
+5. [x] **Spectator extras**: `spectator.res` (scores, timer, info line, title) and `bottomspectator.res` (drop-downs,
    previous/next buttons).
 6. [ ] **Test values** in the Test tools drop-down: 5 HP, 1000+ HP, $0 / $16000, empty magazine, a round timer over
    10:00, bots with long names filling the scoreboard, MVP stars.
