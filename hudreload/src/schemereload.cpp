@@ -781,6 +781,7 @@ static void RecordVisibility( VPANEL p, CUtlVector< VPANEL > &panels, CUtlVector
 static bool RunStep( int step, void ( *fn )() );
 static void StepHud();
 static CUtlVector< VPANEL > g_Reshow; // visible before the last reload, see Reshow
+static void HideRowTemplates();
 static double g_flReshowUntil;
 
 static VPANEL FindNamed( VPANEL p, const char *name, int depth )
@@ -911,6 +912,7 @@ static void StepPanels()
 			g_Reshow.AddToTail( panels[i] );
 	}
 	g_flReshowUntil = Plat_FloatTime() + 0.7;
+	HideRowTemplates();
 }
 
 // Some panels hide themselves a frame after a reload (the scoreboard does whenever its scheme is applied), after the
@@ -926,12 +928,47 @@ static void ReshowTree( VPANEL p, int depth )
 	}
 }
 
+// The scoreboard's row templates (CTPlayerArea, TPlayerName0...) only give the rows their places; the game hides them
+// once at startup and a reload's visibility restore can show them. Keep them hidden.
+static bool IsRowTemplate( const char *n )
+{
+	const char *s = !Q_strnicmp( n, "CTPlayer", 8 ) ? n + 8 : !Q_strnicmp( n, "TPlayer", 7 ) ? n + 7 : NULL;
+	static const char *s_Kinds[] = { "Area", "Avatar", "Clan", "Name", "Status", "Score", "Deaths", "Latency" };
+	for ( int k = 0; s && k < ARRAYSIZE( s_Kinds ); ++k )
+	{
+		int len = Q_strlen( s_Kinds[k] );
+		if ( Q_strnicmp( s, s_Kinds[k], len ) )
+			continue;
+		for ( s += len; *s >= '0' && *s <= '9'; ++s )
+			;
+		return !*s;
+	}
+	return false;
+}
+
+static void HideRowTemplates()
+{
+	VPANEL sb = FindNamed( TopPanel(), "scores", 0 );
+	for ( int i = 0; sb && i < g_pVPanel->GetChildCount( sb ); ++i )
+	{
+		VPANEL c = g_pVPanel->GetChild( sb, i );
+		if ( c && g_pVPanel->IsVisible( c ) && IsRowTemplate( g_pVPanel->GetName( c ) ) )
+			g_pVPanel->SetVisible( c, false );
+	}
+}
+
 static void Reshow()
 {
 	if ( g_Reshow.Count() && Plat_FloatTime() < g_flReshowUntil )
+	{
 		ReshowTree( TopPanel(), 0 );
-	else
+		HideRowTemplates();
+	}
+	else if ( g_Reshow.Count() )
+	{
 		g_Reshow.RemoveAll();
+		HideRowTemplates();
+	}
 }
 
 static void StepHud()

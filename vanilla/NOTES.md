@@ -67,3 +67,10 @@ Not in custom: a folder there with full vanilla files would cover every HUD that
 - Scheme reloads and HUD reloads take the chat out of typing (its keyboard input is switched off). The plugin's panel
   list marks panels that take keyboard input ("k"); HudChat has it only while typing. The editor presses the
   player's messagemode key again when a reload closed it.
+
+## Startup cfg from a HUD (checked in game)
+- cfg/valve.rc (the game's copy is in the VPK) is run at startup from the first folder that has one, custom folders
+  included, after config.cfg. A HUD's copy with "exec hudeditor_colours.cfg" added before "exec autoexec.cfg" sets
+  archived cvars (the scoreboard name colours) that beat config.cfg, while the player's autoexec still wins.
+- The scoreboard's row templates (CTPlayerArea, TPlayerName0...) are hidden by the game once; a live reload's
+  visibility restore showed them. The plugin hides them again after every reload.

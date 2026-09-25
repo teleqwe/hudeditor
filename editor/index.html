@@ -529,6 +529,10 @@ async function loadAll() {
   const gm = (await readHud(GM)) ?? GAME_MENU; // written into the HUD on the first change
   files.push({ name: GM, path: GM, text: gm, parsed: parse(gm), bases: [] });
   await Promise.all(SB_PAGES.map(uiFile));
+  for (const path of [CVAR_CFG, VALVE_RC]) { // the scoreboard name colours, when the HUD has them
+    const text = await readHud(path);
+    if (text != null) files.push({ name: path, path, text, parsed: parse(''), bases: [] });
+  }
   squareAll = (await readHud(CORNER_VMT(1)) || '').includes('vgui/white');
   render();
   drawBoxes();
@@ -559,6 +563,7 @@ async function undo() {
       }
       await call('write', f.path, text);
       Object.assign(f, { text, parsed: before });
+      if (f.name === CVAR_CFG) applyCvars(text); // a cfg only runs at startup: give the game the values now
       setDirty(true);
       status('Undone.');
     } catch (err) {
@@ -715,11 +720,16 @@ const hideHow = block => {
   return part ? part.slice(2) : ['xpos', '9999'];
 };
 const partHidden = (f, block) => `${hideHow(block)[0]}_hudeditor` in layoutProps(f, block);
+// Moves a part off screen (keeping where it was in key_hudeditor) or back. Values are worked out when written: edits
+// wait a moment before they're written, so a hide still waiting when "show" comes must not be read as done.
+function moveOff(f, block, key, off, hide) {
+  const p = () => layoutProps(f, block), kept = `${key}_hudeditor`;
+  if (hide) { save(f, kept, () => kept in p() ? p()[kept] : p()[key] || '0', block); save(f, key, off, block); }
+  else { save(f, key, () => kept in p() ? p()[kept] : p()[key] || '0', block); save(f, kept, null, block); }
+}
 function setPartHidden(f, block, hide) {
-  const [key, off] = hideHow(block), p = layoutProps(f, block);
-  if (hide === partHidden(f, block)) return;
-  if (hide) { save(f, `${key}_hudeditor`, p[key] || '0', block); save(f, key, off, block); }
-  else { save(f, key, p[`${key}_hudeditor`], block); save(f, `${key}_hudeditor`, null, block); }
+  const [key, off] = hideHow(block);
+  moveOff(f, block, key, off, hide);
 }
 const showRow = (f, block, label) => checkRow(label, !partHidden(f, block), on => { setPartHidden(f, block, !on); refreshSoon(); });
 // The window's own bars, plus every part hidden here (they can't be clicked in the preview any more).
@@ -753,19 +763,43 @@ const SCOREBOARD_CVARS = [['CT players', 'cl_scoreboard_ct_color', '150 200 255'
   ['T clan tags', 'cl_scoreboard_clan_t_color', '240 90 90'], ['Dead clan tags', 'cl_scoreboard_dead_clan_color', '125 125 125']];
 // The .res only has the first row of each team, as a template the game copies for every player.
 const PLAYER_ROW = /^(CT|T)Player(Avatar|Clan|Name|Status|Score|Deaths|Latency)0$/i;
-let cvarValues = null; // from config.cfg (it only lists values that aren't the default) and what the editor set since
+// They're game settings, so the HUD carries them as a cfg the game runs at startup: cfg/hudeditor_colours.cfg, run
+// from the HUD's copy of cfg/valve.rc (the game's own plus that exec, before autoexec.cfg so a player's autoexec still
+// wins). Written like any other file, so undo, Save HUD and discarding cover them; the running game gets the values too.
+const CVAR_CFG = 'cfg/hudeditor_colours.cfg', VALVE_RC = 'cfg/valve.rc', CVAR_EXEC = 'exec hudeditor_colours.cfg';
+const VALVE_RC_TEXT = '// load the base configuration\n//exec default.cfg\nr_decal_cullsize 1\n\n// Setup custom controller\nexec joystick.cfg\n\n'
+  + `// the HUD's scoreboard name colours (HUD editor)\n${CVAR_EXEC}\n\n// run a user script file if present\nexec autoexec.cfg\n\n//\n// stuff command line statements\n//\nstuffcmds\n`;
+const readCvars = text => { const o = {}; for (const m of (text || '').matchAll(/^\s*(cl_scoreboard_\w+)\s+"?(\d+)/gm)) o[m[1].toLowerCase()] = m[2]; return o; };
+let cvarValues = null, cvarStart = null; // now; config.cfg's when the editor first read it (what a HUD without the cfg gets back)
 async function loadCvars() {
   if (cvarValues) return;
-  const cfg = await call('config').catch(() => '');
-  cvarValues = {};
-  for (const m of cfg.matchAll(/^\s*(cl_scoreboard_\w+)\s+"?(\d+)/gm)) cvarValues[m[1].toLowerCase()] = m[2];
+  cvarStart ||= readCvars(await call('config').catch(() => ''));
+  cvarValues = { ...cvarStart, ...readCvars(F(CVAR_CFG) && F(CVAR_CFG).text) };
 }
 const RGB = ['red', 'green', 'blue'];
 const cvarColour = (prefix, def) => RGB.map((c, i) => (cvarValues || {})[`${prefix}_${c}`] ?? def.split(' ')[i]).join(' ') + ' 255';
+const cvarLines = () => SCOREBOARD_CVARS.flatMap(([, prefix, def]) => RGB.map((c, i) => `${prefix}_${c} ${cvarColour(prefix, def).split(' ')[i]}`));
+const hudFile = (path, text) => F(path) || (files.push({ name: path, path, text, parsed: parse(''), bases: [] }), F(path));
 function setCvarColour(prefix, rgba) {
   const rgb = rgba.split(' ');
   RGB.forEach((c, i) => { cvarValues[`${prefix}_${c}`] = rgb[i]; });
   call('cmd', '', RGB.map((c, i) => `${prefix}_${c} ${rgb[i]}`).join('; '));
+  // the game's valve.rc, or the HUD's own with the exec added before autoexec. Not an undo step: an emptied valve.rc
+  // would skip the player's autoexec (discarding still removes one the editor made)
+  const rc = hudFile(VALVE_RC, '');
+  if (!rc.text.includes(CVAR_EXEC)) {
+    rc.text = !rc.text ? VALVE_RC_TEXT : /^\s*exec autoexec/m.test(rc.text) ? rc.text.replace(/^(\s*exec autoexec)/m, `${CVAR_EXEC}\n$1`) : `${rc.text}\n${CVAR_EXEC}\n`;
+    const text = rc.text;
+    writing = writing.then(() => call('write', VALVE_RC, text)).catch(err => status(`Couldn't write ${VALVE_RC}: ${err.message}`));
+  }
+  const cfg = hudFile(CVAR_CFG, '');
+  commit(cfg, 'name colours', () => `// Scoreboard name colours, run at startup from cfg/valve.rc (HUD editor)\n${cvarLines().join('\n')}\n`);
+}
+// Puts the running game's name colours to what a cfg text says (after an undo, or a discard), else to config.cfg's.
+function applyCvars(text) {
+  if (!cvarStart) return;
+  cvarValues = { ...cvarStart, ...readCvars(text) };
+  call('cmd', '', cvarLines().join('; ')).catch(() => {});
 }
 
 // The game's background is a picture (materials/vgui/scoreboard/panel-scoreboard). The editor can add a box of its own
@@ -820,7 +854,7 @@ function scoreboardSections(sel, shownFonts) {
     return colorRow(label, '', v, v2 => blocks.forEach(b => save(f, 'fgcolor_override', v2, b)), ['fgcolor_override']);
   });
   const rows = [colorRow('Your own row', 'The highlight behind your name (a material in the HUD)', sbSelectColour() || '255 160 0 255', setSbSelect, ['scoreboard-select']),
-    noteRow('The name colours below are your own game settings, not part of the HUD: the game keeps them in config.cfg.'),
+    noteRow('Name colours are game settings: the HUD keeps them in cfg/hudeditor_colours.cfg, which the game runs at startup.'),
     ...SCOREBOARD_CVARS.map(([label, prefix, def]) => {
       const now = cvarColour(prefix, def), reset = () => { setCvarColour(prefix, `${def} 255`); refreshSoon(); };
       const r = colorRow(label, prefix, now, v => setCvarColour(prefix, v), [], now === `${def} 255` ? null : reset);
@@ -1073,11 +1107,9 @@ const isHidden = id => { const p = layoutProps(F(L), id); return SELF_FADING.has
 const canHide = id => !!F(L) && Object.keys(layoutProps(F(L), id)).length > 0;
 
 function setHidden(id, hide) {
-  const lay = F(L), p = layoutProps(lay, id);
+  const lay = F(L);
   if (!SELF_FADING.has(id)) return save(lay, 'alpha', hide ? '0' : '255', id);
-  if (hide === 'xpos_hudeditor' in p) return;
-  if (hide) { save(lay, 'xpos_hudeditor', p.xpos || '0', id); save(lay, 'xpos', '9999', id); }
-  else { save(lay, 'xpos', p.xpos_hudeditor, id); save(lay, 'xpos_hudeditor', null, id); }
+  moveOff(lay, id, 'xpos', '9999', hide);
 }
 
 // After a change that alters which rows or tags show: redraw once it's written.
@@ -1717,7 +1749,7 @@ function selectionSections(sel) {
   if (control) {
     const [ctl, what, keys] = controlIn(control, sel.thing);
     const file = schemeOf(control), where = file === C ? 'in-game windows' : file === CH ? 'the chat' : 'menus';
-    add('colour', `Colours: every ${what.toLowerCase()} in ${where}`, [
+    add('colour', `Colours: ${what.endsWith('s') ? 'all' : 'every'} ${what.toLowerCase()} in ${where}`, [
       // the chat keeps its scroll bar once it holds more lines than fit, even closed; the default colours are see-through
       ...(file === CH && ctl.startsWith('ScrollBar') ? [noteRow('The chat shows this scroll bar even while it is closed. Keep it see-through (low opacity) or it stays on screen.')] : []),
       ...schemeRows(file, keys), ...(ctl.startsWith('ScrollBar') ? [scrollWideRow(file)].filter(Boolean) : [])]);
@@ -2133,6 +2165,8 @@ async function openHud(path) {
     $('undo').disabled = true;
     setDirty(false);
     await loadAll();
+    // the game's name colours to this HUD's (or back to config.cfg's after discarding a HUD's new cfg)
+    if (F(CVAR_CFG) || cvarStart) { cvarValues = null; await loadCvars(); applyCvars(F(CVAR_CFG) && F(CVAR_CFG).text); }
     status(live ? `Editing ${hudName}. Click anything in the preview to edit it.` : `Editing ${hudName}.`);
     // the HUD's own font faces first in the font name suggestions
     call('hudfonts').then(list => { for (const n of list.split('\n').filter(Boolean).reverse()) $('fontfaces').prepend(el('option', { value: n })); }).catch(() => {});
