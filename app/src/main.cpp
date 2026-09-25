@@ -231,6 +231,19 @@ static void Revert()
 		std::filesystem::remove_all( g_unsaved, ec );
 }
 
+// Closing the editor. Not with DestroyWindow: that has WebView2 hide its window in the browser process, whose UI
+// thread can at that moment be waiting on a thread making a thumbnail of this window (the capture picker), which
+// waits on this one, and all hang. Unsaved changes are put back, then the browser process and this one just end.
+static void Quit()
+{
+	Revert();
+	UINT32 pid = 0;
+	HANDLE browser = g_web && SUCCEEDED( g_web->get_BrowserProcessId( &pid ) ) && pid ? OpenProcess( PROCESS_TERMINATE, FALSE, pid ) : NULL;
+	if ( browser )
+		TerminateProcess( browser, 0 );
+	TerminateProcess( GetCurrentProcess(), g_exitCode );
+}
+
 // Hint texts play ui/hint.wav on every update and the test server sends ten a second. Stopping the sound after it
 // starts (what timer plugins do) depends on packet order and misses at high frame rates, so the plugin puts a folder
 // with a silent one first in the game's search paths (see InstallPlugin).
@@ -887,10 +900,7 @@ static void OnMessage( const wstring &msg )
 			ShellExecuteW( NULL, L"open", g_hudPath.c_str(), NULL, NULL, SW_SHOWNORMAL );
 	}
 	else if ( op == L"quit" )
-	{
-		DestroyWindow( g_hwnd );
-		return;
-	}
+		Quit();
 	else if ( op == L"done" ) // --selftest result
 	{
 		WriteAll( g_selftestOut, Utf8( body ) );
@@ -973,6 +983,11 @@ static LRESULT CALLBACK WndProc( HWND h, UINT m, WPARAM w, LPARAM l )
 		if ( g_ctl )
 			g_ctl->NotifyParentWindowPositionChanged();
 		return 0;
+	case WM_PRINT:
+		// The capture picker makes thumbnails of every window with PrintWindow, this one too, from a WebView2 thread
+		// its UI thread waits on. Passed on to the child, that would wait on the same UI thread: both hang (the empty
+		// "Choose what to share" dialog). The thumbnail goes without the page.
+		return DefWindowProcW( h, m, w, l & ~PRF_CHILDREN );
 	case WM_CLOSE: // let the page ask about unsaved changes; a second click within 5 s closes anyway
 		if ( g_web && g_selftestOut.empty() && GetTickCount() - s_closeAsked > 5000 )
 		{
@@ -980,6 +995,8 @@ static LRESULT CALLBACK WndProc( HWND h, UINT m, WPARAM w, LPARAM l )
 			g_web->PostWebMessageAsString( L"!close" );
 			return 0;
 		}
+		if ( g_selftestOut.empty() )
+			Quit();
 		break;
 	case WM_TIMER:
 		if ( w == 2 )
