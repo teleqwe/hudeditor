@@ -1081,6 +1081,10 @@ static void Tick()
 		--g_nPendingTicks;
 	else if ( g_nPendingTicks == 0 )
 	{
+		// not while a map loads: its windows are being made and torn down, and refreshing them then crashed (a change
+		// written just as a map started). It runs once the loading screen has gone.
+		if ( g_pEngineClient && g_pEngineClient->IsDrawingLoadingImage() )
+			return;
 		g_nPendingTicks = -1;
 		DoReload();
 	}
