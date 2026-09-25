@@ -1038,24 +1038,51 @@ async function pictureFrames(file) {
   try { img.src = url; await img.decode(); } finally { URL.revokeObjectURL(url); }
   return [{ image: img, ms: 0 }];
 }
-// Writes the picture as <name>.vtf/.vmt (power-of-two sizes up to 512, smaller for long animations) and returns its
-// ImagePanel "image" and its width/height.
-async function importPicture(file, name) {
+// Writes the picture as <dir>/<name>.vtf/.vmt (power-of-two sizes up to max, smaller for long animations) and returns
+// its ImagePanel "image" (relative to materials/vgui), width/height, and the proxy lines that animate it (or '').
+async function importPicture(file, name, dir = PICTURES, max = 512) {
   const frames = await pictureFrames(file), first = frames[0].image;
   const iw = first.displayWidth || first.naturalWidth || first.width, ih = first.displayHeight || first.naturalHeight || first.height;
   const pow2 = n => 2 ** Math.round(Math.log2(Math.max(4, n)));
-  let w = Math.min(512, pow2(iw)), h = Math.min(512, pow2(ih));
+  let w = Math.min(max, pow2(iw)), h = Math.min(max, pow2(ih));
   while (w * h * 4 * frames.length > 8 << 20 && w * h > 256) w = Math.max(16, w / 2), h = Math.max(16, h / 2);
   const cv = el('canvas', { width: w, height: h }), g = cv.getContext('2d', { willReadFrequently: true }), pixels = [];
   g.imageSmoothingQuality = 'high';
   for (const { image } of frames) { g.clearRect(0, 0, w, h); g.drawImage(image, 0, 0, w, h); pixels.push(g.getImageData(0, 0, w, h).data); image.close?.(); }
-  const path = `${PICTURES}/${name}`, material = path.replace(/^materials\//, '');
+  const path = `${dir}/${name}`, material = path.replace(/^materials\//, '');
   const ms = frames.reduce((s, f) => s + (f.ms || 100), 0) / frames.length, fps = Math.max(1, Math.min(60, Math.round(1000 / ms)));
+  const proxies = frames.length > 1 ? `\t"Proxies"\n\t{\n\t\t"AnimatedTexture"\n\t\t{\n\t\t\t"animatedtexturevar"\t"$basetexture"\n`
+    + `\t\t\t"animatedtextureframenumvar"\t"$frame"\n\t\t\t"animatedtextureframerate"\t"${fps}"\n\t\t}\n\t}\n` : '';
   await call('writebin', `${path}.vtf`, await base64(pictureVtf(pixels, w, h)));
   await call('write', `${path}.vmt`, `"UnlitGeneric"\n{\n\t"$basetexture"\t"${material}"\n\t"$translucent"\t"1"\n\t"$vertexcolor"\t"1"\n\t"$vertexalpha"\t"1"\n`
-    + `\t"$ignorez"\t"1"\n\t"$no_fullbright"\t"1"\n\t"$nolod"\t"1"\n` + (frames.length > 1 ? `\t"Proxies"\n\t{\n\t\t"AnimatedTexture"\n\t\t{\n\t\t\t"animatedtexturevar"\t"$basetexture"\n`
-    + `\t\t\t"animatedtextureframenumvar"\t"$frame"\n\t\t\t"animatedtextureframerate"\t"${fps}"\n\t\t}\n\t}\n` : '') + '}\n');
-  return { image: material.replace(/^vgui\//, ''), aspect: iw / ih, frames: frames.length };
+    + `\t"$ignorez"\t"1"\n\t"$no_fullbright"\t"1"\n\t"$nolod"\t"1"\n${proxies}}\n`);
+  return { image: material.replace(/^vgui\//, ''), material, aspect: iw / ih, frames: frames.length, proxies };
+}
+
+// The MVP star: the scoreboard's (hud/scoreboard_mvp) and the round-end panel's (hud/win_panel_mvpstar) materials,
+// pointed at the HUD's own picture (under two names taking turns, so the running game loads the new one) or back at
+// the game's.
+const MVP_STARS = ['hud/scoreboard_mvp', 'hud/win_panel_mvpstar'];
+const starVmt = (tex, proxies = '') => `"UnlitGeneric"\n{\n\t"$basetexture"\t"${tex}"\n\t"$translucent"\t"1"\n\t"$vertexalpha"\t"1"\n\t"$vertexcolor"\t"1"\n${proxies}}\n`;
+async function setMvpStar(file) {
+  try {
+    if (file) status('Making the MVP star...');
+    const tex = /hudeditor_mvp_a"/.test(await readHud(`materials/${MVP_STARS[0]}.vmt`) || '') ? 'hudeditor_mvp_b' : 'hudeditor_mvp_a';
+    const pic = file && await importPicture(file, tex, 'materials/hud', 128);
+    for (const star of MVP_STARS) await call('write', `materials/${star}.vmt`, pic ? starVmt(pic.material, pic.proxies) : starVmt(star.replace(/^hud/, 'HUD')));
+    await call('cmd', '', 'mat_reloadmaterial scoreboard_mvp; mat_reloadmaterial win_panel_mvpstar').catch(() => {});
+    setDirty(true);
+    status(pic ? 'MVP star changed. Click Done or Save HUD to keep it.' : 'The game\'s MVP star is back.');
+  } catch (err) { status(`Couldn't use that picture: ${err.message}`); }
+}
+function mvpRows() {
+  const pick = el('input', { type: 'file', accept: 'image/png,image/jpeg,image/gif,image/webp', hidden: true });
+  pick.onchange = () => { if (pick.files[0]) setMvpStar(pick.files[0]); pick.value = ''; };
+  const r = el('div', { className: 'row action' });
+  r.append(pick, el('button', { textContent: 'Change picture...', title: 'PNG, JPG, GIF (animated too) or WebP, square works best', onclick: () => pick.click() }),
+    el('button', { className: 'ghost', textContent: 'The game\'s star', onclick: () => setMvpStar(null) }));
+  r.dataset.q = 'mvp star picture icon flower';
+  return [r, noteRow('Beside the names of players with MVPs, and on the round-end panel.')];
 }
 const pictureName = () => `${(hudName || 'hud').toLowerCase().replace(/[^a-z0-9]+/g, '_')}_${Date.now().toString(36)}`;
 async function addToHud(kind, file) {
@@ -1237,7 +1264,7 @@ function scoreboardSections(sel, shownFonts) {
       return r;
     })];
   const fonts = SCOREBOARD_FONTS.filter(([name]) => !shownFonts.includes(name) && hasFont(C, name)).map(([name, what]) => fontFold(C, name, what));
-  return [['Scoreboard: background', background], ['Scoreboard: text colours', text], ['Scoreboard: player rows', rows], ['Scoreboard: fonts', fonts]];
+  return [['Scoreboard: background', background], ['Scoreboard: text colours', text], ['Scoreboard: player rows', rows], ['Scoreboard: MVP star', mvpRows()], ['Scoreboard: fonts', fonts]];
 }
 
 async function select(sel) {
@@ -3310,7 +3337,7 @@ if (host && location.hash === '#hosttest') (async () => {
     check(layoutProps(spec, 'CTScoreLabel').xpos === 'r268' && !partHidden(spec, 'CTScoreLabel'), 'showing a window part puts its position back');
     const sb = await uiFile('resource/UI/scoreboard.res'), sbSections = scoreboardSections({ res: sb, info: { id: 'scores' }, thing: { key: 'scores' } }, []);
     const sbCounts = sbSections.map(([, rows]) => rows.length);
-    check(sbCounts[0] === 2 && sbCounts[1] === 6 && sbCounts[2] === 8 && sbCounts[3] >= 8, `scoreboard: background, text colours, player rows and fonts in one place (${sbCounts})`);
+    check(sbCounts[0] === 2 && sbCounts[1] === 6 && sbCounts[2] === 8 && sbCounts[3] === 2 && sbCounts[4] >= 8, `scoreboard: background, text colours, player rows, MVP star and fonts in one place (${sbCounts})`);
     const menuFonts = fontsOf({ info: { kind: 'window', id: 'gamemenu', file: S }, thing: { key: 'gamemenu' } }).map(([f, n]) => `${f}:${n}`).join();
     const btnFonts = fontsOf({ info: { kind: 'window', id: 'info', file: C }, thing: { key: 'info' }, control: { cls: 'Button' } });
     check(menuFonts === `${S}:MenuLarge,${C}:ClientTitleFont` && btnFonts.length === 1 && btnFonts[0][1] === 'Default' && fontNames(C).length > 50
