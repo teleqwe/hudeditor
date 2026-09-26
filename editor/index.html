@@ -548,7 +548,7 @@ function layoutProps(f, id) {
 // HudLayout position/size to screen pixels. Values are in 640x480 units scaled by screen height;
 // "r" = from the right/bottom, "c" = from the centre, "f" (sizes) = full minus.
 function coord(v, full, scale, isPos) {
-  const m = /^\s*([rcf]?)\s*(-?[\d.]+)\s*$/i.exec(v || '0');
+  const m = /^\s*([rcf]?)\s*([+-]?[\d.]+)\s*$/i.exec(v || '0');
   if (!m) return 0;
   const n = +m[2] * scale, p = m[1].toLowerCase();
   if (isPos) return p === 'r' ? full - n : p === 'c' ? full / 2 + n : n;
@@ -953,10 +953,15 @@ function windowPartRows(sel) {
 // ---------- command buttons ----------
 // Team and class select run whatever command a button sends (the menu closes and the game runs it as if typed in the
 // console), so a HUD can add its own: blocks named hudeditor_cmd<n>, which the plugin makes in a running game.
-const CMD_WINDOWS = new Set(['team', 'class_ct', 'class_ter']);
+const CMD_WINDOWS = new Set(['team', 'class_ct', 'class_ter']); // not the MOTD: it runs only its OK button's command (checked)
 const CMD_PRESETS = [['say !r', 'Restart'], ['say !rtv', 'Rock the vote'], ['say !nominate', 'Nominate'], ['say !spec', 'Spectate'],
   ['say !stop', 'Stop timer'], ['say !top', 'Top times'], ['say !wr', 'World record'], ['say !pr', 'Personal record'], ['say !cp', 'Checkpoints'],
   ['say !hide', 'Hide players'], ['say !style', 'Styles'], ['say !settings', 'Settings'], ['say !rank', 'Rank'], ['timeleft', 'Time left']];
+// Every button's place, the ones the game shows only now and then too (Spectate, VIP), which can't be clicked in the preview.
+function buttonPlaceRows(f) {
+  return f.parsed.sections.filter(s => s.path.length === 2 && /button$/i.test(layoutProps(f, s.path[1]).controlname || ''))
+    .flatMap(s => { const b = s.path[1], p = layoutProps(f, b); return [numRow(f, b, 'xpos', `${prettify(b)}: X`, p.xpos), numRow(f, b, 'ypos', `${prettify(b)}: Y`, p.ypos)]; });
+}
 const cmdBlocks = f => f.parsed.sections.filter(s => s.path.length === 2 && /^hudeditor_cmd/i.test(s.path[1])).map(s => s.path[1]);
 // Takes the block `name` under sub out of f's own file (whole lines).
 function dropBlock(f, sub, name) {
@@ -969,13 +974,14 @@ function dropBlock(f, sub, name) {
 // under the lowest one, a row further down. Returns [block name, its settings], or null without a button to copy.
 function commandBlock(f, text, command) {
   const blocks = f.parsed.sections.filter(s => s.path.length === 2).map(s => s.path[1]);
-  const buttons = blocks.map(b => layoutProps(f, b)).filter(p => /button$/i.test(p.controlname || ''));
+  // (not ones hidden off screen or switched off: they'd set the spacing)
+  const buttons = blocks.map(b => layoutProps(f, b)).filter(p => /button$/i.test(p.controlname || '') && p.visible !== '0' && !(Math.abs(parseFloat(String(p.xpos).replace(/^[rc]/i, ''))) >= 9999));
   if (!buttons.length) return null;
-  const num = v => { const m = /^\s*[rc]?\s*(-?[\d.]+)\s*$/i.exec(v || ''); return m ? +m[1] : null; };
+  const num = v => { const m = /^\s*[rc]?\s*([+-]?[\d.]+)\s*$/i.exec(v || ''); return m ? +m[1] : null; };
   const look = [...buttons].sort((a, b) => Object.keys(b).length - Object.keys(a).length)[0];
   const low = [...buttons].sort((a, b) => (num(b.ypos) ?? 0) - (num(a.ypos) ?? 0))[0];
   const ys = buttons.map(p => num(p.ypos)).filter(y => y !== null).sort((a, b) => a - b);
-  const gaps = ys.slice(1).map((y, i) => y - ys[i]).filter(d => d > 0), step = gaps.length ? Math.min(...gaps) : (num(low.tall) ?? 20) + 8;
+  const gaps = ys.slice(1).map((y, i) => y - ys[i]).filter(d => d > 0), step = Math.max(gaps.length ? Math.min(...gaps) : (num(low.tall) ?? 20) + 8, num(low.tall) ?? 20);
   let n = 1;
   while (blocks.some(b => b.toLowerCase() === `hudeditor_cmd${n}`)) n++;
   const name = `hudeditor_cmd${n}`;
@@ -1017,10 +1023,12 @@ function commandRows(sel) {
   c.oninput = () => { const preset = CMD_PRESETS.find(([cmd]) => cmd === c.value); if (preset && !t.value) t.value = preset[1]; };
   add.append(el('div', { className: 'meta', textContent: 'Add a button that runs a command' }), t, c, el('button', { className: 'primary', textContent: 'Add button', onclick: () => {
     if (!clean(c.value)) return status('Type what the button runs, like say !rtv.');
+    // the game won't run these from a window's button (FCVAR_CLIENTCMD_CAN_EXECUTE); a main menu button may
+    if (/^(exec|bind|unbind|alias|connect)\b/i.test(clean(c.value))) return status('The game blocks exec, bind, alias and connect from these buttons. Add it to the main menu instead: Main menu > buttons > Add a button that runs a command.');
     addCommandButton(f, clean(t.value) || clean(c.value), clean(c.value));
   } }));
   add.dataset.q = 'command button add say rtv spec';
-  return [...rows, add, noteRow('A click closes the menu and runs the command as if typed in the console. Click the new button in the preview to move it or change its look.')];
+  return [...rows, add, noteRow('A click closes the menu and runs the command, like say or a server\'s !commands; the game blocks exec, bind and alias here (the main menu can run them). Click the new button in the preview to move it or change its look.')];
 }
 
 // ---------- the bomb's screen ----------
@@ -1174,6 +1182,13 @@ async function runCheckup() {
   const out = [], add = (text, fix = null) => out.push([text, fix]), list = xs => xs.slice(0, 5).join(', ') + (xs.length > 5 ? ` and ${xs.length - 5} more` : '');
   const known = async op => new Set((await call(op).catch(() => '')).split('\n').map(s => s.trim().toLowerCase()).filter(Boolean));
   const installed = await known('fontfaces'), brought = await known('hudfonts');
+  // the game reads custom folders in name order: a HUD there before this one wins for every file both have (the
+  // editor puts this one first while it runs, but not for the menus read as the game starts, nor when playing)
+  const huds = (await call('huds').catch(() => '')).split('\n').map(l => l.split('\t'));
+  const here = (huds.find(l => l[1] === 'current') || [])[2] || '', dir = p => p.toLowerCase().replace(/[\\/][^\\/]+$/, ''), base = p => p.split(/[\\/]/).pop();
+  const before = /[\\/]custom[\\/][^\\/]+$/i.test(here) ? [...new Set(huds.filter(l => l[1] && l[1] !== 'current' && dir(l[1]) === dir(here)).map(l => base(l[1])))]
+    .filter(n => n.toLowerCase() < base(here).toLowerCase()) : [];
+  if (before.length) add(`${list(before)} ${before.length > 1 ? 'come' : 'comes'} before ${base(here)} in the custom folder, so the game uses ${before.length > 1 ? 'their' : 'its'} files first: its main menu, and everything when you play. Move ${before.length > 1 ? 'them' : 'it'} out of custom to use this HUD.`);
   const games = {};
   for (const [file] of FONT_FILES) games[file] = await call('vanilla', PATHS[file].split('/').pop()).then(parse).catch(() => null);
   for (const [file, where] of FONT_FILES) {
@@ -1383,9 +1398,9 @@ function mvpRows() {
   return [r, noteRow('Beside the names of players with MVPs, and on the round-end panel.')];
 }
 const pictureName = () => `${(hudName || 'hud').toLowerCase().replace(/[^a-z0-9]+/g, '_')}_${Date.now().toString(36)}`;
-async function addToHud(kind, file) {
-  const lay = F(L);
+async function addToHud(kind, file, lay = F(L)) {
   if (!lay) return;
+  const inWindow = lay !== F(L), win = inWindow && selected;
   let n = 1;
   while (Object.keys(layoutProps(lay, `hudeditor_${kind}${n}`)).length) n++;
   const name = `hudeditor_${kind}${n}`, at = (w, h) => [['xpos', `c${-Math.round(w / 2)}`], ['ypos', `c${-Math.round(h / 2)}`], ['wide', `${w}`], ['tall', `${h}`]];
@@ -1405,11 +1420,27 @@ async function addToHud(kind, file) {
   save(lay, name, [...body, ['visible', '1'], ['enabled', '1']], []);
   await sleep(400);
   await writing;
-  select({ thing: { name, key: name.toLowerCase() }, info: customInfo(name), control: null });
+  if (!inWindow) return select({ thing: { name, key: name.toLowerCase() }, info: customInfo(name), control: null });
+  // in a window: selected as if clicked, once the game has made it
+  for (let i = 0; i < 20; i++) {
+    const p = live && live.panels.find(q => q.key === name.toLowerCase());
+    const hit = p && pickAt((p.x + p.w / 2) / live.W, (p.y + p.h / 2) / live.H);
+    if (hit && (hit.node || hit.control) && (hit.node || hit.control).key === name.toLowerCase()) return select(hit);
+    await sleep(300);
+  }
+  status('Added. It shows when the window is open: click it in the preview to change it.');
+  select({ ...win, control: null, node: null });
 }
 // What an added thing shows (its text, its picture) and taking it out again.
-function customRows(id) {
-  const lay = F(L), p = layoutProps(lay, id), rows = [];
+// A thing added to a window (lay: its .res) gets these too; its position and own colours come from resRows.
+function customRows(id, lay = F(L)) {
+  const p = layoutProps(lay, id), rows = [], inWindow = lay !== F(L), kind = (p.controlname || '').toLowerCase();
+  if (inWindow && kind === 'imagepanel') rows.push(colorRow('Tint', 'For this picture only', p.drawcolor || '255 255 255 255', v => save(lay, 'drawcolor', v, id), ['drawcolor'], null, `${lay.name}/${id}`));
+  if (kind === 'editablepanel') {
+    rows.push(colorRow('Edge line', 'A 1-unit line round the box (clear: none)', edgeColour(p.border) || '0 0 0 0', v => setEdge(lay, id, v), ['border'], null, `${lay.name}/${id}`));
+    if (inWindow) rows.push(checkRow('Rounded corners', p.paintbackgroundtype === '2', on => save(lay, 'PaintBackgroundType', on ? '2' : '0', id)));
+  }
+  if (inWindow) rows.push(inputRow('Layer', p.zpos || '0', v => save(lay, 'zpos', v, id), { type: 'number', step: 1, title: 'Higher is in front' }));
   if ((p.controlname || '').toLowerCase() === 'label') {
     const r = inputRow('Text', p.labeltext || '', v => save(lay, 'labelText', v.replace(/["\\]/g, ''), id));
     r.querySelector('input').style.width = '100%';
@@ -1427,16 +1458,35 @@ function customRows(id) {
     rows.push(r);
   }
   const r = el('div', { className: 'row action' });
-  r.append(el('button', { className: 'ghost', textContent: 'Remove from the HUD', onclick: () => { commit(lay, `${lay.name}/${id}/remove`, () => dropBlock(lay, [], id)); select(null); } }));
+  r.append(el('button', { className: 'ghost', textContent: inWindow ? 'Remove from the window' : 'Remove from the HUD', onclick: () => {
+    commit(lay, `${lay.name}/${id}/remove`, () => dropBlock(lay, [], id));
+    select(inWindow ? { ...selected, control: null, node: null } : null);
+  } }));
   rows.push(r);
   return rows;
 }
-function addRows() {
+// A box's edge line is a border of its own in ClientScheme (HudEditorEdge_<box>), 1 unit on each side.
+const EDGE = id => `HudEditorEdge_${id.replace(/^hudeditor_/i, '')}`;
+function edgeColour(border) {
+  const f = F(C);
+  if (!f || !border || !/^HudEditorEdge_/i.test(border)) return null;
+  const e = [...f.bases, f.parsed].flatMap(p => p.entries).find(e => e.path.length >= 3 && samePath(e.path.slice(1, 3), ['Borders', border]) && e.key.toLowerCase() === 'color');
+  return e ? e.value : null;
+}
+function setEdge(lay, id, rgba) {
+  const name = EDGE(lay === F(L) ? id : `${lay.name.split('/').pop().replace(/\.res$/i, '')}_${id}`), side = s => [s, [['1', [['color', rgba], ['offset', '0 0']]]]];
+  save(F(C), name, [['inset', '0 0 0 0'], ['backgroundtype', '0'], side('Left'), side('Right'), side('Top'), side('Bottom')], ['Borders']);
+  if ((layoutProps(lay, id).border || '') !== name) save(lay, 'border', name, id);
+}
+// windows whose own .res is read again on a change (the scoreboard itself, the others through the plugin)
+const ADD_WINDOWS = new Set(['scores', 'team', 'class_ct', 'class_ter', 'info']);
+function addRows(lay = F(L)) {
   const pick = el('input', { type: 'file', accept: 'image/png,image/jpeg,image/gif,image/webp', hidden: true });
-  pick.onchange = () => { if (pick.files[0]) addToHud('pic', pick.files[0]); };
+  pick.onchange = () => { if (pick.files[0]) addToHud('pic', pick.files[0], lay); pick.value = ''; };
   const r = el('div', { className: 'row action' });
   r.append(pick, el('button', { textContent: '+ Picture', title: 'PNG, JPG, GIF (animated too) or WebP', onclick: () => pick.click() }),
-    el('button', { textContent: '+ Text', onclick: () => addToHud('text') }), el('button', { textContent: '+ Colour box', onclick: () => addToHud('box') }));
+    el('button', { textContent: '+ Text', onclick: () => addToHud('text', null, lay) }), el('button', { textContent: '+ Colour box', onclick: () => addToHud('box', null, lay) }));
+  if (lay !== F(L)) { r.dataset.q = 'add picture gif text box window'; return [r]; }
   r.dataset.q = 'add picture image gif logo text label box colour background';
   return [r, noteRow('Pictures are materials, which servers with sv_pure 1 or 2 replace with the game\'s own, so there they don\'t show. Texts, boxes, colours and fonts show everywhere.')];
 }
@@ -1463,6 +1513,7 @@ const SCOREBOARD_CVARS = [['CT players', 'cl_scoreboard_ct_color', '150 200 255'
   ['T clan tags', 'cl_scoreboard_clan_t_color', '240 90 90'], ['Dead clan tags', 'cl_scoreboard_dead_clan_color', '125 125 125']];
 // The .res only has the first row of each team, as a template the game copies for every player.
 const PLAYER_ROW = /^(CT|T)Player(Avatar|Clan|Name|Status|Score|Deaths|Latency)0$/i;
+const ROW_PARTS = ['CT', 'T'].flatMap(s => ['Area', 'Avatar0', 'Clan0', 'Name0', 'Status0', 'Score0', 'Deaths0', 'Latency0'].map(k => `${s}Player${k}`));
 // They're game settings, so the HUD carries them as a cfg the game runs at startup: cfg/hudeditor_colours.cfg, run
 // from the HUD's copy of cfg/valve.rc (the game's own plus that exec, before autoexec.cfg so a player's autoexec still
 // wins). Written like any other file, so undo, Save HUD and discarding cover them; the running game gets the values too.
@@ -1546,6 +1597,7 @@ function scoreboardSections(sel, shownFonts) {
     })];
   if (boxOn) {
     background.push(colorRow('Box colour', 'The editor\'s own box (HudEditorBackground)', box.bgcolor_override || '0 0 0 200', v => save(f, 'bgcolor_override', v, SB_BOX), ['bgcolor_override']),
+      colorRow('Box edge line', 'A 1-unit line round the box (clear: none)', edgeColour(box.border) || '0 0 0 0', v => setEdge(f, SB_BOX, v), ['border']),
       checkRow('Rounded corners', box.paintbackgroundtype === '2', on => save(f, 'paintbackgroundtype', on ? '2' : '0', SB_BOX)));
     for (const [k, label] of POS) background.push(numRow(f, SB_BOX, k, `Box ${label.toLowerCase()}`, box[k]));
   }
@@ -1561,6 +1613,14 @@ function scoreboardSections(sel, shownFonts) {
       r.querySelector('.alpha').hidden = true; // no opacity
       return r;
     })];
+  // where the rows start: every row template of both teams moves by the same amount, the hidden ones (the list area,
+  // the dead/MVP icon) too, which can't be clicked in the preview
+  const cy = v => { const m = /^c([+-]?\d+)$/i.exec(v || ''); return m ? +m[1] : null; }, top = cy(layoutProps(f, 'CTPlayerName0').ypos);
+  if (top !== null) rows.splice(1, 0, inputRow('Rows start at', top, v => {
+    const d = +v - cy(layoutProps(f, 'CTPlayerName0').ypos);
+    if (d) for (const b of ROW_PARTS) { const y = cy(layoutProps(f, b).ypos); if (y !== null) save(f, 'ypos', `c${y + d}`, b); }
+    refreshSoon();
+  }, { type: 'number', step: 1, title: 'From the centre. Both teams\' first rows and the list under them move together' }));
   const fonts = SCOREBOARD_FONTS.filter(([name]) => !shownFonts.includes(name) && hasFont(C, name)).map(([name, what]) => fontFold(C, name, what));
   return [['Scoreboard: background', background], ['Scoreboard: text colours', text], ['Scoreboard: player rows', rows], ['Scoreboard: MVP star', mvpRows()], ['Scoreboard: fonts', fonts]];
 }
@@ -1602,14 +1662,20 @@ function pickAt(fx, fy) {
     return b ? { thing: b.thing, info: b.info, control: null } : null;
   }
   const x = fx * live.W, y = fy * live.H;
+  // parts thinner than a few screen pixels (1-unit lines) get that much room round them, or no click lands on them
+  const tol = 3 * live.W / Math.max(1, $('boxes').getBoundingClientRect().width);
+  const inside = r => { const ex = r.w < 2 * tol ? tol : 0, ey = r.h < 2 * tol ? tol : 0; return x >= r.x - ex && y >= r.y - ey && x <= r.x + r.w + ex && y <= r.y + r.h + ey; };
   let best = null;
   for (const p of live.panels) {
     if (!p.thing || p.w * p.h <= 0 || CONTAINERS.has(p.key) || p.key.startsWith('frame_') && p.key.endsWith('grip')) continue;
     const info = thingInfo(p.thing);
     if (!info || (p === p.thing && NO_CLICK.has(p.key))) continue;
-    const r = clickRects(p, info, live.W, live.H).find(r => x >= r.x && y >= r.y && x <= r.x + r.w && y <= r.y + r.h);
+    if (info.kind === 'hud' && canHide(info.id) && isHidden(info.id)) continue; // hidden parts are still laid out, but not seen
+    const r = clickRects(p, info, live.W, live.H).find(inside);
     if (!r) continue;
-    const area = r.w * r.h, layer = p.module === 'ClientDLL' ? 0 : 1; // menus and the console draw above the HUD
+    // menus and the console draw above the HUD, and in-game windows' buttons (team select's...) above its parts; not the
+    // windows themselves or their see-through frame pieces, which span most of the screen
+    const area = r.w * r.h, layer = p.module !== 'ClientDLL' ? 2 : info.kind === 'window' && p !== p.thing && /button/i.test(p.cls) ? 1 : 0;
     if (area > 0.9 * live.W * live.H && p !== p.thing) continue;
     if (!best || layer > best.layer || (layer === best.layer && area < best.area)) best = { p, info, area, layer, r };
   }
@@ -1617,7 +1683,10 @@ function pickAt(fx, fy) {
   // the control is the nearest panel (clicked one or a parent) that is a known control type; not inside HUD parts (but
   // the chat: its filter button, scroll bar and history) or the main menu
   let c = best.p;
-  while (c && c !== best.p.thing && !controlOf(c.cls)) c = c.parent;
+  // (the nearest one with a name: a text box's unnamed inside is the box; failing that an unnamed one, the console's text)
+  let unnamed = null;
+  while (c && c !== best.p.thing && !(controlOf(c.cls) && c.name)) { if (!unnamed && controlOf(c.cls)) unnamed = c; c = c.parent; }
+  if ((!c || c === best.p.thing) && unnamed) c = unnamed;
   const control = (best.info.kind === 'window' && best.info.id !== 'gamemenu' || best.info.id === 'HudChat' || best.info.id === 'WinPanel_Round') && c && c !== best.p.thing ? c : null;
   return { thing: best.p.thing, info: best.info, control, node: best.p !== best.p.thing ? best.p : null, r: best.r };
 }
@@ -1805,7 +1874,7 @@ const ANCHOR = { xpos: { '': 'from the left', r: 'from the right', c: 'from the 
 // Each position's value when the HUD was opened ("file/block/key"), for its Undo; cleared when a HUD is opened.
 const loadedPos = {};
 function numRow(lay, id, key, label, raw) {
-  const split = r => { const m = /^\s*([rcf]?)\s*(-?[\d.]+)\s*$/i.exec(r || '0') || [0, '', '0']; return [m[1].toLowerCase(), m[2]]; };
+  const split = r => { const m = /^\s*([rcf]?)\s*([+-]?[\d.]+)\s*$/i.exec(r || '0') || [0, '', '0']; return [m[1].toLowerCase(), m[2].replace(/^\+/, '')]; }; // "c+166" too
   let [prefix, num] = split(raw), undo = null;
   const row = inputRow(label, num, v => { num = v; save(lay, key, prefix + v, id); if (undo) undo.disabled = prefix + num === first; }, { type: 'number', step: 1 });
   const input = row.querySelector('input'), meta = row.lastElementChild;
@@ -2246,6 +2315,8 @@ const OWN_NOTE = { fgcolor_override: 'Text colour of just this one; overrides th
 // bgcolor_override: it takes these instead.
 const BUTTON_OWN = [['defaultFgColor_override', 'Text'], ['defaultBgColor_override', 'Background'], ['armedFgColor_override', 'Text (mouse over)'],
   ['armedBgColor_override', 'Background (mouse over)'], ['depressedFgColor_override', 'Text (clicked)'], ['depressedBgColor_override', 'Background (clicked)']];
+const TEXT_ALIGN = [['west', 'Left'], ['center', 'Centre'], ['east', 'Right'], ['north-west', 'Top left'], ['north', 'Top'], ['north-east', 'Top right'],
+  ['south-west', 'Bottom left'], ['south', 'Bottom'], ['south-east', 'Bottom right']];
 function resRows(f, block, defaults, schemeFile, ctl) {
   const p = layoutProps(f, block), sf = F(schemeFile), t = sf ? tables(sf) : EMPTY_TABLES, rows = [];
   const def = label => { const d = defaults.find(([l]) => l === label); return d && resolve(t, d[1]); };
@@ -2265,6 +2336,8 @@ function resRows(f, block, defaults, schemeFile, ctl) {
     const deflt = CONTROL_FONTS[ctl] && CONTROL_FONTS[ctl][0][1];
     if (!CODE_FONTS[block.toLowerCase()] && (p.font || deflt)) rows.push(inputRow('Font', p.font || deflt, v => save(f, 'font', v, block),
       { list: fontList(schemeFile), title: `Just this one; any font in ${schemeFile}` }));
+    // where a text sits in its box: a right-aligned one grows leftwards from its right edge
+    if (ctl === 'Label' || 'textalignment' in p) rows.push(selectRow('Text alignment', TEXT_ALIGN, (p.textalignment || 'west').toLowerCase().replace(/^(north|south)(west|east)$/, '$1-$2'), v => save(f, 'textAlignment', v, block), ['textAlignment']));
   }
   for (const [k, label] of POS) if (k in p || k.endsWith('pos')) rows.push(numRow(f, block, k, label, p[k]));
   return rows;
@@ -2545,7 +2618,7 @@ function mainMenuSections() {
   add.dataset.q = 'background picture image wallpaper import';
   const buttons = menuRows();
   if (buttons.length) out.push(['Main menu: buttons', buttons]);
-  out.push(['Main menu: background', [add, noteRow('PNG, JPG, WebP... It is cropped to fill the screen, and shows straight away.')]]);
+  out.push(['Main menu: background', [add, noteRow('PNG, JPG, WebP, or an animated GIF, which moves (at half the sharpness). It is cropped to fill the screen, and shows straight away.')]]);
   const h = s && tables(s).base.get('mainmenu.menuitemheight');
   if (h) out.push(['Main menu: items', [inputRow('Item height', h.value, v => save(s, 'MainMenu.MenuItemHeight', v, ['BaseSettings']),
     { type: 'number', min: 8, max: 80, step: 1, title: 'Scaled to your screen; the game\'s is 22. The text size is the MenuLarge font below' })]]);
@@ -2635,7 +2708,8 @@ function menuRows() {
   const move = (i, d) => { const next = [...items]; [next[i], next[i + d]] = [next[i + d], next[i]]; setMenu(next); };
   const rows = items.map((it, i) => {
     const row = el('div', { className: 'row menuitem' });
-    const what = cmd(it).startsWith('engine connect ') ? `Connects to ${cmd(it).slice(15)}` : menuVal(it, 'OnlyInGame') === '1' ? 'In game only' : '';
+    const what = cmd(it).startsWith('engine connect ') ? `Connects to ${cmd(it).slice(15)}` : cmd(it).startsWith('engine ') ? `Runs ${cmd(it).slice(7)}`
+      : menuVal(it, 'OnlyInGame') === '1' ? 'In game only' : '';
     const name = el('div', { textContent: menuName(it) });
     name.append(el('div', { className: 'meta', textContent: what }));
     const btn = (text, title, on, off) => el('button', { textContent: text, title, disabled: !!off, onclick: on });
@@ -2664,29 +2738,46 @@ function menuRows() {
     setMenu(quit < 0 ? [...items, it] : [...items.slice(0, quit), it, ...items.slice(quit)]);
   } }));
   add.dataset.q = 'menu button connect server ip add';
+  // a button that runs any console command (menu buttons may run everything, exec and bind too, unlike in-game windows')
+  const run = el('div', { className: 'row menuadd' });
+  const rlabel = el('input', { placeholder: 'Button text', title: 'Button text, shown as typed' }), rcmd = el('input', { placeholder: 'Command, like exec myconfig', title: 'What the button runs, as typed in the console' });
+  rlabel.setAttribute('aria-label', 'Button text'), rcmd.setAttribute('aria-label', 'Command');
+  rlabel.className = 'wide';
+  run.append(el('div', { className: 'meta', textContent: 'Add a button that runs a command' }), rlabel, rcmd, el('button', { className: 'primary', textContent: 'Add button', onclick: () => {
+    const c = rcmd.value.replace(/["\\]/g, '').trim(), text = rlabel.value.replace(/["\\]/g, '').trim();
+    if (!c) return status('Type what the button runs, like exec myconfig.');
+    const quit = items.findIndex(it => cmd(it) === 'Quit'), it = [['label', text || c], ['command', `engine ${c}`]];
+    setMenu(quit < 0 ? [...items, it] : [...items.slice(0, quit), it, ...items.slice(quit)]);
+  } }));
+  run.dataset.q = 'menu button command exec config bind run add';
   // an empty button is an empty line (the game's own list has one, in game only)
   const gap = el('div', { className: 'row action' });
   gap.append(el('button', { className: 'ghost', textContent: '+ Add a gap', title: 'An empty line; move it into place with the arrows', onclick: () => setMenu([...items, [['label', ''], ['command', '']]]) }));
   gap.dataset.q = 'menu button gap space empty';
-  return [...rows, add, gap,noteRow('The game reads these when it starts: restart it to see changes.')];
+  return [...rows, add, run, gap, noteRow('The game reads these when it starts: restart it to see changes.')];
 }
 
 // The main menu background: the game stretches materials/console/background01 (4:3 screens) or
 // background01_widescreen over the screen, read once at startup. The picture is cropped to that shape and written
 // as VTF 7.2, BGR888 (no compression, so dark gradients don't band), one mip level, power-of-two sizes.
-function backgroundVtf(img, w, h, aspect) {
-  const cv = el('canvas', { width: w, height: h }), g = cv.getContext('2d');
-  const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height, sw = Math.min(iw, ih * aspect), sh = sw / aspect;
-  g.imageSmoothingQuality = 'high';
-  g.fillRect(0, 0, w, h); // black behind see-through pictures
-  g.drawImage(img, (iw - sw) / 2, (ih - sh) / 2, sw, sh, 0, 0, w, h);
-  const px = g.getImageData(0, 0, w, h).data, out = new Uint8Array(80 + w * h * 3), v = new DataView(out.buffer);
+function backgroundVtf(imgs, w, h, aspect) {
+  const cv = el('canvas', { width: w, height: h }), g = cv.getContext('2d', { willReadFrequently: true });
+  const out = new Uint8Array(80 + w * h * 3 * imgs.length), v = new DataView(out.buffer);
   out.set([86, 84, 70]); // "VTF"
   v.setUint32(4, 7, true), v.setUint32(8, 2, true), v.setUint32(12, 80, true), v.setUint16(16, w, true), v.setUint16(18, h, true);
   v.setUint32(20, 0x4 | 0x8 | 0x100 | 0x200, true); // clamp S and T, no mipmaps, no LOD
-  v.setUint16(24, 1, true), v.setFloat32(48, 1, true), v.setUint32(52, 3, true); // one frame, bumpmap scale, BGR888
+  v.setUint16(24, imgs.length, true), v.setFloat32(48, 1, true), v.setUint32(52, 3, true); // frames, bumpmap scale, BGR888
   out[56] = 1, v.setInt32(57, -1, true), v.setUint16(63, 1, true); // one mip level, no low-res image, depth 1
-  for (let i = 0, o = 80; i < px.length; i += 4, o += 3) out[o] = px[i + 2], out[o + 1] = px[i + 1], out[o + 2] = px[i];
+  let o = 80;
+  for (const img of imgs) {
+    const iw = img.displayWidth || img.naturalWidth || img.width, ih = img.displayHeight || img.naturalHeight || img.height, sw = Math.min(iw, ih * aspect), sh = sw / aspect;
+    g.imageSmoothingQuality = 'high';
+    g.fillStyle = '#000';
+    g.fillRect(0, 0, w, h); // black behind see-through pictures
+    g.drawImage(img, (iw - sw) / 2, (ih - sh) / 2, sw, sh, 0, 0, w, h);
+    const px = g.getImageData(0, 0, w, h).data;
+    for (let i = 0; i < px.length; i += 4, o += 3) out[o] = px[i + 2], out[o + 1] = px[i + 1], out[o + 2] = px[i];
+  }
   return out;
 }
 const base64 = bytes => new Promise(res => {
@@ -2694,27 +2785,27 @@ const base64 = bytes => new Promise(res => {
   r.onload = () => res(r.result.slice(r.result.indexOf(',') + 1));
   r.readAsDataURL(new Blob([bytes]));
 });
+// An animated picture (GIF...) plays too, at half the size (every frame is a full picture in the file).
 async function setBackground(file) {
-  const img = new Image(), url = URL.createObjectURL(file);
   try {
-    img.src = url;
-    await img.decode();
+    const frames = await pictureFrames(file), imgs = frames.map(f => f.image), anim = imgs.length > 1;
+    const ms = frames.reduce((s, f) => s + (f.ms || 100), 0) / frames.length, fps = Math.max(1, Math.min(30, Math.round(1000 / ms)));
+    const proxies = anim ? `\t"Proxies"\n\t{\n\t\t"AnimatedTexture"\n\t\t{\n\t\t\t"animatedtexturevar"\t"$basetexture"\n\t\t\t"animatedtextureframenumvar"\t"$frame"\n\t\t\t"animatedtextureframerate"\t"${fps}"\n\t\t}\n\t}\n` : '';
     status('Making the background...');
-    for (const [name, w, h, aspect] of [['background01', 1024, 1024, 4 / 3], ['background01_widescreen', 2048, 1024, 16 / 9]]) {
+    for (const [name, w, h, aspect] of [['background01', anim ? 512 : 1024, anim ? 512 : 1024, 4 / 3], ['background01_widescreen', anim ? 1024 : 2048, anim ? 512 : 1024, 16 / 9]]) {
       // the picture goes under a name the running game hasn't loaded (it keeps a texture once loaded), taking turns
       // between two so old ones don't pile up; the material the game asks for points at it
       const vmt = `materials/console/${name}.vmt`, tex = new RegExp(`${name}_a"`).test(await readHud(vmt) || '') ? `${name}_b` : `${name}_a`;
-      await call('writebin', `materials/console/${tex}.vtf`, await base64(backgroundVtf(img, w, h, aspect)));
+      await call('writebin', `materials/console/${tex}.vtf`, await base64(backgroundVtf(imgs, w, h, aspect)));
       await call('write', vmt, `"UnlitGeneric"\n{\n\t"$basetexture"\t"console/${tex}"\n\t"$vertexcolor"\t"1"\n\t"$vertexalpha"\t"1"\n`
-        + `\t"$ignorez"\t"1"\n\t"$no_fullbright"\t"1"\n\t"$nolod"\t"1"\n}\n`);
+        + `\t"$ignorez"\t"1"\n\t"$no_fullbright"\t"1"\n\t"$nolod"\t"1"\n${proxies}}\n`);
     }
+    imgs.forEach(i => i.close?.());
     await call('cmd', '', 'mat_reloadmaterial background01').catch(() => {});
     setDirty(true);
-    status('Background set. Click Done or Save HUD to keep it.');
+    status(`Background set${anim ? `, ${imgs.length} frames moving` : ''}. Click Done or Save HUD to keep it.`);
   } catch (err) {
     status(`Couldn't use that picture: ${err.message}`);
-  } finally {
-    URL.revokeObjectURL(url);
   }
 }
 
@@ -2728,6 +2819,7 @@ function selectionSections(sel) {
   // (these menus read their .res only when the game makes them; the scoreboard and spectator bars read it on a reload)
   if (own) add('colour', `Just this ${own.what}`, [...(STARTUP_RES.has(info.id) ? [noteRow('The buy menu reads its own settings when the game makes it: these show after a game restart. The shared colours and fonts below change straight away.')] : []),
     ...resRows(sel.res, own.block, own.defaults, schemeOf(sel.thing), own.ctl)]);
+  if (own && /^hudeditor_(pic|text|box)/i.test(own.block)) add('colour', `What this ${own.block.replace(/^hudeditor_|\d+$/gi, '').replace('pic', 'picture')} shows`, customRows(own.block, sel.res));
   if (control) {
     const [ctl, what, keys] = controlIn(control, sel.thing);
     const file = schemeOf(control), where = file === C ? 'in-game windows' : file === CH ? 'the chat' : 'menus';
@@ -2757,12 +2849,14 @@ function selectionSections(sel) {
     }
     if (EXTRA[info.id]) add('colour', `Colours: ${info.name.toLowerCase()}`, schemeRows(S, EXTRA[info.id]).concat(info.file === C ? schemeRows(C, EXTRA[info.id]) : []));
     if (CMD_WINDOWS.has(info.id)) add('other', 'Command buttons', commandRows(sel));
+    if (CMD_WINDOWS.has(info.id) && sel.res) add('other', 'Button places', buttonPlaceRows(sel.res));
+    if (ADD_WINDOWS.has(info.id) && sel.res) add('other', 'Add to this window', addRows(sel.res));
     if (info.id !== 'loadingdialog') add('other', `${info.name}: show or hide parts`, windowPartRows(sel)); // its own rows do both files
-    // the game's MOTD is 4:3 wide from the screen's left edge, so it sits left of centre on wide screens
-    if (info.id === 'info' && sel.res) {
-      const p = layoutProps(sel.res, 'info');
+    // the MOTD, team and class select are 4:3 wide from the screen's left edge, so they sit left of centre on wide screens
+    if (['info', 'team', 'class_ct', 'class_ter'].includes(info.id) && sel.res) {
+      const p = layoutProps(sel.res, info.id);
       add('other', `${info.name}: position`, [checkRow('Centred on the screen', /^c/.test(p.xpos || ''),
-        on => { save(sel.res, 'xpos', on ? `c-${(+p.wide || 640) / 2}` : '0', 'info'); refreshSoon(); })]);
+        on => { save(sel.res, 'xpos', on ? `c-${(+p.wide || 640) / 2}` : '0', info.id); refreshSoon(); })]);
     }
     if (info.id === 'scores') for (const [t, r] of scoreboardSections(sel, fonts.map(([, n]) => n))) add(/fonts$/.test(t) ? 'font' : 'colour', t, r);
     if (info.id === 'gamemenu') for (const [t, r] of mainMenuSections()) add(/logo$/.test(t) ? 'colour' : 'other', t, r);
@@ -3087,7 +3181,7 @@ function snapTo(r, t) {
 }
 // A position moved by d units ("r" counts from the right or bottom, so it goes the other way); null for "f" or junk.
 function shifted(raw, d) {
-  const m = /^\s*([rc]?)\s*(-?[\d.]+)\s*$/i.exec(raw ?? '0');
+  const m = /^\s*([rc]?)\s*([+-]?[\d.]+)\s*$/i.exec(raw ?? '0');
   return m ? m[1] + Math.round(+m[2] + (m[1].toLowerCase() === 'r' ? -d : d)) : null;
 }
 const movable = hit => hit.info.kind === 'hud' && !hit.control ? canHide(hit.info.id) && !isHidden(hit.info.id) : !!UI_RES[hit.thing.key] && !!(hit.control || hit.node);
@@ -3219,6 +3313,8 @@ async function poll() {
   liveRaw = raw;
   live = raw ? parsePanels(raw) : null;
   $('launch').hidden = !!live;
+  // the game quit without the capture noticing (a quick quit): the next game gets a new capture
+  if (!live && captured) captureEnded();
   // the scoreboard closes when the HUD reloads: open it again while it's being kept open
   if (keepScores && live && !live.panels.some(p => p.key === 'scores') && Date.now() - scoresSent > 1500) { scoresSent = Date.now(); call('cmd', '', '+showscores'); }
   // the same for the chat (a reload takes it out of typing): the player's chat key opens it again
@@ -3499,8 +3595,10 @@ function parserCheck() {
   check(gmItems.length === 11 && menuName(gmItems[3]) === '(gap)' && menuText(gmItems) === GAME_MENU, 'game menu buttons read and written back unchanged');
   const cv = el('canvas', { width: 2, height: 1 }), g = cv.getContext('2d');
   g.fillStyle = '#ff0000', g.fillRect(0, 0, 1, 1), g.fillStyle = '#0000ff', g.fillRect(1, 0, 1, 1);
-  const tex = backgroundVtf(cv, 2, 1, 2), dv = new DataView(tex.buffer);
+  const tex = backgroundVtf([cv], 2, 1, 2), dv = new DataView(tex.buffer), anim = backgroundVtf([cv, cv], 2, 1, 2);
   check(tex.length === 86 && dv.getUint32(52, true) === 3 && dv.getUint16(16, true) === 2 && tex[82] === 255 && tex[83] === 255, 'background texture: header, BGR order');
+  check(coord('c+10', 100, 1, true) === 60 && coord('c-10', 100, 1, true) === 40 && shifted('c+166', -22) === 'c144', 'positions written "c+N" read and move');
+  check(anim.length === 92 && new DataView(anim.buffer).getUint16(24, true) === 2 && anim[88] === 255, 'animated background: frame count, frames one after another');
   // fonts: pick the entry for the screen height, and create the nested blocks when only #base has the font
   const fb = parse('Scheme { Fonts { HudHintText { "1" { "name" "Arial" "tall" "10" "yres" "1 1079" } "2" { "name" "Arial" "tall" "20" "yres" "1080 1439" } } } }');
   const ff = { name: 'f', text: 'Scheme\n{\n}\n', parsed: parse('Scheme\n{\n}\n'), bases: [fb] };
@@ -3566,8 +3664,15 @@ function parserCheck() {
     '3\tBaseUI\tGameConsole\t1232\t192\t1280\t1056\tCGameConsoleDialog', '4\tBaseUI\tframe_caption\t1232\t192\t1267\t30\tPanel',
     '4\tBaseUI\tConsolePage\t1240\t226\t1264\t1014\tCConsolePanel', '5\tBaseUI\t\t1250\t240\t1200\t900\tRichText'].join('\n'));
   const at = (x, y) => pickAt(x / 2560, y / 1440);
+  const keep = files.slice(), withHealth = alpha => files.splice(0, files.length, ...keep.filter(f => f.name !== L),
+    { name: L, text: '', parsed: parse(`L { HudHealth { "xpos" "20" "alpha" "${alpha}" } }`), bases: [] });
+  withHealth(0);
   let hit = at(100, 1370);
+  check(!hit || hit.info.name !== 'Health', 'a hidden part takes no clicks');
+  withHealth(255);
+  hit = at(100, 1370);
   check(hit && hit.info.name === 'Health' && !hit.control, 'click health');
+  files.splice(0, files.length, ...keep);
   hit = at(600, 1110);
   check(hit && hit.info.name === 'Server message (MOTD)' && hit.control && controlOf(hit.control.cls)[1] === 'Button' && schemeOf(hit.control) === C, 'click the MOTD OK button');
   hit = at(600, 370);
@@ -3657,7 +3762,7 @@ if (host && location.hash === '#hosttest') (async () => {
     check(layoutProps(spec, 'CTScoreLabel').xpos === 'r268' && !partHidden(spec, 'CTScoreLabel'), 'showing a window part puts its position back');
     const sb = await uiFile('resource/UI/scoreboard.res'), sbSections = scoreboardSections({ res: sb, info: { id: 'scores' }, thing: { key: 'scores' } }, []);
     const sbCounts = sbSections.map(([, rows]) => rows.length);
-    check(sbCounts[0] === 2 && sbCounts[1] === 6 && sbCounts[2] === 8 && sbCounts[3] === 2 && sbCounts[4] >= 8, `scoreboard: background, text colours, player rows, MVP star and fonts in one place (${sbCounts})`);
+    check(sbCounts[0] === 2 && sbCounts[1] === 6 && sbCounts[2] === 9 && sbCounts[3] === 2 && sbCounts[4] >= 8, `scoreboard: background, text colours, player rows (and where they start), MVP star and fonts in one place (${sbCounts})`);
     const menuFonts = fontsOf({ info: { kind: 'window', id: 'gamemenu', file: S }, thing: { key: 'gamemenu' } }).map(([f, n]) => `${f}:${n}`).join();
     const btnFonts = fontsOf({ info: { kind: 'window', id: 'info', file: C }, thing: { key: 'info' }, control: { cls: 'Button' } });
     check(menuFonts === `${S}:MenuLarge,${C}:ClientTitleFont` && btnFonts.length === 1 && btnFonts[0][1] === 'Default' && fontNames(C).length > 50
@@ -3712,7 +3817,7 @@ if (host && location.hash === '#hosttest') (async () => {
     await writing;
     check(/"?HudEditorBackground"?\s*\{[^}]*"zpos"\s+"-1"[^}]*"paintbackgroundtype"\s+"2"/.test(sb.text), 'scoreboard colour box added to a copy of the game\'s scoreboard.res');
     const mm = mainMenuSections().map(([title, rows]) => `${title}:${rows.length}`).join();
-    check(mm === 'Main menu: logo:3,Main menu: position:7,Main menu: buttons:14,Main menu: background:2,Main menu: items:1', `main menu: logo on/off and colours, position, buttons, background import, item height (${mm})`);
+    check(mm === 'Main menu: logo:3,Main menu: position:7,Main menu: buttons:15,Main menu: background:2,Main menu: items:1', `main menu: logo on/off and colours, position, buttons, background import, item height (${mm})`);
     await setAllFonts('Arial', '600');
     const cf = F(C), marlett = fontVariants(cf, 'Marlett'), dflt = fontVariants(cf, 'Default');
     check([...dflt.values()].every(p => p.name === 'Arial' && p.weight === '600') && [...marlett.values()].every(p => p.name === 'Marlett'),

@@ -114,6 +114,9 @@ packed inside it. Needs Windows 10 or 11 (it uses the WebView2 runtime that ship
        (suggestions for surf/bhop servers come up as you type). A click closes the menu and runs it as if typed in the
        console. The new button copies the look of the window's most customised button (colours, border, font, size)
        and goes a row under the lowest one; the plugin makes it straight away (blocks named `hudeditor_cmd1`...).
+       The game runs these the restricted way: `say` and server !commands work, `exec`, `bind` and `alias` don't
+       (the editor says so and points to the main menu). **Button places** lists every button's X and Y, the ones the
+       game only shows sometimes (Spectate, VIP) too.
      - **Main menu position** (`Main.Menu.X/Y`, `Main.BottomBorder`, `Main.Title1/2.X/Y` in ClientScheme): where the
        menu and the logo's two lines sit, live. A menu that would reach the bottom gap is lifted, logo and all.
      - **Fading** (any window, under More): how long windows take to fade in and out, and to go behind another
@@ -126,16 +129,18 @@ packed inside it. Needs Windows 10 or 11 (it uses the WebView2 runtime that ship
        cropped to fill the screen and written as `materials/console/background01` (4:3) and `background01_widescreen`
        (uncompressed VTFs, under names that take turns so the running game loads the new one: it shows straight away).
        **Buttons** (`resource/GameMenu.res`): remove, reorder, put back any of the game's own buttons, or add one that
-       joins a server (type the IP:port). Also read at startup only.
+       joins a server (type the IP:port) or runs any command (`engine <command>`, so `exec` and `bind` work here).
+       Also read at startup only.
      - **Server browser:** show or hide the Filters button (`servers/InternetGamesPage.res`, `CustomGamesPage.res`;
        read at startup). Its list of servers uses ListSmall (DefaultSmall when the scheme has none), set by
        the game.
-     - **MOTD:** centre it on the screen (the game puts it 4:3 wide from the left edge), and show or hide its title,
+     - **MOTD, team and class select:** centre them on the screen (the game puts them 4:3 wide from the left edge). The MOTD: show or hide its title,
        text and web page message, leaving only OK. Read at startup.
      - **Chat:** click its parts in the preview to move or hide them (`resource/UI/BaseChat.res`, e.g. the Filters
        button), and set the padding inside it. Hidden parts are listed under "Chat: hidden parts" to bring back.
      - **Scroll bar width** (`ScrollBar.Wide`) shows with scroll bar colours, or search "scroll", for in-game windows,
        menus and the chat.
+     - **Text alignment** for texts (left, centre, right...).
      - **Show on screen** to hide the control. It moves off screen and its position is kept in `xpos_hudeditor`. The
        game sets window parts' visibility itself, so `visible` can't hide them.
      - **Spectator bars:** show or hide each part: the top and bottom bar (keeping their text), the title, team
@@ -146,7 +151,10 @@ packed inside it. Needs Windows 10 or 11 (it uses the WebView2 runtime that ship
      - A HUD without that window's `.res` gets the game's own copy on the first change.
    - **Scoreboard:** everything it draws is under its selection:
      - **Background:** the game's picture on or off, and a colour box of the editor's own behind it (square or rounded,
-       any size). The picture is a texture, so the game can't tint it.
+       any size, with an edge line). The picture is a texture, so the game can't tint it.
+     - **Add to this window** (scoreboard, team and class select, MOTD): pictures (GIFs animate), texts and colour boxes
+       inside the window, each with its tint or colour, an edge line, rounded corners and a layer.
+     - **Rows start at:** moves both teams' first rows and the list under them together (the hidden templates too).
      - **Your own row:** the highlight behind your name is the image `vgui/scoreboard/scoreboard-select`. The editor
        replaces it in the HUD with a flat colour you pick.
      - **Text colours** in groups: header, each team's name and score, each team's column titles, spectators.

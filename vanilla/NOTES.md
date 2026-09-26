@@ -151,3 +151,17 @@ Not in custom: a folder there with full vanilla files would cover every HUD that
 - HudDamageIndicator: DmgColorLeft/Right and dmg_* do nothing (Half-Life 2's). The arrows are the pain_* pictures
   from mod_textures.txt; alpha 0 hides them.
 - HudHealth icon_ypos/digit_xpos move the icon/number inside the box, clipped by the box's width.
+
+## Buttons that run commands (checked in game)
+- Team and class select buttons run their command through the game's restricted path: `say` and server !commands
+  work, but `exec`, `bind` and `alias` are blocked ("FCVAR_CLIENTCMD_CAN_EXECUTE prevented running command: exec").
+- The MOTD runs only its own "okay" command; any other button command in TextWindow.res does nothing.
+- Main menu (GameMenu.res) buttons run anything with the "engine " prefix, exec included.
+- A cfg in a custom folder's cfg/ is found by exec.
+
+## Custom folder order
+- The game reads custom folders in name order, so another HUD earlier in the alphabet wins for every file both have.
+  The editor mounts the edited HUD first, but GameMenu.res and the startup-made scoreboard were already read: the
+  plugin now reloads once a map is up after a mount; the main menu still needs the other HUD moved out.
+- A reload's visibility restore went by panel handle; a panel deleted in the reload (a scoreboard row) could free its
+  handle for a new box the editor added, which then came back hidden. Now the name must match too.
