@@ -197,7 +197,9 @@ packed inside it. Needs Windows 10 or 11 (it uses the WebView2 runtime that ship
    A colour your HUD changed has a **Default** button that puts the game's own colour back. A row's **Undo** puts it
    back to how it was when the HUD was opened (a new HUD: the defaults); the top **Undo** (Ctrl+Z) steps back
    through this session's changes.
-5. **Done** or **Save HUD** keeps your changes. They go into the HUD straight away so the game can show them, and until
+5. **Done** or **Save HUD** keeps your changes. While there are unsaved ones, **Unsaved changes** at the top of the list
+   shows **what Save will write**: every setting and block changed in each file, old → new, each with its own Undo
+   (pictures and fonts by name). They go into the HUD straight away so the game can show them, and until
    you save, the editor keeps each changed file's saved version in `%LOCALAPPDATA%\CSSHudEditor\unsaved`. Closing the
    editor asks about unsaved changes. Discarding them, or opening another HUD, puts the saved versions back; after a
    crash that happens the next time the editor starts.

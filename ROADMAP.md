@@ -58,7 +58,8 @@ Each step is committed on its own, so work can stop after any of them.
     favourites boxes' colours. Tried and taken back: giving the open buy menu its settings live (the next panel refresh
     crashed). Still to do: the other pages (they all make a panel named BuySubMenu, so the file has to be told from its
     buttons), the weapon pages (`classes/*.res`) and `loadout.res`.
-16. [ ] **Preview what Save writes** (low priority): every change per file, old → new, each with an undo.
+16. [x] **Preview what Save writes**: Unsaved changes > See what Save will write: every setting and block per file, old →
+    new, each with an Undo. Checked in game.
 
 ## Later
 - **Addon merger** (back burner): "Add to my HUD" from any HUD/addon download, copying the parts and everything they

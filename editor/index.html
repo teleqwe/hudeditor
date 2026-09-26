@@ -664,6 +664,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // ---------- files ----------
 let hudName = null, files = [], writing = Promise.resolve(), dirty = false;
+let changesView = null; // what Save will write, [text, undo | null] per change once asked for (see showChanges)
 const $ = id => document.getElementById(id);
 const F = name => files.find(f => f.name === name);
 let statusAt = 0;
@@ -750,6 +751,7 @@ function setDirty(d) {
   dirty = d;
   $('save').disabled = !d;
   $('save').textContent = d ? 'Save HUD *' : 'Save HUD';
+  if (!d) changesView = null;
 }
 
 // Every edit goes through here. section = HudLayout block for layout settings; scheme colours are sorted into Colors/BaseSettings.
@@ -1054,6 +1056,51 @@ function freezeRows(f) {
     refreshSoon();
   }));
   return [colours, parts];
+}
+
+// ---------- what Save will write ----------
+// Every file changed since the last save: for the text files the editor reads, each setting and block with its old and
+// new value and an Undo of its own; other files (pictures, fonts) by name.
+async function showChanges() {
+  const out = [];
+  for (const [kind, rel] of (await call('changes').catch(() => '')).split('\n').filter(Boolean).map(l => l.split('\t'))) {
+    const f = files.find(x => x.path.toLowerCase() === rel.toLowerCase()), name = rel.split('/').pop();
+    if (!f) { out.push([`${rel}: ${kind === 'A' ? 'new file' : 'changed'}`, null]); continue; }
+    const old = parse(kind === 'M' ? await call('saved', rel).catch(() => '') : '');
+    for (const [text, undo] of settingChanges(f, old)) out.push([`${name}: ${text}`, undo]);
+  }
+  changesView = out;
+  render();
+}
+// [description, undo] for each key and whole block that differs between `old` (parsed) and f as it is now.
+function settingChanges(f, old) {
+  const K = path => path.slice(1).join('\u0001').toLowerCase(), out = [], now = f.parsed;
+  const blocks = p => new Map(p.sections.map(s => [K(s.path), s])), oldB = blocks(old), newB = blocks(now);
+  const inside = (path, set) => { for (let n = path.length - 1; n > 1; n--) if (set.has(K(path.slice(0, n)))) return true; return false; };
+  const added = new Set([...newB.keys()].filter(k => !oldB.has(k))), gone = new Set([...oldB.keys()].filter(k => !newB.has(k)));
+  const again = async () => { await sleep(400); await writing; showChanges(); };
+  for (const k of added) { const s = newB.get(k); if (!inside(s.path, added)) out.push([`added ${s.path.slice(1).join(' › ')}`, () => { commit(f, `${f.name}/${k}/undoadd`, () => dropBlock(f, s.path.slice(1, -1), s.path[s.path.length - 1])); again(); }]); }
+  for (const k of gone) { const s = oldB.get(k); if (!inside(s.path, gone)) out.push([`took out ${s.path.slice(1).join(' › ')}`, () => { save(f, s.path[s.path.length - 1], blockPairs(old, s.path), s.path.slice(1, -1)); again(); }]); }
+  const entries = p => new Map(p.entries.map(e => [K([...e.path, e.key]), e])), was = entries(old), is = entries(now);
+  for (const [k, e] of is) {
+    const o = was.get(k), where = [...e.path.slice(1), e.key].join(' › ');
+    if (inside([...e.path, e.key], added) || (o && o.value === e.value)) continue;
+    out.push([o ? `${where}: ${o.value} → ${e.value}` : `${where}: ${e.value} (new)`, () => { save(f, e.key, o ? o.value : null, e.path.slice(1)); again(); }]);
+  }
+  for (const [k, o] of was) if (!is.has(k) && !inside([...o.path, o.key], gone))
+    out.push([`${[...o.path.slice(1), o.key].join(' › ')}: ${o.value} (taken out)`, () => { save(f, o.key, o.value, o.path.slice(1)); again(); }]);
+  return out;
+}
+function changesRows() {
+  const see = el('div', { className: 'row action' });
+  see.append(el('button', { textContent: changesView ? 'Look again' : 'See what Save will write', onclick: showChanges }));
+  if (!changesView) return [see];
+  const rows = changesView.slice(0, 200).map(([text, undo]) => {
+    const r = el('div', { className: 'row note meta', textContent: text });
+    if (undo) { const b = el('button', { className: 'mini', textContent: 'Undo' }); b.onclick = () => { b.disabled = true; undo(); }; r.append(' ', b); }
+    return r;
+  });
+  return [...(rows.length ? rows : [noteRow('Nothing is changed.')]), ...(changesView.length > 200 ? [noteRow(`And ${changesView.length - 200} more.`)] : []), see];
 }
 
 // ---------- recolouring the whole HUD ----------
@@ -2914,6 +2961,7 @@ function renderList() {
     return b;
   };
   const parts = things.length ? things.map(partRow) : [el('p', { className: 'meta', style: 'padding: 8px 12px; margin: 0', textContent: 'Nothing editable on screen right now.' })];
+  if (dirty) list.append(card('Unsaved changes', changesRows()));
   list.append(card(live ? 'On screen now' : 'HUD parts', parts));
   if (F(L)) list.append(card('Add to the HUD', addRows()));
   const screens = el('div', { className: 'row action' });
@@ -3544,6 +3592,9 @@ function parserCheck() {
     `a command button copies a button's look and goes a row under the lowest (${JSON.stringify(cb)})`);
   const dropped = dropBlock(tm, [], 'CancelButton');
   check(!/CancelButton|vguicancel/.test(dropped) && /terbutton/.test(dropped) && /hudeditor_cmd1/.test(dropped), 'a block is taken out whole');
+  const sc = settingChanges({ name: 'x', text: '', parsed: parse('"R" { "A" { "k" "2" "n" "1" } "B" { "z" "1" } }'), bases: [] },
+    parse('"R" { "A" { "k" "1" "gone" "0" } "C" { "y" "1" } }')).map(([t]) => t).join('|');
+  check(sc === 'added B|took out C|A › k: 1 → 2|A › n: 1 (new)|A › gone: 0 (taken out)', `what Save will write lists settings and blocks (${sc})`);
   const bp = JSON.stringify(blockPairs(parse('"S" { "Borders" { "B" { "inset" "0 0 1 1" "Left" { "1" { "color" "X" "offset" "0 0" } } } } }'), ['S', 'Borders', 'B']));
   check(bp === '[["inset","0 0 1 1"],["Left",[["1",[["color","X"],["offset","0 0"]]]]]]', `a game block is copied with its sub-blocks (${bp})`);
   const vt = pictureVtf([new Uint8ClampedArray([1, 2, 3, 4, 5, 6, 7, 8]), new Uint8ClampedArray(8)], 2, 1), vd = new DataView(vt.buffer);
