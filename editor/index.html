@@ -394,6 +394,8 @@ const EXTRA = {
     ['Menu text (clicked)', 'MainMenu.DepressedTextColor', ''], ['Background dim', 'MainMenu.Backdrop', 'Darkens the game behind the menu']],
   gameconsole: [['Console text', 'Console.TextColor', ''], ['Developer text', 'Console.DevTextColor', '']],
   team: [['Map description', 'MapDescriptionText', '']],
+  buy_ct: [['Preset boxes', 'BuyPreset.BgColor', 'Behind the favourites (buy presets)'], ['Preset list', 'BuyPresetListBox.BgColor', ''], ['Preset box edge', 'Border.BuyPreset', '']],
+  buy_ter: [['Preset boxes', 'BuyPreset.BgColor', 'Behind the favourites (buy presets)'], ['Preset list', 'BuyPresetListBox.BgColor', ''], ['Preset box edge', 'Border.BuyPreset', '']],
   loadingdialog: [['Progress bar', 'ProgressBar.FgColor', 'Every progress bar in the menus'], ['Progress bar background', 'ProgressBar.BgColor', ''],
     ['Loading text', 'Label.TextDullColor', 'Grey text in every menu']],
 };
@@ -880,6 +882,13 @@ const UI_RES = { scores: 'resource/UI/scoreboard.res', specgui: 'resource/UI/spe
   // the chat's Filters button. The game has no file of its own; its code sizes the history and typing line to the
   // chat (HudLayout HudChat), so the default only places the button, in 480-line units inside the chat
   hudchat: 'resource/UI/BaseChat.res' };
+// The buy menu's main page (BuySubMenu_CT / _TER) has a file of its own, where its controls' own settings go; its
+// other pages all make a panel named BuySubMenu, so they aren't told apart here yet.
+const BUY_PAGES = { buysubmenu_ct: 'resource/UI/BuyMenu_CT.res', buysubmenu_ter: 'resource/UI/BuyMenu_TER.res' };
+function resPath(sel) {
+  for (let p = sel.node || sel.control; p; p = p.parent) if (BUY_PAGES[p.key]) return BUY_PAGES[p.key];
+  return UI_RES[sel.thing.key];
+}
 // A HUD without the file starts from the game's own copy (written into the HUD on the first change).
 async function uiFile(path) {
   if (!path) return null;
@@ -1508,7 +1517,7 @@ async function select(sel) {
   also = []; // parts Ctrl+clicked with the last selection
   // loaded before it becomes the selection: the panel poll copies the selection, and a copy made while this waited
   // would never get the file
-  if (sel) sel.res = await uiFile(UI_RES[sel.thing.key]);
+  if (sel) sel.res = await uiFile(resPath(sel));
   if (sel && sel.thing.key === 'scores') await Promise.all([loadCvars(), loadSbSelect()]);
   selected = sel;
   render();
@@ -2664,7 +2673,7 @@ function selectionSections(sel) {
   const { info, control } = sel, fonts = fontsOf(sel), own = sel.res && ownBlock(sel);
   // what was clicked, on its own: shown or not, position, and its own colours over the shared ones below
   // (these menus read their .res only when the game makes them; the scoreboard and spectator bars read it on a reload)
-  if (own) add('colour', `Just this ${own.what}`, [...(STARTUP_RES.has(info.id) ? [noteRow('This window reads its own settings when the game starts: these show after a game restart. The shared colours and fonts below change straight away.')] : []),
+  if (own) add('colour', `Just this ${own.what}`, [...(STARTUP_RES.has(info.id) ? [noteRow('The buy menu reads its own settings when the game makes it: these show after a game restart. The shared colours and fonts below change straight away.')] : []),
     ...resRows(sel.res, own.block, own.defaults, schemeOf(sel.thing), own.ctl)]);
   if (control) {
     const [ctl, what, keys] = controlIn(control, sel.thing);
@@ -3088,7 +3097,7 @@ $('boxes').onclick = async e => {
     if (!movable(hit)) return status('That one can\'t be moved: the game places it itself.');
     const i = also.findIndex(a => sameSel(a, hit));
     if (i >= 0) also.splice(i, 1);
-    else { hit.res = await uiFile(UI_RES[hit.thing.key]); also.push(hit); }
+    else { hit.res = await uiFile(resPath(hit)); also.push(hit); }
     render(); drawBoxes();
     return;
   }

@@ -824,9 +824,20 @@ static VPANEL FindNamed( VPANEL p, const char *name, int depth )
 }
 
 // For testing without the mouse: a button acts as if clicked (vgui's "PressButton").
-CON_COMMAND( schemereload_press, "schemereload_press <panel name>: clicks that button" )
+static VPANEL FindShown( VPANEL p, const char *name, int depth ) // the same, among panels on screen only
 {
-	VPANEL p = args.ArgC() > 1 && g_pVGui ? FindNamed( TopPanel(), args.Arg( 1 ), 0 ) : 0;
+	if ( !p || depth > 64 || !g_pVPanel->IsVisible( p ) )
+		return 0;
+	if ( !Q_stricmp( g_pVPanel->GetName( p ), name ) )
+		return p;
+	for ( int i = 0; i < g_pVPanel->GetChildCount( p ); ++i )
+		if ( VPANEL f = FindShown( g_pVPanel->GetChild( p, i ), name, depth + 1 ) )
+			return f;
+	return 0;
+}
+CON_COMMAND( schemereload_press, "schemereload_press <panel name>: clicks that button (one on screen)" )
+{
+	VPANEL p = args.ArgC() > 1 && g_pVGui ? FindShown( TopPanel(), args.Arg( 1 ), 0 ) : 0;
 	if ( p )
 		g_pVGui->PostMessage( p, new KeyValues( "PressButton" ), 0 );
 	else
@@ -973,6 +984,7 @@ static void ReapplyLayouts()
 	static const char *s_Res[][2] = { { "team", "Resource/UI/TeamMenu.res" }, { "class_ct", "Resource/UI/ClassMenu_CT.res" },
 		{ "class_ter", "Resource/UI/ClassMenu_TER.res" }, { "info", "Resource/UI/TextWindow.res" },
 		{ "WinPanel_Round", "Resource/UI/Win_Round.res" }, { "FreezePanel", "Resource/UI/FreezePanel_Basic.res" } };
+	// (not the buy menus: re-applying BuyMenu_CT.res's blocks to the open buy menu made the next panel refresh crash)
 	int slot = g_ApplySlot = SlotApplySettings();
 	if ( slot <= 0 || SlotLabelSetFont() != 0x710 / 8 )
 		return;
