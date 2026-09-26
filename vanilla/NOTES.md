@@ -122,6 +122,13 @@ Not in custom: a folder there with full vanilla files would cover every HUD that
   so on sv_pure 1/2 servers every HUD material (pictures, square corners, scoreboard highlight) is the game's own;
   .res files, scripts and fonts aren't listed and load from the HUD.
 
+## Loading screen (checked in game)
+- GameUI.dll names Resource/LoadingDialogNoBanner.res (the one shown on the test server and non-VAC servers),
+  LoadingDialogVAC.res (VAC-secured servers), LoadingDialogNoBannerSingle.res, LoadingDialogDualProgress.res and the
+  LoadingDialogError*.res ones; the game's copies are loose files in hl2/resource. cstrike's resource/LoadingDialog.res
+  isn't used. The box is made on each load and centred by the game; with vgui_cache_res_files 1 (the default) a .res
+  read once is kept, so edits show on the next load only with the cache off.
+
 ## Test server
 - Restarting the test server (disconnect; map de_dust2) right after `sv_pure 2` once ended in an Engine Error
   dialog: "IVP Failed at ...\ivp_utility\ivu_vhash.cxx 157" (physics). OK closes the game.

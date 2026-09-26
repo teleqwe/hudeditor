@@ -373,7 +373,8 @@ const NO_CLICK = new Set(['hudweapon', 'hudcrosshair', 'hudzoom', 'hudclosecapti
 // Windows: panel name -> friendly name, plus window-wide colours per scheme.
 const WINDOWS = { info: 'Server message (MOTD)', team: 'Team select', class_ct: 'Class select', class_ter: 'Class select', buy: 'Buy menu',
   buy_ct: 'Buy menu', buy_ter: 'Buy menu', scores: 'Scoreboard', specgui: 'Spectator bars', specmenu: 'Spectator menu',
-  gamemenu: 'Main menu', gameconsole: 'Console', optionsdialog: 'Options', cserverbrowserdialog: 'Server browser', serverbrowser: 'Server browser' };
+  gamemenu: 'Main menu', gameconsole: 'Console', optionsdialog: 'Options', cserverbrowserdialog: 'Server browser', serverbrowser: 'Server browser',
+  loadingdialog: 'Loading screen' };
 const WINDOW_COLOURS = {
   [C]: [['Window background', 'Frame.BgColor', 'Also the spectator bars'], ['Backdrop', 'BgColor', 'Behind team select and the MOTD'], ['Title', 'FrameTitleBar.TextColor', ''],
     ['Text', 'Label.TextColor', 'Shared by in-game windows and the buy menu'], ['Borders', 'Border.Bright|Border.Dark', '']],
@@ -386,6 +387,8 @@ const EXTRA = {
     ['Menu text (clicked)', 'MainMenu.DepressedTextColor', ''], ['Background dim', 'MainMenu.Backdrop', 'Darkens the game behind the menu']],
   gameconsole: [['Console text', 'Console.TextColor', ''], ['Developer text', 'Console.DevTextColor', '']],
   team: [['Map description', 'MapDescriptionText', '']],
+  loadingdialog: [['Progress bar', 'ProgressBar.FgColor', 'Every progress bar in the menus'], ['Progress bar background', 'ProgressBar.BgColor', ''],
+    ['Loading text', 'Label.TextDullColor', 'Grey text in every menu']],
 };
 
 // Colours each VGUI control type reads (from vgui_controls' ApplySchemeSettings). First match on the class name wins.
@@ -864,7 +867,7 @@ let guide43 = false; // Test tools: 4:3 screen edges over the preview
 const STARTUP_RES = new Set(['buy_ct', 'buy_ter']);
 const UI_RES = { scores: 'resource/UI/scoreboard.res', specgui: 'resource/UI/spectator.res', specmenu: 'resource/UI/bottomspectator.res',
   team: 'resource/UI/TeamMenu.res', class_ct: 'resource/UI/ClassMenu_CT.res', class_ter: 'resource/UI/ClassMenu_TER.res', info: 'resource/UI/TextWindow.res',
-  buy_ct: 'resource/UI/BuyMenu.res', buy_ter: 'resource/UI/BuyMenu.res',
+  buy_ct: 'resource/UI/BuyMenu.res', buy_ter: 'resource/UI/BuyMenu.res', loadingdialog: 'resource/LoadingDialogNoBanner.res',
   // the chat's Filters button. The game has no file of its own; its code sizes the history and typing line to the
   // chat (HudLayout HudChat), so the default only places the button, in 480-line units inside the chat
   hudchat: 'resource/UI/BaseChat.res' };
@@ -991,6 +994,33 @@ function commandRows(sel) {
   } }));
   add.dataset.q = 'command button add say rtv spec';
   return [...rows, add, noteRow('A click closes the menu and runs the command as if typed in the console. Click the new button in the preview to move it or change its look.')];
+}
+
+// ---------- loading screen ----------
+// GameUI's loading box, made each time a map loads from resource/LoadingDialogNoBanner.res (LoadingDialogVAC.res on
+// VAC-secured servers: the same box, taller, with the VAC notice; the plain LoadingDialog.res isn't used). The game
+// centres it; its size and the parts inside can change, and show on the next load (with vgui_cache_res_files 0, set
+// by the test server, the file is read each time). Edits go to both files. Its colours are the menus' (SourceScheme).
+const LOADING_VAC = 'resource/LoadingDialogVAC.res';
+const LOADING_SEL = () => ({ thing: { name: 'LoadingDialog', key: 'loadingdialog', module: 'GameUI', scheme: 'SourceScheme' },
+  info: { kind: 'window', id: 'loadingdialog', name: 'Loading screen', file: S }, control: null });
+function loadingRows(f) {
+  const both = [f, F(LOADING_VAC)].filter(Boolean), has = (x, block) => Object.keys(layoutProps(x, block)).length > 0;
+  const set = (block, key, v) => { for (const x of both) if (has(x, block)) save(x, key, v, block); };
+  const n = (block, key, label, note = '', only = false) => {
+    const r = inputRow(label, layoutProps(f, block)[key.toLowerCase()] || '0', v => only ? save(f, key, v, block) : set(block, key, v), { type: 'number', step: 1, ...(note ? { title: note } : {}) });
+    r.dataset.keys = key;
+    return r;
+  };
+  const show = (block, label) => checkRow(label, !partHidden(f, block), on => { for (const x of both) if (has(x, block)) setPartHidden(x, block, !on); refreshSoon(); });
+  const see = el('div', { className: 'row action' });
+  see.append(el('button', { textContent: 'See it: start the test game again', onclick: () => testServer() }));
+  return [show('InfoLabel', 'Show the loading text'), show('progress', 'Show the progress bar'), show('CancelButton', 'Show the Cancel button'),
+    n('LoadingDialog', 'wide', 'Box width'), n('LoadingDialog', 'tall', 'Box height', 'On VAC-secured servers the box is taller, for the VAC notice', true),
+    n('InfoLabel', 'xpos', 'Text X', 'From the box\'s left edge'), n('InfoLabel', 'ypos', 'Text Y'),
+    n('progress', 'xpos', 'Progress bar X'), n('progress', 'ypos', 'Progress bar Y'), n('progress', 'wide', 'Progress bar width'), n('progress', 'tall', 'Progress bar height'),
+    n('CancelButton', 'xpos', 'Cancel X'), n('CancelButton', 'ypos', 'Cancel Y'), see,
+    noteRow('The game centres the box. Changes show the next time a map loads.')];
 }
 
 // ---------- things added to the HUD ----------
@@ -2454,7 +2484,7 @@ function selectionSections(sel) {
     }
     if (EXTRA[info.id]) add('colour', `Colours: ${info.name.toLowerCase()}`, schemeRows(S, EXTRA[info.id]).concat(info.file === C ? schemeRows(C, EXTRA[info.id]) : []));
     if (CMD_WINDOWS.has(info.id)) add('other', 'Command buttons', commandRows(sel));
-    add('other', `${info.name}: show or hide parts`, windowPartRows(sel));
+    if (info.id !== 'loadingdialog') add('other', `${info.name}: show or hide parts`, windowPartRows(sel)); // its own rows do both files
     // the game's MOTD is 4:3 wide from the screen's left edge, so it sits left of centre on wide screens
     if (info.id === 'info' && sel.res) {
       const p = layoutProps(sel.res, 'info');
@@ -2464,6 +2494,7 @@ function selectionSections(sel) {
     if (info.id === 'scores') for (const [t, r] of scoreboardSections(sel, fonts.map(([, n]) => n))) add(/fonts$/.test(t) ? 'font' : 'colour', t, r);
     if (info.id === 'gamemenu') for (const [t, r] of mainMenuSections()) add(/logo$/.test(t) ? 'colour' : 'other', t, r);
     if (/serverbrowser/.test(info.id)) add('other', 'Server browser: buttons', serverBrowserRows());
+    if (info.id === 'loadingdialog' && sel.res) add('other', 'Loading screen: layout', loadingRows(sel.res));
   }
   if (fonts.length) add('font', `${fonts.length > 1 ? 'Fonts' : 'Font'} (a change shows everywhere the font is used)`,
     fonts.map(([file, font, what]) => fontFold(file, font, what, fonts.length <= 2 && (control || info.kind === 'hud'))));
@@ -2666,6 +2697,9 @@ function renderList() {
   const parts = things.length ? things.map(partRow) : [el('p', { className: 'meta', style: 'padding: 8px 12px; margin: 0', textContent: 'Nothing editable on screen right now.' })];
   list.append(card(live ? 'On screen now' : 'HUD parts', parts));
   if (F(L)) list.append(card('Add to the HUD', addRows()));
+  const screens = el('div', { className: 'row action' });
+  screens.append(el('button', { textContent: 'Loading screen', title: 'The box that shows while a map loads', onclick: async () => { await uiFile(LOADING_VAC); select(LOADING_SEL()); } }));
+  list.append(card('Other screens', [screens]));
   // parts that only show now and then (kill feed, pickup history, weapon selection...), so they can be hidden too
   if (live && F(L)) {
     const shown = new Set(things.map(t => t.info.id));
@@ -2971,7 +3005,7 @@ function captureEnded() { // the game window closed
 
 const TEST_SETUP = 'disconnect; sv_cheats 1; mp_autokick 0; mp_ignore_round_win_conditions 1; mp_autoteambalance 0; mp_limitteams 0; mp_freezetime 0; mp_roundtime 9; mp_buytime 9999; '
   + 'mp_startmoney 16000; mp_timelimit 0; mp_maxrounds 0; mp_winlimit 0; bot_quota 1; bot_join_team T; bot_stop 1; bot_chatter off; '
-  + 'motdfile hudeditor_nomotd.txt; maxplayers 32; map de_dust2';
+  + 'motdfile hudeditor_nomotd.txt; maxplayers 32; vgui_cache_res_files 0; map de_dust2';
 // Sample server texts the test game keeps on screen, added up like the plugin's schemereload_testtext:
 // 1 timer box and right side, 2 speed, 4 jhud, 8 top left. Remembered between runs.
 let texts = 15;

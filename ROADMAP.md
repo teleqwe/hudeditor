@@ -38,7 +38,9 @@ Each step is committed on its own, so work can stop after any of them.
 9. [x] **MVP star picture** (e.g. a flower): `hud/scoreboard_mvp` and the round-end panel's star, live. Checked in game
    with both materials on screen (flower, then the game's star back). Not yet seen on a real scoreboard row: the test
    server can't give MVPs yet.
-10. [ ] **Loading screen** (`resource/LoadingDialog.res`): position, progress bar, hide lines. Tested by reloading the map.
+10. [x] **Loading screen**: the game really reads `LoadingDialogNoBanner.res` (VAC servers: `LoadingDialogVAC.res`),
+    not `LoadingDialog.res`. Show/hide text, bar and Cancel; box size; parts' places. Checked on a map reload (the test
+    server turns vgui_cache_res_files off so each load reads the file). The game centres the box.
 11. [ ] **HUD check-up**: fonts not installed or not in the HUD, missing images and font files, duplicate blocks,
     settings old HUDs are missing; one-click fixes.
 12. [ ] **Recolour the whole HUD**: replace one colour everywhere, or shift every colour's hue. Needs testing.
