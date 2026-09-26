@@ -9,3 +9,6 @@ app/build/
 
 # Working notes
 PLAN.md
+
+# local test helpers (paths are this PC's)
+dev/
