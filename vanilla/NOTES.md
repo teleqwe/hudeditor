@@ -122,6 +122,18 @@ Not in custom: a folder there with full vanilla files would cover every HUD that
   so on sv_pure 1/2 servers every HUD material (pictures, square corners, scoreboard highlight) is the game's own;
   .res files, scripts and fonts aren't listed and load from the HUD.
 
+## Buy menu (checked in game)
+- The window is buy_ct / buy_ter (CBuyMenu, frame from BuyMenu.res); its main page is a CCSBuySubMenu named
+  BuySubMenu_CT / BuySubMenu_TER (BuyMenu_CT.res / BuyMenu_TER.res); every other page (pistols, rifles...) makes a
+  CCSBuySubMenu named plain BuySubMenu. Positions are 480-line units inside a 4:3 area centred on the screen
+  (RebuyButton xpos 248 = x 1064 at 2560x1440).
+- Giving the open main page's controls their BuyMenu_CT.res blocks again (Panel::ApplySettings, as for team select)
+  made the next panel refresh crash ("'refresh panels' step crashed"), so buy menu layouts still show after a restart.
+- `schemereload_press pistols` while the CT buy menu was open once crashed client.dll (+0x248619) when the FindNamed
+  it used found a hidden copy; the command now only presses panels on screen.
+- Quitting the game (build-all's `quit`) leaves crash dumps in Steam/dumps (vgui2.dll+0x30ca), also on earlier days.
+  Not looked into yet.
+
 ## Loading screen (checked in game)
 - GameUI.dll names Resource/LoadingDialogNoBanner.res (the one shown on the test server and non-VAC servers),
   LoadingDialogVAC.res (VAC-secured servers), LoadingDialogNoBannerSingle.res, LoadingDialogDualProgress.res and the

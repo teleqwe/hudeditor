@@ -54,7 +54,10 @@ Each step is committed on its own, so work can stop after any of them.
 14. [x] **C4 panel** (`resource/c4panel.res`): armed/defused colours (`C4Panel_Armed`, `C4Panel_Defused`, the names
     client.dll uses) and the font, under Other screens > Bomb screen. Not seen in game: `give weapon_c4` didn't put the
     C4 in hand on the test server, so whether the plugin's live reload finds this scheme is unchecked.
-15. [ ] **Buy menu**: all its pages (`buymenu_ct/ter`, sub-menus, `classes/*.res` weapon pages, `loadout.res`).
+15. [~] **Buy menu**: done: a main-page control can now be given its own settings (in `BuyMenu_CT/TER.res`), and the
+    favourites boxes' colours. Tried and taken back: giving the open buy menu its settings live (the next panel refresh
+    crashed). Still to do: the other pages (they all make a panel named BuySubMenu, so the file has to be told from its
+    buttons), the weapon pages (`classes/*.res`) and `loadout.res`.
 16. [ ] **Preview what Save writes** (low priority): every change per file, old → new, each with an undo.
 
 ## Later

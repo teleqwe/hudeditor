@@ -50,7 +50,7 @@ packed inside it. Needs Windows 10 or 11 (it uses the WebView2 runtime that ship
    height / 480: 3 px at 1440p). The dashed box shows where it goes, and the game follows once you
    pause. What the game places itself (server browser, window frames) can't be moved, the main menu only with its position rows, and the radio menu
    only moves up and down (the game keeps it full width). The same X and Y positions are rows on every part that has
-   them. The buy menu reads its own settings at startup, so changes to its controls show after a restart; the plugin reads the team and class menus' and the MOTD's again on every change.
+   them. The buy menu reads its own settings at startup, so changes to its controls show after a restart (a control on its main page keeps its own settings in `BuyMenu_CT.res` / `BuyMenu_TER.res`; its favourites boxes' colours are under the buy menu's colours); the plugin reads the team and class menus', the MOTD's and the round-end and killer panels' again on every change.
 4. **Click anything in the preview** to edit it:
    - **HUD parts:** show/hide and opacity, colours, position and size, the font it uses, and its box:
      - **Corners:** rounded or square. Where the game can't draw one of them (the timer's box is always rounded) the
