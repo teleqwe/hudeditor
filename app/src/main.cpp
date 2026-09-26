@@ -934,6 +934,29 @@ static void OnMessage( const wstring &msg )
 		else
 			out = Decode( data );
 	}
+	else if ( op == L"changes" ) // files changed since the last save: "M\tpath" (changed, its saved copy kept) or "A\tpath" (new)
+	{
+		auto list = [&]( const wchar_t *kind, const wchar_t *sub ) {
+			EachFile( g_unsaved + L"\\" + sub, L"", [&]( const wstring &rel ) {
+				wstring r = rel;
+				std::replace( r.begin(), r.end(), L'\\', L'/' );
+				if ( IsFile( g_hudPath + L"\\" + rel ) || !wcscmp( kind, L"M" ) )
+					out += wstring( kind ) + L"\t" + r + L"\n";
+			} );
+		};
+		list( L"M", L"files" );
+		list( L"A", L"new" );
+	}
+	else if ( op == L"saved" ) // arg = path in the HUD: its version as last saved (for the save preview)
+	{
+		string data;
+		wstring rel = arg;
+		std::replace( rel.begin(), rel.end(), L'/', L'\\' );
+		if ( rel.find( L".." ) != wstring::npos || !ReadAll( g_unsaved + L"\\files\\" + rel, data ) )
+			fail( L"missing" );
+		else
+			out = Decode( data );
+	}
 	else if ( op == L"exists" ) // arg = path in the HUD: "1" if that file is there (the HUD check-up)
 		out = InHud( arg, path ) && IsFile( path ) ? L"1" : L"0";
 	else if ( op == L"vanilla" ) // arg = a window .res, chatscheme.res or clientscheme/sourcescheme.res by name: the game's own copy
