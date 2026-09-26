@@ -56,6 +56,9 @@
   .row.menuitem { grid-template-columns: 1fr repeat(3, 30px); gap: 4px; }
   .row.cmdbtn { grid-template-columns: 1fr 1.3fr 30px; gap: 6px; }
   .row.lineup { grid-template-columns: 54px repeat(4, 1fr); gap: 4px; }
+  .row.swatches { display: flex; flex-wrap: wrap; gap: 4px; }
+  .row.swatches .swatch { width: 26px; height: 22px; padding: 0; border: 1px solid #3a3f49; border-radius: 4px; background: var(--c); cursor: pointer; }
+  .row.swatches .swatch:hover { border-color: var(--accent); }
   .row.lineup button { padding: 3px 2px; font-size: 11px; }
   .box.guide { opacity: 1; top: 0; bottom: 0; width: 0; border: none; border-left: 1px dashed rgba(245, 197, 66, .8); }
   .row.menuadd { grid-template-columns: 1fr auto; gap: 6px 8px; padding: 10px 12px; }
@@ -994,6 +997,61 @@ function commandRows(sel) {
   } }));
   add.dataset.q = 'command button add say rtv spec';
   return [...rows, add, noteRow('A click closes the menu and runs the command as if typed in the console. Click the new button in the preview to move it or change its look.')];
+}
+
+// ---------- recolouring the whole HUD ----------
+// Every colour the HUD sets: in its schemes, named colours and settings written as colours (the game's own included,
+// so a HUD that #bases them still recolours) and borders' lines; in its layout and window files, colour settings
+// written as values. A change keeps each place's opacity; names that point at another colour stay as they are.
+function colourPlaces() {
+  const out = [];
+  for (const f of files) {
+    if ([C, S, CH].includes(f.name)) {
+      const t = tables(f);
+      for (const [sub, map] of [[['Colors'], t.colors], [['BaseSettings'], t.base]]) for (const v of map.values()) if (isColor(v.value)) out.push({ f, sub, key: v.name, value: v.value });
+      for (const e of f.parsed.entries) if (sectionOf(e) === 'borders' && isColor(e.value) && e.key.toLowerCase() === 'color') out.push({ f, sub: e.path.slice(1), key: e.key, value: e.value });
+    } else for (const e of f.parsed.entries) if (e.path.length >= 2 && isColor(e.value) && /colou?r|_override$/i.test(e.key)) out.push({ f, sub: e.path.slice(1), key: e.key, value: e.value });
+  }
+  return out;
+}
+// change(rgba) gives the new [r, g, b, a] for a place, or null to leave it; one undo step per file.
+function recolour(change) {
+  const byFile = new Map();
+  for (const p of colourPlaces()) { const c = change(toRgba(p.value)); if (c && c.join(' ') !== toRgba(p.value).join(' ')) byFile.set(p.f, [...(byFile.get(p.f) || []), [p, c.join(' ')]]); }
+  for (const [f, list] of byFile) commit(f, `${f.name}/recolour/${Date.now()}`, () => {
+    let text = f.text;
+    for (const [p, v] of list) text = setAt({ ...f, text, parsed: parse(text) }, p.sub, p.key, v);
+    return text;
+  });
+  refreshSoon();
+  return [...byFile.values()].reduce((n, l) => n + l.length, 0);
+}
+function recolourRows() {
+  const groups = new Map();
+  for (const p of colourPlaces()) { const k = toRgba(p.value).slice(0, 3).join(' '); groups.set(k, (groups.get(k) || 0) + 1); }
+  const grid = el('div', { className: 'row swatches' });
+  for (const [k, n] of [...groups].sort((a, b) => b[1] - a[1]).slice(0, 48)) {
+    const b = el('button', { className: 'swatch', title: `${k}: ${n} place${n > 1 ? 's' : ''}. Click to change it everywhere` });
+    b.style.setProperty('--c', `rgb(${k})`);
+    // the picker reports every move: written once it rests, each time from the colour the places have by then
+    let from = k, timer = 0;
+    b.onclick = () => openPicker(b, [...k.split(' ').map(Number), 255], c => {
+      b.style.setProperty('--c', `rgb(${c.slice(0, 3).join(' ')})`);
+      clearTimeout(timer);
+      timer = setTimeout(() => { const was = from; from = c.slice(0, 3).join(' '); recolour(x => x.slice(0, 3).join(' ') === was ? [...c.slice(0, 3), x[3]] : null); }, 400);
+    }, grid);
+    grid.append(b);
+  }
+  let deg = 0;
+  const hue = rangeRow('Shift every hue', 128, v => { deg = Math.round((v - 128) * 180 / 128); hue.lastElementChild.textContent = `${deg > 0 ? '+' : ''}${deg}°`; });
+  hue.lastElementChild.textContent = '0°';
+  const go = el('div', { className: 'row action' });
+  go.append(el('button', { textContent: 'Shift the hues', onclick: () => {
+    if (!deg) return;
+    const n = recolour(c => { const [h, s, v] = toHsv(c); return s ? [...fromHsv((h + deg + 360) % 360, s, v), c[3]] : null; });
+    status(`Shifted ${n} colours by ${deg}°. Undo puts them back.`);
+  } }));
+  return [grid, hue, go, noteRow('Every colour the HUD sets, most used first; greys and white stay as they are when shifting.')];
 }
 
 // ---------- HUD check-up ----------
@@ -2802,6 +2860,7 @@ function renderList() {
   screens.append(el('button', { textContent: 'Loading screen', title: 'The box that shows while a map loads', onclick: async () => { await uiFile(LOADING_VAC); select(LOADING_SEL()); } }));
   list.append(card('Other screens', [screens]));
   list.append(card('HUD check-up', checkupRows()));
+  list.append(card('Recolour the HUD', recolourRows()));
   // parts that only show now and then (kill feed, pickup history, weapon selection...), so they can be hidden too
   if (live && F(L)) {
     const shown = new Set(things.map(t => t.info.id));
