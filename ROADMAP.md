@@ -51,7 +51,9 @@ Each step is committed on its own, so work can stop after any of them.
     show them (the plugin fires cs_win_panel_round + round_mvp, show_freezepanel, hide_freezepanel/round_start).
     Checked in game: fun fact and screenshot hint hidden live. Not done: the freeze-cam callout (freezepanelcallout.res)
     and the killer's health (freezepanelkillerhealth.res); the killer's name shows "[unknown]" for the test bot.
-14. [ ] **C4 panel** (`resource/c4panel.res`): colours of the bomb's screen.
+14. [x] **C4 panel** (`resource/c4panel.res`): armed/defused colours (`C4Panel_Armed`, `C4Panel_Defused`, the names
+    client.dll uses) and the font, under Other screens > Bomb screen. Not seen in game: `give weapon_c4` didn't put the
+    C4 in hand on the test server, so whether the plugin's live reload finds this scheme is unchecked.
 15. [ ] **Buy menu**: all its pages (`buymenu_ct/ter`, sub-menus, `classes/*.res` weapon pages, `loadout.res`).
 16. [ ] **Preview what Save writes** (low priority): every change per file, old → new, each with an undo.
 

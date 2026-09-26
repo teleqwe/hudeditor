@@ -73,6 +73,9 @@ packed inside it. Needs Windows 10 or 11 (it uses the WebView2 runtime that ship
        flash, the buy zone, bomb, defuse kit and rescue zone icons.
      - **Damage arrows** (under Other HUD parts) can be faded or hidden. They are pictures: HudLayout's DmgColor and
        dmg_ settings are Half-Life 2's and do nothing in CS:S.
+   - **Bomb screen** (Other screens): the C4's little screen has its own scheme, `resource/C4Panel.res`: the code and
+     timer colour while armed (`C4Panel_Armed`) and once defused (`C4Panel_Defused`), and its font (Default there,
+     Courier New). The plugin reloads it like the other schemes once a C4 is around (not yet seen in game).
    - **Round-end panel and killer panel:** **Round end** and **Killer panel** in Test values show them on the test
      server (a CT win with you as MVP and a fun fact; a bot as your killer), **Hide panels** takes them away. Click
      their parts for their own colours, fonts and places. The round-end panel (`resource/UI/Win_Round.res`) has its

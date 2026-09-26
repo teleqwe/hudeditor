@@ -100,6 +100,7 @@ static SchemeFile g_Files[] =
 	{ "resource/SourceScheme.res", "SourceScheme", { "Tracker", "SourceScheme", NULL } },
 	{ "resource/ClientScheme.res", "ClientScheme", { "ClientScheme", "HudScheme", NULL } },
 	{ "resource/ChatScheme.res", "ChatScheme", { "ChatScheme", NULL } },
+	{ "resource/C4Panel.res", "C4Panel", { "C4Panel", NULL } }, // the bomb's screen; loaded once a C4 is around
 };
 static const int NUM_FILES = ARRAYSIZE( g_Files );
 
