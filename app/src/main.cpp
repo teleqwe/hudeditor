@@ -489,7 +489,7 @@ static void MountHud()
 	wstring p = g_hudPath;
 	std::replace( p.begin(), p.end(), L'\\', L'/' );
 	if ( !g_game.empty() && !p.empty() )
-		GameCommand( L"schemereload_mount \"" + p + L"\"" );
+		GameCommand( L"schemereload_mount \"" + p + L"\"; scheme_reload" ); // and read its files again: the last HUD's stay up otherwise
 }
 
 // Stub scheme files that #base the game's defaults, for a brand-new HUD.
@@ -599,6 +599,7 @@ static struct
 	wgc::Direct3D11CaptureFramePool pool{ nullptr };
 	wgc::GraphicsCaptureSession session{ nullptr };
 	winrt::Windows::Graphics::SizeInt32 poolSize{};
+	HWND wnd = NULL; // the game window being captured
 	std::mutex lock; // the frame thread writing vs the UI thread swapping the buffer or stopping
 	ComPtr< ICoreWebView2SharedBuffer > buf;
 	BYTE *mem = NULL;
@@ -710,8 +711,11 @@ static void StopCapture()
 
 static wstring StartCapture()
 {
-	if ( g_cap.session )
+	// a game that quit without the capture's Closed event (a quick quit) leaves a session on a window that's gone
+	if ( g_cap.session && IsWindow( g_cap.wnd ) )
 		return L"";
+	if ( g_cap.session )
+		StopCapture();
 	HWND game = GameWindow();
 	if ( !game )
 		return L"no game window";
@@ -732,6 +736,7 @@ static wstring StartCapture()
 		wgc::GraphicsCaptureItem item{ nullptr };
 		winrt::check_hresult( interop->CreateForWindow( game, winrt::guid_of< wgc::GraphicsCaptureItem >(), winrt::put_abi( item ) ) );
 		std::lock_guard< std::mutex > hold( g_cap.lock );
+		g_cap.wnd = game;
 		g_cap.poolSize = item.Size();
 		g_cap.pool = wgc::Direct3D11CaptureFramePool::CreateFreeThreaded( g_cap.device, winrt::Windows::Graphics::DirectX::DirectXPixelFormat::B8G8R8A8UIntNormalized, 2, g_cap.poolSize );
 		g_cap.pool.FrameArrived( []( wgc::Direct3D11CaptureFramePool const &pool, auto && ) {

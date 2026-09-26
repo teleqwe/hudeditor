@@ -40,6 +40,7 @@
 #include "Color.h"
 #include <stdio.h>
 #include <unordered_map>
+#include <string>
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
@@ -777,11 +778,14 @@ static void RemoveEditorBorders()
 
 // Re-applying a scheme makes dialogs re-apply their .res files, which sets hidden tab pages
 // visible again. Record visibility first and put it back afterwards.
-static void RecordVisibility( VPANEL p, std::unordered_map< VPANEL, bool > &was, int depth )
+// (by handle and name: a panel deleted during the reload frees its handle for a new one, e.g. a scoreboard row's for a
+// box the editor added, which must not take the old one's hidden state)
+typedef std::unordered_map< VPANEL, std::pair< bool, std::string > > Shown;
+static void RecordVisibility( VPANEL p, Shown &was, int depth )
 {
 	if ( !p || depth > 64 )
 		return;
-	was[p] = g_pVPanel->IsVisible( p );
+	was[p] = { g_pVPanel->IsVisible( p ), g_pVPanel->GetName( p ) };
 	for ( int i = 0; i < g_pVPanel->GetChildCount( p ); ++i )
 		RecordVisibility( g_pVPanel->GetChild( p, i ), was, depth + 1 );
 }
@@ -789,17 +793,17 @@ static void RecordVisibility( VPANEL p, std::unordered_map< VPANEL, bool > &was,
 // Puts back what was shown or hidden before, walking the tree as it is now: the refresh can delete panels (a class
 // menu button remakes its info page), so a recorded one may be gone.
 static CUtlVector< VPANEL > g_Reshow; // visible before the last reload, see Reshow
-static void RestoreVisibility( VPANEL p, const std::unordered_map< VPANEL, bool > &was, int depth )
+static void RestoreVisibility( VPANEL p, const Shown &was, int depth )
 {
 	for ( int i = 0; p && depth < 64 && i < g_pVPanel->GetChildCount( p ); ++i )
 	{
 		VPANEL c = g_pVPanel->GetChild( p, i );
 		auto it = was.find( c );
-		if ( c && it != was.end() )
+		if ( c && it != was.end() && it->second.second == g_pVPanel->GetName( c ) )
 		{
-			if ( g_pVPanel->IsVisible( c ) != it->second )
-				g_pVPanel->SetVisible( c, it->second );
-			if ( it->second )
+			if ( g_pVPanel->IsVisible( c ) != it->second.first )
+				g_pVPanel->SetVisible( c, it->second.first );
+			if ( it->second.first )
 				g_Reshow.AddToTail( c );
 		}
 		RestoreVisibility( c, was, depth + 1 );
@@ -1041,7 +1045,7 @@ static void ReapplyLayouts()
 
 static void StepPanels()
 {
-	std::unordered_map< VPANEL, bool > was;
+	Shown was;
 	RecordVisibility( TopPanel(), was, 0 );
 
 	static bool s_bReapplyBroken;
@@ -1172,6 +1176,7 @@ static void DoReload()
 //-----------------------------------------------------------------------------
 static int g_nPendingTicks = -1;
 static bool g_bPrimed;
+static bool g_bReloadOnMap; // a HUD was mounted: reload once a map is up (see Tick)
 
 static void Tick()
 {
@@ -1221,6 +1226,14 @@ static void Tick()
 		}
 	}
 	g_bPrimed = true;
+
+	// a HUD mounted at the menu: the in-game windows made as the game started (the scoreboard) keep the last HUD's
+	// layout until hud_reloadscheme, which only runs in a map, so reload once the next one is up
+	static bool s_wasInGame;
+	bool inGame = g_pEngineClient ? g_pEngineClient->IsInGame() : g_bLevelActive;
+	if ( inGame && !s_wasInGame && g_bReloadOnMap )
+		g_bReloadOnMap = false, changed = true;
+	s_wasInGame = inGame;
 
 	// wait one extra tick after the last change so we don't read a half-written file
 	if ( changed )
@@ -1654,6 +1667,7 @@ CON_COMMAND( schemereload_mount, "schemereload_mount <folder>: search this folde
 	s_added = !V_stristr( s_paths, dir ) || ( s_added && !V_stricmp( s_mounted, dir ) );
 	MountFirst( dir );
 	V_strncpy( s_mounted, dir, sizeof( s_mounted ) );
+	g_bReloadOnMap = true;
 	Msg( "[schemereload] searching %s first\n", dir );
 }
 
