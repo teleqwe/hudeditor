@@ -73,6 +73,13 @@ packed inside it. Needs Windows 10 or 11 (it uses the WebView2 runtime that ship
        flash, the buy zone, bomb, defuse kit and rescue zone icons.
      - **Damage arrows** (under Other HUD parts) can be faded or hidden. They are pictures: HudLayout's DmgColor and
        dmg_ settings are Half-Life 2's and do nothing in CS:S.
+   - **Round-end panel and killer panel:** **Round end** and **Killer panel** in Test values show them on the test
+     server (a CT win with you as MVP and a fun fact; a bot as your killer), **Hide panels** takes them away. Click
+     their parts for their own colours, fonts and places. The round-end panel (`resource/UI/Win_Round.res`) has its
+     three boxes' colours and show/hide for the title, how the round was won, timer, MVP, fun fact and each box; the
+     killer panel (`FreezePanel_Basic.res`) its box and edge colours, each text's colour, and show/hide for the texts,
+     avatar, health bar and domination icon. Both read their file once, so the plugin gives their parts their
+     settings again on every change.
    - **Recolour the HUD** (below On screen now): every colour the HUD sets, most used first. Click one to change it
      everywhere it's used (each place keeps its opacity), or **Shift every hue** by up to 180° (greys and white stay).
      That covers the schemes' named colours and colour settings (the game's defaults too, so a HUD that #bases them

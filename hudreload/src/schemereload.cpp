@@ -36,6 +36,7 @@
 #include "server_class.h"
 #include "iservernetworkable.h"
 #include "iserverunknown.h"
+#include "igameevents.h"
 #include "Color.h"
 #include <stdio.h>
 #include <unordered_map>
@@ -966,8 +967,11 @@ static bool IsEditorBlock( const char *name ) { return !Q_strnicmp( name, "huded
 
 static void ReapplyLayouts()
 {
+	// (the round-end and killer panels are HUD parts that read their .res once too; the killer panel's parts are blocks
+	// inside FreezePanelBG, which applies them to its own children)
 	static const char *s_Res[][2] = { { "team", "Resource/UI/TeamMenu.res" }, { "class_ct", "Resource/UI/ClassMenu_CT.res" },
-		{ "class_ter", "Resource/UI/ClassMenu_TER.res" }, { "info", "Resource/UI/TextWindow.res" } };
+		{ "class_ter", "Resource/UI/ClassMenu_TER.res" }, { "info", "Resource/UI/TextWindow.res" },
+		{ "WinPanel_Round", "Resource/UI/Win_Round.res" }, { "FreezePanel", "Resource/UI/FreezePanel_Basic.res" } };
 	int slot = g_ApplySlot = SlotApplySettings();
 	if ( slot <= 0 || SlotLabelSetFont() != 0x710 / 8 )
 		return;
@@ -1530,6 +1534,52 @@ CON_COMMAND( schemereload_testvalue, "schemereload_testvalue health|armor|money|
 	}
 }
 
+// Panels the game shows only now and then, on the test server: the round-end panel (as for a CT win, with the player
+// as MVP and a fun fact), the killer panel (as if a bot had killed the player), or neither (hide).
+static IGameEventManager2 *g_pGameEvents;
+CON_COMMAND( schemereload_showpanel, "schemereload_showpanel win|freeze|hide: shows the round-end or killer panel on the test server" )
+{
+	edict_t *me = g_pEngineServer ? g_pEngineServer->PEntityOfEntIndex( 1 ) : NULL;
+	if ( !g_pGameEvents || !me || args.ArgC() < 2 )
+		return;
+	int bot = 0;
+	for ( int i = 2; i <= 64 && !bot; ++i )
+	{
+		edict_t *e = g_pEngineServer->PEntityOfEntIndex( i );
+		if ( e && !e->IsFree() && g_pEngineServer->GetPlayerUserId( e ) >= 0 && !Q_stricmp( g_pEngineServer->GetPlayerNetworkIDString( e ), "BOT" ) )
+			bot = i;
+	}
+	const char *what = args.Arg( 1 );
+	auto fire = [&]( const char *name, void ( *fill )( IGameEvent *, int, int ) ) {
+		if ( IGameEvent *e = g_pGameEvents->CreateEvent( name, true ) )
+		{
+			if ( fill )
+				fill( e, g_pEngineServer->GetPlayerUserId( me ), bot );
+			g_pGameEvents->FireEvent( e );
+		}
+	};
+	if ( !Q_stricmp( what, "win" ) )
+	{
+		fire( "cs_win_panel_round", []( IGameEvent *e, int, int ) {
+			e->SetBool( "show_timer_defend", false );
+			e->SetBool( "show_timer_attack", true );
+			e->SetInt( "timer_time", 83 );
+			e->SetInt( "final_event", 7 ); // CTs_Win in cs_gamerules.h
+			e->SetString( "funfact_token", "#funfact_killed_enemies" );
+			e->SetInt( "funfact_player", 1 );
+			e->SetInt( "funfact_data1", 5 );
+		} );
+		fire( "round_mvp", []( IGameEvent *e, int me, int ) { e->SetInt( "userid", me ); e->SetInt( "reason", 1 ); } );
+	}
+	else if ( !Q_stricmp( what, "freeze" ) )
+		fire( "show_freezepanel", []( IGameEvent *e, int, int bot ) { e->SetInt( "killer", bot ? bot : 1 ); } );
+	else
+	{
+		fire( "hide_freezepanel", NULL );
+		fire( "round_start", []( IGameEvent *e, int, int ) { e->SetInt( "timelimit", 540 ); } ); // the round-end panel goes on this
+	}
+}
+
 //-----------------------------------------------------------------------------
 // Console commands
 //-----------------------------------------------------------------------------
@@ -1684,6 +1734,7 @@ bool CSchemeReloadPlugin::Load( CreateInterfaceFn interfaceFactory, CreateInterf
 	g_pEngineClient = (IVEngineClient *)interfaceFactory( VENGINE_CLIENT_INTERFACE_VERSION, NULL );
 	g_pEngineVGui = (IEngineVGui *)interfaceFactory( VENGINE_VGUI_VERSION, NULL );
 	g_pServerGame = gameServerFactory ? (IServerGameDLL *)gameServerFactory( INTERFACEVERSION_SERVERGAMEDLL, NULL ) : NULL;
+	g_pGameEvents = (IGameEventManager2 *)interfaceFactory( INTERFACEVERSION_GAMEEVENTSMANAGER2, NULL );
 
 	CreateInterfaceFn vguiFactory = Sys_GetFactory( "vgui2.dll" );
 	if ( vguiFactory )

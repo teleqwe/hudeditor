@@ -259,6 +259,9 @@
       <button data-cmd="schemereload_testvalue roundtime 15" title="A round timer over 10:00, as surf and bhop servers have (starts the round again)">15:00 timer</button>
       <button data-cmd='bot_stop 1; bot_join_team any; bot_prefix "[WWWWWWWWWWWWWWWW]"; bot_quota 24' title="Bots with long names in both teams">Full scoreboard</button>
       <button data-cmd="bot_kill" title="Kills every bot: a line each in the kill feed">Kill feed</button>
+      <button data-cmd="schemereload_showpanel win" title="The round-end panel, as for a CT win with you as MVP">Round end</button>
+      <button data-cmd="schemereload_showpanel freeze" title="The killer panel, as if the bot had killed you">Killer panel</button>
+      <button data-cmd="schemereload_showpanel hide" title="Hides the round-end and killer panels">Hide panels</button>
       <button data-cmd='bot_prefix ""; bot_kick; bot_join_team T; bot_quota 1; mp_roundtime 9; mp_restartgame 1' title="Back to one frozen bot and a 9:00 round">Reset</button>
     </div>
     <div class="tline">
@@ -368,6 +371,7 @@ const HUD = {
   // its HudLayout colours and sizes (DmgColorLeft, dmg_xpos...) are Half-Life 2's and do nothing here: checked in game
   HudDamageIndicator: { name: 'Damage arrows', quiet: true, fixed: 'The red arrows round the crosshair when you take damage. They are pictures, so here they can only be faded or hidden.' },
   WinPanel_Round: { name: 'Round end panel' },
+  FreezePanel: { name: 'Killer panel', quiet: true },
   HudAchievementTracker: { name: 'Achievement tracker', quiet: true },
 };
 // Fullscreen overlays that draw little; never picked by clicking (still reachable from the list).
@@ -871,6 +875,8 @@ const STARTUP_RES = new Set(['buy_ct', 'buy_ter']);
 const UI_RES = { scores: 'resource/UI/scoreboard.res', specgui: 'resource/UI/spectator.res', specmenu: 'resource/UI/bottomspectator.res',
   team: 'resource/UI/TeamMenu.res', class_ct: 'resource/UI/ClassMenu_CT.res', class_ter: 'resource/UI/ClassMenu_TER.res', info: 'resource/UI/TextWindow.res',
   buy_ct: 'resource/UI/BuyMenu.res', buy_ter: 'resource/UI/BuyMenu.res', loadingdialog: 'resource/LoadingDialogNoBanner.res',
+  // HUD parts with a .res of their own, read again on a reload
+  winpanel_round: 'resource/UI/Win_Round.res', freezepanel: 'resource/UI/FreezePanel_Basic.res',
   // the chat's Filters button. The game has no file of its own; its code sizes the history and typing line to the
   // chat (HudLayout HudChat), so the default only places the button, in 480-line units inside the chat
   hudchat: 'resource/UI/BaseChat.res' };
@@ -898,6 +904,8 @@ const WINDOW_PARTS = { specgui: [['Top bar', 'topbar', 'tall', '0'], ['Bottom ba
     ['Team scores', 'CTScoreLabel|CTScoreValue|TERScoreLabel|TERScoreValue'], ['Timer', 'timerclock|timerlabel'], ['Info line', 'extrainfo'],
     ['Divider', 'DividerBar'], ['Player name', 'playerlabel']],
   specmenu: [['Settings menu', 'settingscombo'], ['Player menu', 'playercombo'], ['View menu', 'viewcombo'], ['Previous and next buttons', 'specprev|specnext']],
+  WinPanel_Round: [['Title (who won)', 'WinLabel'], ['How they won', 'WinDescription'], ['Timer', 'TimerIcon|TimerText'],
+    ['MVP', 'MVP_AvatarGlow|MVP_Avatar|MVP_Text|MVP_Foreground_Star'], ['Fun fact', 'FunFact'], ['Top box', 'UpperPanel'], ['Middle box', 'MiddlePanel'], ['Bottom box', 'LowerPanel']],
   info: [['Title', 'MessageTitle'], ['Text message', 'TextMessage'], ['Web page message', 'HTMLMessage']] };
 const hideHow = block => {
   const part = Object.values(WINDOW_PARTS).flat().find(([, b]) => b === block);
@@ -997,6 +1005,38 @@ function commandRows(sel) {
   } }));
   add.dataset.q = 'command button add say rtv spec';
   return [...rows, add, noteRow('A click closes the menu and runs the command as if typed in the console. Click the new button in the preview to move it or change its look.')];
+}
+
+// ---------- round-end and killer panels ----------
+// The round-end panel's boxes (resource/UI/Win_Round.res), and the killer panel (resource/UI/FreezePanel_Basic.res),
+// whose parts are blocks inside its FreezePanelBG: their colours and whether they show. Both files are read again on
+// a reload; Test values shows the panels on the test server.
+const nestedProps = (f, path) => {
+  const props = {};
+  for (const p of [...f.bases, f.parsed]) for (const e of p.entries) if (samePath(e.path.slice(1), path)) props[e.key.toLowerCase()] = e.value;
+  return props;
+};
+function winBoxRows(f) {
+  return [['Top box', 'UpperPanel'], ['Middle box', 'MiddlePanel'], ['Bottom box', 'LowerPanel']].map(([label, b]) =>
+    colorRow(label, 'Behind that part of the panel', layoutProps(f, b).bgcolor_override || '80 80 80 160', v => save(f, 'bgcolor_override', v, b), ['bgcolor_override'], null, `${f.name}/${b}`));
+}
+const FREEZE_TEXT = [['Killer\'s name', 'KillerName'], ['First line', 'InfoLabel1'], ['Second line', 'InfoLabel2'], ['Screenshot hint', 'ScreenshotLabel']];
+const FREEZE_PARTS = [...FREEZE_TEXT.map(([label, b]) => [label, [b]]), ['Avatar', ['AvatarImage', 'AvatarGlow']], ['Health bar', ['KillerHealth']], ['Domination icon', ['DominationIcon']]];
+function freezeRows(f) {
+  const bg = nestedProps(f, ['FreezePanelBG']), at = b => ['FreezePanelBG', b];
+  const colours = [colorRow('Box', 'Behind the killer panel', bg.bgcolor_override || '0 0 0 192', v => save(f, 'bgcolor_override', v, 'FreezePanelBG'), ['bgcolor_override'], null, f.name),
+    colorRow('Edge', 'The line round it', bg.fgcolor_override || '251 176 59 255', v => save(f, 'fgcolor_override', v, 'FreezePanelBG'), ['fgcolor_override'], null, f.name),
+    ...FREEZE_TEXT.map(([label, b]) => colorRow(label, '', nestedProps(f, at(b)).fgcolor_override || '204 204 204 255', v => save(f, 'fgcolor_override', v, at(b)), ['fgcolor_override'], null, `${f.name}/${b}`))];
+  // hidden off screen like other window parts, the place kept in xpos_hudeditor
+  const parts = FREEZE_PARTS.map(([label, blocks]) => checkRow(`Show the ${label.toLowerCase()}`, !('xpos_hudeditor' in nestedProps(f, at(blocks[0]))), on => {
+    for (const b of blocks) {
+      const p = () => nestedProps(f, at(b));
+      if (!on) { save(f, 'xpos_hudeditor', () => p().xpos_hudeditor ?? p().xpos ?? '0', at(b)); save(f, 'xpos', '9999', at(b)); }
+      else { save(f, 'xpos', () => p().xpos_hudeditor ?? p().xpos ?? '0', at(b)); save(f, 'xpos_hudeditor', null, at(b)); }
+    }
+    refreshSoon();
+  }));
+  return [colours, parts];
 }
 
 // ---------- recolouring the whole HUD ----------
@@ -1509,7 +1549,7 @@ function pickAt(fx, fy) {
   // the chat: its filter button, scroll bar and history) or the main menu
   let c = best.p;
   while (c && c !== best.p.thing && !controlOf(c.cls)) c = c.parent;
-  const control = (best.info.kind === 'window' && best.info.id !== 'gamemenu' || best.info.id === 'HudChat') && c && c !== best.p.thing ? c : null;
+  const control = (best.info.kind === 'window' && best.info.id !== 'gamemenu' || best.info.id === 'HudChat' || best.info.id === 'WinPanel_Round') && c && c !== best.p.thing ? c : null;
   return { thing: best.p.thing, info: best.info, control, node: best.p !== best.p.thing ? best.p : null, r: best.r };
 }
 
@@ -2163,7 +2203,8 @@ function resRows(f, block, defaults, schemeFile, ctl) {
 // Fonts a HUD part draws with by default (HudLayout font keys, when set, win). From telehud's comments and the SDK.
 const HUD_FONTS = { HudHealth: ['HudNumbers'], HudArmor: ['HudNumbers'], HudAmmo: ['HudNumbers'], HudAccount: ['HudNumbers'], HudRoundTimer: ['HudNumbers'],
   HudHintDisplay: ['HudHintText'], HudHintKeyDisplay: ['HudHintTextSmall'], CCenterStringLabel: ['Trebuchet24'], HudMessage: ['CenterPrintText'], TargetID: ['TargetID'],
-  HudWeaponSelection: ['HudSelectionNumbers', 'HudSelectionText'], HudMenu: ['Default'], HudDeathNotice: ['Default'], HudRadar: ['ChatFont'], HudChat: ['ChatFont'] };
+  HudWeaponSelection: ['HudSelectionNumbers', 'HudSelectionText'], HudMenu: ['Default'], HudDeathNotice: ['Default'], HudRadar: ['ChatFont'], HudChat: ['ChatFont'],
+  WinPanel_Round: ['WinPanelLarge', 'WinPanelTiny', 'WinPanelClock'], FreezePanel: ['FreezeSmall', 'FreezeMedium', 'FreezeLarge'] };
 
 // Fonts a selection draws with, as [scheme file, font, what for]: the control's own .res "font", HudLayout font keys
 // and the defaults above for HUD parts, the fonts the game gives some windows, and control types' defaults. With a
@@ -2628,6 +2669,8 @@ function selectionSections(sel) {
   }
   if (info.kind === 'hud') {
     if (info.hud.custom) add('colour', `${info.name}: what it shows`, customRows(info.id));
+    if (info.id === 'WinPanel_Round' && sel.res) add('colour', 'Round end panel: boxes', winBoxRows(sel.res));
+    if (info.id === 'FreezePanel' && sel.res) { const [c, p] = freezeRows(sel.res); add('colour', 'Killer panel: colours', c); add('other', 'Killer panel: show or hide parts', p); }
     add('colour', info.name, hudRows(info.id, info.hud));
     add('other', `${info.name}: settings`, hudSettingRows(info.id, info.hud));
     if (info.id === 'HudChat' && sel.res) add('other', 'Chat: space inside', chatPaddingRows(sel));

@@ -47,8 +47,10 @@ Each step is committed on its own, so work can stop after any of them.
     may come from the game's files, which the editor can't list).
 12. [x] **Recolour the whole HUD**: replace one colour everywhere, or shift every colour's hue. Checked in game on
     testhud: a 120° shift turned the timer text from green to purple live (55 of 151 colours changed; greys kept).
-13. [ ] **Round-end panel** (`win_round.res`) and **killer panel** (`freezepanel_basic.res` + callout/health), with
-    test buttons that show them.
+13. [x] **Round-end panel** (`win_round.res`) and **killer panel** (`freezepanel_basic.res`), with test buttons that
+    show them (the plugin fires cs_win_panel_round + round_mvp, show_freezepanel, hide_freezepanel/round_start).
+    Checked in game: fun fact and screenshot hint hidden live. Not done: the freeze-cam callout (freezepanelcallout.res)
+    and the killer's health (freezepanelkillerhealth.res); the killer's name shows "[unknown]" for the test bot.
 14. [ ] **C4 panel** (`resource/c4panel.res`): colours of the bomb's screen.
 15. [ ] **Buy menu**: all its pages (`buymenu_ct/ter`, sub-menus, `classes/*.res` weapon pages, `loadout.res`).
 16. [ ] **Preview what Save writes** (low priority): every change per file, old → new, each with an undo.
