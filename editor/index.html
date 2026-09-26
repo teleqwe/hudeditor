@@ -339,7 +339,7 @@ const HUD = {
     links: { NumberColor: 'SelectionNumberFg', BoxColor: 'SelectionBoxBg', EmptyBoxColor: 'SelectionEmptyBoxBg', SelectedBoxClor: 'SelectionSelectedBoxBg' }, rounded: true },
   HudDeathNotice: { name: 'Kill feed', hit: ['r260', '12', '248', '100'], layoutColours: [['CT names', 'CTTextColor', 'CT_Blue'], ['T names', 'TerroristTextColor', 'T_Red']],
     settings: [['Lines', 'MaxDeathNotices', 'num', '4', 'How many kills show at once'], ['Line height', 'LineHeight', 'num', '22'],
-      ['Side', 'RightJustify', [['1', 'Right'], ['0', 'Left']], '1']], fontKeys: [['Names font', 'TextFont', 'Default']] },
+      ['Lines line up on the', 'RightJustify', [['1', 'Right'], ['0', 'Left']], '1', 'Side of the kill feed\'s area (move the area to move the feed)']], fontKeys: [['Names font', 'TextFont', 'Default']] },
   // the chat reads ChatScheme; its message colours (names in team colours, yellow server lines) are the game's own
   HudChat: { name: 'Chat', scheme: CH, rounded: true, colours: [['Background', 'DullWhite', 'Behind the chat while typing; the game sets how see-through it is'],
     ['Typing text', 'Chat.TypingText', ''], ['"Say :" text', 'Label.TextColor', ''], ['Typing box', 'TextEntry.BgColor', '']] },
@@ -1003,7 +1003,12 @@ function commandRows(sel) {
     const p = layoutProps(f, block), row = el('div', { className: 'row cmdbtn' }), [t, c] = inputs(p.labeltext || '', p.command || '');
     t.oninput = () => save(f, 'labelText', clean(t.value), block);
     c.oninput = () => { if (clean(c.value)) save(f, 'command', clean(c.value), block); };
-    row.append(t, c, el('button', { textContent: '✕', title: 'Remove this button', onclick: () => { commit(f, `${f.name}/${block}/remove`, () => dropBlock(f, [], block)); refreshSoon(); } }));
+    row.append(t, c, el('button', { textContent: '✕', title: 'Remove this button', onclick: () => {
+      commit(f, `${f.name}/${block}/remove`, () => dropBlock(f, [], block));
+      // the button was the selection: the window is, now
+      if (selected && (selected.control?.name || '').toLowerCase() === block.toLowerCase()) select({ ...selected, control: null, node: null });
+      else refreshSoon();
+    } }));
     row.dataset.q = `command button ${p.labeltext || ''} ${p.command || ''}`.toLowerCase();
     return row;
   });
@@ -1984,6 +1989,7 @@ function hudSettingRows(id, hud) {
     const row = kind === 'onoff' ? toggleRow(label, now !== '0', on => set(on ? '1' : '0'), note)
       : Array.isArray(kind) ? selectRow(label, kind.some(([v]) => v === now) ? kind : [...kind, [now, now]], now, set, ks)
       : inputRow(label, now, set, { type: 'number', step: kind === 'time' ? 0.05 : 1, ...(note ? { title: note } : {}) });
+    if (note && Array.isArray(kind)) row.querySelector('.meta').textContent = note;
     row.dataset.keys = ks.join(' + ');
     row.dataset.q += ` ${ks.join(' ').toLowerCase()}`;
     return row;
