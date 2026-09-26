@@ -1158,7 +1158,7 @@ function recolourRows() {
   go.append(el('button', { textContent: 'Shift the hues', onclick: () => {
     if (!deg) return;
     const n = recolour(c => { const [h, s, v] = toHsv(c); return s ? [...fromHsv((h + deg + 360) % 360, s, v), c[3]] : null; });
-    status(`Shifted ${n} colours by ${deg}°. Undo puts them back.`);
+    writing.then(() => status(`Shifted ${n} colours by ${deg}°. Undo puts them back.`));
   } }));
   return [grid, hue, go, noteRow('Every colour the HUD sets, most used first; greys and white stay as they are when shifting.')];
 }
@@ -2744,7 +2744,8 @@ function selectionSections(sel) {
     add('colour', info.name, hudRows(info.id, info.hud));
     add('other', `${info.name}: settings`, hudSettingRows(info.id, info.hud));
     if (info.id === 'HudChat' && sel.res) add('other', 'Chat: space inside', chatPaddingRows(sel));
-    add('other', `${info.name}: hidden parts`, windowPartRows(sel)); // parts moved off screen (the chat's Filters button) can't be clicked any more
+    // parts moved off screen (the chat's Filters button) can't be clicked any more
+    add('other', `${info.name}: ${WINDOW_PARTS[info.id] ? 'show or hide parts' : 'hidden parts'}`, windowPartRows(sel));
   } else {
     if (info.id !== 'gamemenu') { // the main menu isn't a window frame
       // menu windows paint their frame's background and edge; in-game ones (team select...) draw their own panels
@@ -3404,7 +3405,11 @@ if (host) {
   });
   $('explore').onclick = () => call('explore');
   $('guide43').onclick = () => { guide43 = !guide43; $('guide43').setAttribute('aria-pressed', guide43); drawBoxes(); };
-  for (const b of $('values').querySelectorAll('button')) b.onclick = () => live ? call('cmd', '', b.dataset.cmd) : status('Start the test server first.');
+  for (const b of $('values').querySelectorAll('button')) b.onclick = () => {
+    if (!live) return status('Start the test server first.');
+    call('cmd', '', b.dataset.cmd);
+    status(`Test value: ${b.textContent}${b.title ? ` (${b.title.replace(/^./, c => c.toLowerCase())})` : ''}.`);
+  };
   $('testserver').onclick = testServer;
   $('toolsbtn').onclick = () => showTools($('tools').hidden);
   // held open like Tab does, as Tab can't be held down while clicking in the editor
