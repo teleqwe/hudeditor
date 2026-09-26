@@ -996,6 +996,107 @@ function commandRows(sel) {
   return [...rows, add, noteRow('A click closes the menu and runs the command as if typed in the console. Click the new button in the preview to move it or change its look.')];
 }
 
+// ---------- HUD check-up ----------
+// What quietly goes wrong in a HUD: font faces this PC doesn't have and the HUD doesn't bring (the game shows Tahoma),
+// font files and pictures the HUD names but doesn't have, blocks written twice (the game reads only the first), and the
+// game's own fonts, colours and borders an old HUD's scheme leaves out (the parts using them get a stand-in or none).
+let checkup = null; // [text, [fix label, fix] | null] per finding, once run
+const lineAt = (text, i) => text.lastIndexOf('\n', i - 1) + 1, lineAfter = (text, i) => { const n = text.indexOf('\n', i); return n < 0 ? text.length : n + 1; };
+async function runCheckup() {
+  status('Checking the HUD...');
+  const out = [], add = (text, fix = null) => out.push([text, fix]), list = xs => xs.slice(0, 5).join(', ') + (xs.length > 5 ? ` and ${xs.length - 5} more` : '');
+  const known = async op => new Set((await call(op).catch(() => '')).split('\n').map(s => s.trim().toLowerCase()).filter(Boolean));
+  const installed = await known('fontfaces'), brought = await known('hudfonts');
+  const games = {};
+  for (const [file] of FONT_FILES) games[file] = await call('vanilla', PATHS[file].split('/').pop()).then(parse).catch(() => null);
+  for (const [file, where] of FONT_FILES) {
+    const f = F(file);
+    if (!f) continue;
+    // font faces
+    // (a style after the family, "Verdana Bold", is a full font name Windows finds too; the game's own scheme uses it)
+    const faces = new Map(), family = k => k.replace(/\s+(bold|italic|oblique|regular|light|medium|semi ?bold|demi ?bold|black|heavy|thin|condensed|narrow)\b.*$/, '');
+    for (const font of fontNames(file)) for (const v of fontVariants(f, font).values()) {
+      const face = (v.name || '').trim(), k = face.toLowerCase(), ok = n => installed.has(n) || brought.has(n);
+      if (face && !ok(k) && !ok(family(k)) && !SYMBOL_FACES.has(k)) faces.set(k, [faces.get(k)?.[0] || face, [...new Set([...(faces.get(k)?.[1] || []), font])]]);
+    }
+    for (const [face, fonts] of faces.values()) add(`The font face "${face}" (${where}: ${list(fonts)}) isn't on this PC or in the HUD, so the game shows Tahoma.`, ['Add its font file...', () => addFontFile([file])]);
+    // font files it lists but doesn't have (the game's own, listed in its schemes, come from the game)
+    const game = games[file], ours = new Set((game ? game.entries : []).filter(e => sectionOf(e) === 'customfontfiles').map(e => e.value.replace(/\\/g, '/').toLowerCase()));
+    for (const e of f.parsed.entries) {
+      if (sectionOf(e) !== 'customfontfiles' || !(e.path.length === 2 || e.key.toLowerCase() === 'font')) continue;
+      const p = e.value.replace(/\\/g, '/');
+      if (!/\.(ttf|otf|vfont)$/i.test(p) || ours.has(p.toLowerCase()) || (await call('exists', p)) === '1') continue;
+      add(`${PATHS[file]} lists the font file ${p}, which isn't in the HUD.`, ['Take it out of the list', () => {
+        const entry = e.path.length === 2 ? e.key : e.path[2];
+        commit(f, `${f.name}/customfontfiles/${entry}`, () => e.path.length === 2 ? dropKey(f, ['CustomFontFiles'], entry) : dropBlock(f, ['CustomFontFiles'], entry));
+      }]);
+    }
+    // the game's own definitions this scheme leaves out (#base files count; not when a #base file is outside the HUD,
+    // as SourceScheme's usually is: the game finds it, the editor doesn't)
+    if (game && f.bases.length === f.parsed.bases.length) {
+      const have = (sec, name) => [...f.bases, f.parsed].some(p => p.entries.some(e => e.path.length >= 2 && e.path[1].toLowerCase() === sec && (e.path.length === 2 ? e.key : e.path[2]).toLowerCase() === name.toLowerCase()));
+      for (const [sec, what] of [['fonts', 'fonts'], ['borders', 'borders'], ['colors', 'colours'], ['basesettings', 'settings']]) {
+        const names = [...new Set(game.entries.filter(e => e.path.length >= 2 && e.path[1].toLowerCase() === sec).map(e => e.path.length === 2 ? e.key : e.path[2]))];
+        const missing = names.filter(n => !have(sec, n));
+        if (missing.length) add(`${PATHS[file]} leaves out ${missing.length} of the game's ${what} (${list(missing)}).`, [`Add the game's ${what}`, () => addGameDefs(f, game, sec, missing)]);
+      }
+    }
+  }
+  // pictures the HUD's own blocks show but it doesn't have (the ones under replay/thumbnails are always the HUD's)
+  for (const f of files) for (const e of f.parsed.entries)
+    if (e.key.toLowerCase() === 'image' && /^replay\/thumbnails\//i.test(e.value) && (await call('exists', `materials/vgui/${e.value}.vmt`)) !== '1')
+      add(`${f.name}: ${e.path[1]} shows the picture ${e.value}, which isn't in the HUD.`);
+  // blocks written twice
+  for (const f of files) {
+    const seen = new Map();
+    for (const s of f.parsed.sections) {
+      const deep = s.path.length === 3 && /^(fonts|borders)$/i.test(s.path[1]);
+      if (s.path.length !== 2 && !deep) continue;
+      const key = s.path.slice(1).join('/').toLowerCase();
+      if (!seen.has(key)) { seen.set(key, s); continue; }
+      add(`${f.name}: "${s.path.slice(1).join(' › ')}" is written twice; the game reads only the first.`, ['Take out the second', () =>
+        commit(f, `${f.name}/${key}/dup`, () => { const t = f.text, again = f.parsed.sections.filter(x => x.path.slice(1).join('/').toLowerCase() === key)[1]; return again ? t.slice(0, lineAt(t, again.kstart)) + t.slice(lineAfter(t, again.close)) : t; })]);
+    }
+  }
+  checkup = out;
+  status(out.length ? `The check-up found ${out.length} thing${out.length > 1 ? 's' : ''}.` : 'The check-up found nothing wrong.');
+  render();
+}
+// Copies the game's definitions of `names` in section `sec` into the HUD's scheme, as the game's file writes them.
+function addGameDefs(f, game, sec, names) {
+  commit(f, `${f.name}/${sec}/game`, () => {
+    let text = f.text;
+    for (const n of names) {
+      const g = { ...f, text, parsed: parse(text) }, block = game.sections.find(s => s.path.length === 3 && s.path[1].toLowerCase() === sec && s.path[2].toLowerCase() === n.toLowerCase());
+      const e = !block && game.entries.find(x => x.path.length === 2 && x.path[1].toLowerCase() === sec && x.key.toLowerCase() === n.toLowerCase());
+      text = block ? setBlock(g, [game.sections.find(s => s.path.length === 2 && s.path[1].toLowerCase() === sec).path[1]], block.path[2], blockPairs(game, block.path))
+        : e ? setAt(g, [e.path[1]], e.key, e.value) : text;
+    }
+    return text;
+  });
+  checkup = null;
+  refreshSoon();
+}
+// A block's keys and sub-blocks as setBlock's pairs, from a parsed file.
+function blockPairs(parsed, path) {
+  const n = path.length, same = p => p.length > n && samePath(p.slice(0, n), path), pairs = [];
+  for (const e of parsed.entries) if (samePath(e.path, path)) pairs.push([e.key, e.value]);
+  for (const s of parsed.sections) if (s.path.length === n + 1 && same(s.path)) pairs.push([s.path[n], blockPairs(parsed, s.path)]);
+  return pairs;
+}
+function checkupRows() {
+  const run = el('div', { className: 'row action' });
+  run.append(el('button', { textContent: checkup ? 'Check again' : 'Check the HUD', onclick: runCheckup }));
+  if (!checkup) return [run, noteRow('Looks for fonts the game can\'t find, missing files and pictures, blocks written twice, and the game\'s fonts and colours an old HUD leaves out.')];
+  const rows = checkup.map(([text, fix]) => {
+    const r = el('div', { className: 'row note meta', textContent: text });
+    if (fix) { const b = el('button', { className: 'mini', textContent: fix[0] }); b.onclick = () => { fix[1](); b.disabled = true; }; r.append(' ', b); }
+    r.dataset.q = text.toLowerCase();
+    return r;
+  });
+  return [...(rows.length ? rows : [noteRow('Nothing found.')]), run];
+}
+
 // ---------- loading screen ----------
 // GameUI's loading box, made each time a map loads from resource/LoadingDialogNoBanner.res (LoadingDialogVAC.res on
 // VAC-secured servers: the same box, taller, with the VAC notice; the plain LoadingDialog.res isn't used). The game
@@ -2700,6 +2801,7 @@ function renderList() {
   const screens = el('div', { className: 'row action' });
   screens.append(el('button', { textContent: 'Loading screen', title: 'The box that shows while a map loads', onclick: async () => { await uiFile(LOADING_VAC); select(LOADING_SEL()); } }));
   list.append(card('Other screens', [screens]));
+  list.append(card('HUD check-up', checkupRows()));
   // parts that only show now and then (kill feed, pickup history, weapon selection...), so they can be hidden too
   if (live && F(L)) {
     const shown = new Set(things.map(t => t.info.id));
@@ -3322,6 +3424,8 @@ function parserCheck() {
     `a command button copies a button's look and goes a row under the lowest (${JSON.stringify(cb)})`);
   const dropped = dropBlock(tm, [], 'CancelButton');
   check(!/CancelButton|vguicancel/.test(dropped) && /terbutton/.test(dropped) && /hudeditor_cmd1/.test(dropped), 'a block is taken out whole');
+  const bp = JSON.stringify(blockPairs(parse('"S" { "Borders" { "B" { "inset" "0 0 1 1" "Left" { "1" { "color" "X" "offset" "0 0" } } } } }'), ['S', 'Borders', 'B']));
+  check(bp === '[["inset","0 0 1 1"],["Left",[["1",[["color","X"],["offset","0 0"]]]]]]', `a game block is copied with its sub-blocks (${bp})`);
   const vt = pictureVtf([new Uint8ClampedArray([1, 2, 3, 4, 5, 6, 7, 8]), new Uint8ClampedArray(8)], 2, 1), vd = new DataView(vt.buffer);
   check(vt.length === 96 && vd.getUint32(52, true) === 12 && vd.getUint16(24, true) === 2 && [...vt.slice(80, 88)].join() === '3,2,1,4,7,6,5,8', 'pictures are written as BGRA VTFs, one frame after another');
 }

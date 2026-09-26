@@ -934,10 +934,15 @@ static void OnMessage( const wstring &msg )
 		else
 			out = Decode( data );
 	}
-	else if ( op == L"vanilla" ) // arg = a window .res or chatscheme.res by name: the game's own copy, for HUDs without one
+	else if ( op == L"exists" ) // arg = path in the HUD: "1" if that file is there (the HUD check-up)
+		out = InHud( arg, path ) && IsFile( path ) ? L"1" : L"0";
+	else if ( op == L"vanilla" ) // arg = a window .res, chatscheme.res or clientscheme/sourcescheme.res by name: the game's own copy
 	{
 		wstring name = L"V_" + NameOf( arg );
-		string data = Res( name.substr( 0, name.rfind( L'.' ) ).c_str() );
+		name = name.substr( 0, name.rfind( L'.' ) );
+		for ( auto &c : name )
+			c = towupper( c );
+		string data = Res( name == L"V_CLIENTSCHEME" ? L"CLIENT_DEF" : name == L"V_SOURCESCHEME" ? L"SOURCE_DEF" : name.c_str() );
 		if ( data.empty() )
 			fail( L"missing" );
 		else

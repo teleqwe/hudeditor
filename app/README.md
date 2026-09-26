@@ -73,6 +73,11 @@ packed inside it. Needs Windows 10 or 11 (it uses the WebView2 runtime that ship
        flash, the buy zone, bomb, defuse kit and rescue zone icons.
      - **Damage arrows** (under Other HUD parts) can be faded or hidden. They are pictures: HudLayout's DmgColor and
        dmg_ settings are Half-Life 2's and do nothing in CS:S.
+   - **HUD check-up** (below On screen now): **Check the HUD** lists what quietly goes wrong, each with a fix where
+     there is one: font faces this PC doesn't have and the HUD doesn't bring (the game shows Tahoma; "Verdana Bold"
+     style names count as Verdana, as Windows finds them), font files CustomFontFiles names that aren't in the HUD,
+     pictures under replay/thumbnails that aren't there, blocks written twice (the game reads only the first), and the
+     game's own fonts, colours, borders and settings an old HUD's scheme leaves out (**Add the game's**).
    - **Loading screen** (Other screens, below On screen now): the box that shows while a map loads. Show or hide its
      text, progress bar and Cancel button; its width and height; where the parts sit inside. **See it** starts the test
      game again. The game reads `resource/LoadingDialogNoBanner.res` (and `LoadingDialogVAC.res` on VAC-secured

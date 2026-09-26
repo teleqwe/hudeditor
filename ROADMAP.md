@@ -41,8 +41,10 @@ Each step is committed on its own, so work can stop after any of them.
 10. [x] **Loading screen**: the game really reads `LoadingDialogNoBanner.res` (VAC servers: `LoadingDialogVAC.res`),
     not `LoadingDialog.res`. Show/hide text, bar and Cancel; box size; parts' places. Checked on a map reload (the test
     server turns vgui_cache_res_files off so each load reads the file). The game centres the box.
-11. [ ] **HUD check-up**: fonts not installed or not in the HUD, missing images and font files, duplicate blocks,
-    settings old HUDs are missing; one-click fixes.
+11. [x] **HUD check-up**: fonts not installed or not in the HUD, missing font files and replay/thumbnails pictures,
+    blocks written twice, the game's fonts/colours/borders/settings an old HUD leaves out; fixes where there's one.
+    Tried on a copy of Gasai GUI: 8 findings, 0 after its fixes. Not checked: pictures outside replay/thumbnails (they
+    may come from the game's files, which the editor can't list).
 12. [ ] **Recolour the whole HUD**: replace one colour everywhere, or shift every colour's hue. Needs testing.
 13. [ ] **Round-end panel** (`win_round.res`) and **killer panel** (`freezepanel_basic.res` + callout/health), with
     test buttons that show them.
