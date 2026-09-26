@@ -45,7 +45,8 @@ Each step is committed on its own, so work can stop after any of them.
     blocks written twice, the game's fonts/colours/borders/settings an old HUD leaves out; fixes where there's one.
     Tried on a copy of Gasai GUI: 8 findings, 0 after its fixes. Not checked: pictures outside replay/thumbnails (they
     may come from the game's files, which the editor can't list).
-12. [ ] **Recolour the whole HUD**: replace one colour everywhere, or shift every colour's hue. Needs testing.
+12. [x] **Recolour the whole HUD**: replace one colour everywhere, or shift every colour's hue. Checked in game on
+    testhud: a 120° shift turned the timer text from green to purple live (55 of 151 colours changed; greys kept).
 13. [ ] **Round-end panel** (`win_round.res`) and **killer panel** (`freezepanel_basic.res` + callout/health), with
     test buttons that show them.
 14. [ ] **C4 panel** (`resource/c4panel.res`): colours of the bomb's screen.

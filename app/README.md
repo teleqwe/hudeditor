@@ -73,6 +73,10 @@ packed inside it. Needs Windows 10 or 11 (it uses the WebView2 runtime that ship
        flash, the buy zone, bomb, defuse kit and rescue zone icons.
      - **Damage arrows** (under Other HUD parts) can be faded or hidden. They are pictures: HudLayout's DmgColor and
        dmg_ settings are Half-Life 2's and do nothing in CS:S.
+   - **Recolour the HUD** (below On screen now): every colour the HUD sets, most used first. Click one to change it
+     everywhere it's used (each place keeps its opacity), or **Shift every hue** by up to 180° (greys and white stay).
+     That covers the schemes' named colours and colour settings (the game's defaults too, so a HUD that #bases them
+     recolours as well), borders' lines, and colours written in HudLayout and window files. One Undo per file.
    - **HUD check-up** (below On screen now): **Check the HUD** lists what quietly goes wrong, each with a fix where
      there is one: font faces this PC doesn't have and the HUD doesn't bring (the game shows Tahoma; "Verdana Bold"
      style names count as Verdana, as Windows finds them), font files CustomFontFiles names that aren't in the HUD,
