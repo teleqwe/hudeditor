@@ -14,7 +14,8 @@ Each step is committed on its own, so work can stop after any of them.
    - Damage indicator: its HudLayout colours/sizes do nothing in CS:S (checked); the arrows can be faded or hidden.
      Recolouring them means swapping their pictures (`pain_*` in mod_textures), like the MVP star.
    - Per-part colours: low health, timer flash, icon colours (so they don't share the warning red / highlight green)
-   - Smaller: pickup history spacing, plant/defuse bar border, scope settings
+   - Smaller: pickup history spacing, plant/defuse bar border. Left out: the scope's settings (its HudLayout block,
+     HudZoom, is Half-Life 2's like the damage indicator's; not tried in game)
 2. [x] **Command buttons** in windows (team and class select; the buy menu comes with step 15): an "Add a command button" section after Borders. The new
    button gets a sensible size and copies another button's colours and border. Presets for surf/bhop/ZE servers.
    The plugin creates new buttons live.
@@ -60,6 +61,13 @@ Each step is committed on its own, so work can stop after any of them.
     buttons), the weapon pages (`classes/*.res`) and `loadout.res`.
 16. [x] **Preview what Save writes**: Unsaved changes > See what Save will write: every setting and block per file, old →
     new, each with an Undo. Checked in game.
+
+## Found along the way (to look into)
+- **The game crashes when it quits** with the plugin loaded: dumps in `Steam\dumps` (vgui2.dll+0x30ca, a panel
+  teardown), also on 09-24 and 09-25. build-all's `quit` shows it every time; normal play doesn't load the plugin.
+  Worth checking whether a game started without the plugin does the same.
+- Restarting the test server right after `sv_pure 2` once ended in "IVP Failed ... ivu_vhash.cxx 157" (physics).
+- The console says "C4Panel not found in memory, skipped" on every reload until a C4 has been seen (harmless).
 
 ## Later
 - **Addon merger** (back burner): "Add to my HUD" from any HUD/addon download, copying the parts and everything they
