@@ -1007,6 +1007,14 @@ function commandRows(sel) {
   return [...rows, add, noteRow('A click closes the menu and runs the command as if typed in the console. Click the new button in the preview to move it or change its look.')];
 }
 
+// ---------- the bomb's screen ----------
+// The C4's little screen (on the planted bomb and on the C4 in your hands) has a scheme of its own,
+// resource/C4Panel.res: the code/timer colour while armed and after defusing, and its font (Default there).
+const C4 = 'resource/C4Panel.res';
+const C4_SEL = () => ({ thing: { name: 'C4Screen', key: 'c4screen' }, control: null, info: { kind: 'hud', id: 'C4Screen', name: 'Bomb screen', hud: { name: 'Bomb screen', scheme: C4,
+  colours: [['Armed', 'C4Panel_Armed', 'The code and timer while the bomb ticks'], ['Defused', 'C4Panel_Defused', 'Once it is defused']],
+  fixed: 'The screen on the bomb and on the C4 in your hands. To see it on the test server: give weapon_c4 in the console, then pick the C4.' } } });
+
 // ---------- round-end and killer panels ----------
 // The round-end panel's boxes (resource/UI/Win_Round.res), and the killer panel (resource/UI/FreezePanel_Basic.res),
 // whose parts are blocks inside its FreezePanelBG: their colours and whether they show. Both files are read again on
@@ -2204,7 +2212,7 @@ function resRows(f, block, defaults, schemeFile, ctl) {
 const HUD_FONTS = { HudHealth: ['HudNumbers'], HudArmor: ['HudNumbers'], HudAmmo: ['HudNumbers'], HudAccount: ['HudNumbers'], HudRoundTimer: ['HudNumbers'],
   HudHintDisplay: ['HudHintText'], HudHintKeyDisplay: ['HudHintTextSmall'], CCenterStringLabel: ['Trebuchet24'], HudMessage: ['CenterPrintText'], TargetID: ['TargetID'],
   HudWeaponSelection: ['HudSelectionNumbers', 'HudSelectionText'], HudMenu: ['Default'], HudDeathNotice: ['Default'], HudRadar: ['ChatFont'], HudChat: ['ChatFont'],
-  WinPanel_Round: ['WinPanelLarge', 'WinPanelTiny', 'WinPanelClock'], FreezePanel: ['FreezeSmall', 'FreezeMedium', 'FreezeLarge'] };
+  WinPanel_Round: ['WinPanelLarge', 'WinPanelTiny', 'WinPanelClock'], FreezePanel: ['FreezeSmall', 'FreezeMedium', 'FreezeLarge'], C4Screen: ['Default'] };
 
 // Fonts a selection draws with, as [scheme file, font, what for]: the control's own .res "font", HudLayout font keys
 // and the defaults above for HUD parts, the fonts the game gives some windows, and control types' defaults. With a
@@ -2900,7 +2908,8 @@ function renderList() {
   list.append(card(live ? 'On screen now' : 'HUD parts', parts));
   if (F(L)) list.append(card('Add to the HUD', addRows()));
   const screens = el('div', { className: 'row action' });
-  screens.append(el('button', { textContent: 'Loading screen', title: 'The box that shows while a map loads', onclick: async () => { await uiFile(LOADING_VAC); select(LOADING_SEL()); } }));
+  screens.append(el('button', { textContent: 'Loading screen', title: 'The box that shows while a map loads', onclick: async () => { await uiFile(LOADING_VAC); select(LOADING_SEL()); } }),
+    el('button', { textContent: 'Bomb screen', title: 'The C4\'s little screen', onclick: async () => { await uiFile(C4); select(C4_SEL()); } }));
   list.append(card('Other screens', [screens]));
   list.append(card('HUD check-up', checkupRows()));
   list.append(card('Recolour the HUD', recolourRows()));
