@@ -762,10 +762,13 @@ static wstring StartCapture()
 	return L"";
 }
 
-// A key sent to the game brings it to the front, and in a map the game then locks the mouse inside its window. Once
-// the key is let go, the editor takes the front back. Windows only lets the program the user last typed into change
-// the front window, so this borrows the game's input state for the call.
+// A key sent to the game brings it to the front, and in a map the game then locks the mouse inside its window (and
+// opening the chat moves the mouse onto it). Once the key is let go, the editor takes the front back and the mouse goes
+// back where the user had it. Windows only lets the program the user last typed into change the front window, so this
+// borrows the game's input state for the call.
 static UINT g_keyVk;
+static POINT g_keyMouse;
+static bool g_keyMouseSaved;
 static void BringEditorBack()
 {
 	HWND fg = GetForegroundWindow();
@@ -776,6 +779,11 @@ static void BringEditorBack()
 		AttachThreadInput( me, fgThread, FALSE );
 	if ( g_ctl )
 		g_ctl->MoveFocus( COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC );
+	if ( g_keyMouseSaved )
+	{
+		SetCursorPos( g_keyMouse.x, g_keyMouse.y );
+		SetTimer( g_hwnd, 4, 250, NULL ); // and again once the game has let go of it (see WM_TIMER)
+	}
 }
 
 static wstring NameOf( const wstring &path )
@@ -939,29 +947,6 @@ static void OnMessage( const wstring &msg )
 		else
 			out = Decode( data );
 	}
-	else if ( op == L"changes" ) // files changed since the last save: "M\tpath" (changed, its saved copy kept) or "A\tpath" (new)
-	{
-		auto list = [&]( const wchar_t *kind, const wchar_t *sub ) {
-			EachFile( g_unsaved + L"\\" + sub, L"", [&]( const wstring &rel ) {
-				wstring r = rel;
-				std::replace( r.begin(), r.end(), L'\\', L'/' );
-				if ( IsFile( g_hudPath + L"\\" + rel ) || !wcscmp( kind, L"M" ) )
-					out += wstring( kind ) + L"\t" + r + L"\n";
-			} );
-		};
-		list( L"M", L"files" );
-		list( L"A", L"new" );
-	}
-	else if ( op == L"saved" ) // arg = path in the HUD: its version as last saved (for the save preview)
-	{
-		string data;
-		wstring rel = arg;
-		std::replace( rel.begin(), rel.end(), L'/', L'\\' );
-		if ( rel.find( L".." ) != wstring::npos || !ReadAll( g_unsaved + L"\\files\\" + rel, data ) )
-			fail( L"missing" );
-		else
-			out = Decode( data );
-	}
 	else if ( op == L"exists" ) // arg = path in the HUD: "1" if that file is there (the HUD check-up)
 		out = InHud( arg, path ) && IsFile( path ) ? L"1" : L"0";
 	else if ( op == L"vanilla" ) // arg = a window .res, chatscheme.res or clientscheme/sourcescheme.res by name: the game's own copy
@@ -1037,6 +1022,7 @@ static void OnMessage( const wstring &msg )
 			// the game drops keys that arrive while it is still activating: wait until it is in front, then a little more
 			if ( GetForegroundWindow() != w )
 			{
+				g_keyMouseSaved = GetCursorPos( &g_keyMouse ) != FALSE;
 				SetForegroundWindow( w );
 				for ( int i = 0; i < 50 && GetForegroundWindow() != w; ++i )
 					Sleep( 10 );
@@ -1189,6 +1175,14 @@ static LRESULT CALLBACK WndProc( HWND h, UINT m, WPARAM w, LPARAM l )
 			g_web->PostWebMessageAsString( L"!captureended" );
 		return 0;
 	case WM_TIMER:
+		if ( w == 4 )
+		{
+			KillTimer( h, 4 );
+			if ( g_keyMouseSaved && GetForegroundWindow() == g_hwnd )
+				SetCursorPos( g_keyMouse.x, g_keyMouse.y );
+			g_keyMouseSaved = false;
+			return 0;
+		}
 		if ( w == 3 )
 		{
 			if ( !( GetAsyncKeyState( g_keyVk ) & 0x8000 ) )

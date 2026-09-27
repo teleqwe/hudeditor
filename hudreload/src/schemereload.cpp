@@ -1469,6 +1469,20 @@ static void TimerTick()
 {
 	if ( g_bDisabled )
 		return;
+	// the editor reloads pictures it changed (menu background, MVP star, box corners) with mat_reloadmaterial, which the
+	// game counts as a cheat: without a server that has sv_cheats 1 (the main menu) it wouldn't run. Only with the editor,
+	// which is the only thing that loads this plugin.
+	// (ConCommandBase keeps its flags private and this SDK has no RemoveFlags: its fields as convar.h lays them out, used
+	// only when the name found there is the command's own)
+	static bool s_reloadAllowed;
+	if ( !s_reloadAllowed )
+	{
+		struct Fields { void *vt; ConCommandBase *next; bool registered; const char *name, *help; int flags; };
+		ConCommandBase *c = g_pCVar->FindCommandBase( "mat_reloadmaterial" );
+		if ( c && ( (Fields *)c )->name == c->GetName() )
+			( (Fields *)c )->flags &= ~FCVAR_CHEAT;
+		s_reloadAllowed = true;
+	}
 	SR_SafeCall( RunCommandFile );
 	if ( !g_bDumpBroken && g_pEngineServer && !SR_SafeCall( DumpPanels ) )
 	{
