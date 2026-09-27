@@ -1037,6 +1037,17 @@ static void ReapplyLayouts()
 				g_ApplyBroken.CopyAndAddToTail( id );
 				Warning( "[schemereload] applying %s's settings crashed; it's left alone until a restart\n", id );
 			}
+			// a window its .res places at 0,0 (as the game's own files do) is centred by the game when it makes it; any
+			// other place is used as it is (checked in game: team select at 0,0 sits in the middle, at 0,52 on the left)
+			else if ( i < 4 && p == win )
+			{
+				int x, y, w, h, pw, ph;
+				g_pVPanel->GetPos( win, x, y );
+				g_pVPanel->GetSize( win, w, h );
+				g_pVPanel->GetSize( g_pVPanel->GetParent( win ), pw, ph );
+				if ( !x && !y )
+					g_pVPanel->SetPos( win, ( pw - w ) / 2, ( ph - h ) / 2 );
+			}
 		}
 		if ( res )
 			res->deleteThis();
@@ -1253,7 +1264,7 @@ static void Tick()
 
 //-----------------------------------------------------------------------------
 // Visible panels, for the editor: addons/schemereload_panels.txt lists every visible panel
-// a few levels deep ("screen W H", then "depth module name x y w h class scheme keys" per line). The HUD hides
+// a few levels deep ("screen W H local", then "depth module name x y w h class scheme keys" per line). The HUD hides
 // elements that aren't being drawn, so this is what is actually on screen.
 //-----------------------------------------------------------------------------
 static bool g_bDumpBroken;
@@ -1298,7 +1309,8 @@ static void DumpPanels()
 	VPANEL top = TopPanel();
 	int w, h;
 	g_pVPanel->GetSize( top, w, h );
-	out.Printf( "screen\t%d\t%d\n", w, h );
+	// (local: 1 while this game runs the server itself, the test game or Create Server, where the test commands work)
+	out.Printf( "screen\t%d\t%d\t%d\n", w, h, g_bLevelActive ? 1 : 0 );
 	DumpTree( top, -1, 1, out );
 	if ( out.TellPut() == s_last.TellPut() && !memcmp( out.Base(), s_last.Base(), out.TellPut() ) )
 		return;
