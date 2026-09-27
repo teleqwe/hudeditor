@@ -21,6 +21,8 @@
 #include <windows.graphics.capture.interop.h>
 #include <windows.graphics.directx.direct3d11.interop.h>
 #include "WebView2.h"
+#include <dwmapi.h>
+#pragma comment( lib, "dwmapi.lib" )
 
 using Microsoft::WRL::Callback;
 using Microsoft::WRL::ComPtr;
@@ -1096,6 +1098,9 @@ static HRESULT OnController( HRESULT hr, ICoreWebView2Controller *ctl )
 		return MessageBoxW( g_hwnd, L"Couldn't start the WebView2 browser view.", L"CS:S HUD Editor", MB_ICONERROR ), PostQuitMessage( 1 ), S_OK;
 	g_ctl = ctl;
 	g_ctl->get_CoreWebView2( &g_web );
+	ComPtr< ICoreWebView2Controller2 > ctl2; // no white flash before the page draws
+	if ( SUCCEEDED( g_ctl.As( &ctl2 ) ) )
+		ctl2->put_DefaultBackgroundColor( { 255, 0x11, 0x10, 0x13 } );
 	Fit();
 
 	// The page is served from inside the exe at https://hud.editor/.
@@ -1236,10 +1241,17 @@ int WINAPI wWinMain( HINSTANCE inst, HINSTANCE, LPWSTR, int show )
 	wc.lpfnWndProc = WndProc;
 	wc.hInstance = inst;
 	wc.hCursor = LoadCursor( NULL, IDC_ARROW );
-	wc.hbrBackground = CreateSolidBrush( RGB( 0x16, 0x18, 0x1c ) );
+	wc.hbrBackground = CreateSolidBrush( RGB( 0x11, 0x10, 0x13 ) ); // the page's background (--base)
 	wc.lpszClassName = L"CSSHudEditor";
 	RegisterClassW( &wc );
 	g_hwnd = CreateWindowW( wc.lpszClassName, L"CS:S HUD Editor", WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, 1500, 900, NULL, NULL, inst, NULL );
+	// the title bar in the page's colours: dark (Windows 10 20H1+), then its surface, edge and text colours (Windows 11)
+	BOOL dark = TRUE;
+	COLORREF caption = RGB( 0x19, 0x17, 0x1b ), edge = RGB( 0x42, 0x39, 0x41 ), title = RGB( 0xe6, 0xdf, 0xe4 );
+	DwmSetWindowAttribute( g_hwnd, 20 /* DWMWA_USE_IMMERSIVE_DARK_MODE */, &dark, sizeof dark );
+	DwmSetWindowAttribute( g_hwnd, 35 /* DWMWA_CAPTION_COLOR */, &caption, sizeof caption );
+	DwmSetWindowAttribute( g_hwnd, 34 /* DWMWA_BORDER_COLOR */, &edge, sizeof edge );
+	DwmSetWindowAttribute( g_hwnd, 36 /* DWMWA_TEXT_COLOR */, &title, sizeof title );
 	if ( g_selftestOut.empty() )
 		ShowWindow( g_hwnd, show );
 	else

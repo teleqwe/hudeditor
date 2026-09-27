@@ -5,257 +5,280 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>HUD Editor</title>
 <style>
-  :root { --bg: #16181c; --panel: #1f2228; --line: #2c3038; --text: #e6e6e6; --dim: #8b919c; --accent: #ffb000; --sel: #4da3ff; }
-  * { box-sizing: border-box; }
+  /* Graphite Rose: charcoal surfaces, pink kept for the chosen tab, the main action, what's selected and focus */
+  :root { --base: #111013; --surface: #19171b; --raised: #252127; --field: #0e0d10; --text: #e6dfe4; --muted: #a99ba4; --line: #423941;
+    --accent: #e8a2c7; --soft: #382333; --radius: 6px; --thin: color-mix(in srgb, var(--line) 40%, transparent); --side: 408px;
+    --check: repeating-conic-gradient(#3b3439 0 25%, #1d1a1f 0 50%); color-scheme: dark; }
+  @media (min-width: 1500px) { :root { --side: 440px; } }
+  @media (max-width: 1050px) { :root { --side: 370px; } }
+  * { box-sizing: border-box; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
   [hidden] { display: none !important; }
-  body { margin: 0; height: 100vh; display: grid; grid-template-columns: 1fr 440px; background: var(--bg); color: var(--text); font: 13px/1.4 system-ui, sans-serif; }
-  #preview { display: flex; align-items: center; justify-content: center; background: #000; min-width: 0; min-height: 0; padding: 8px; }
+  body { margin: 0; height: 100vh; display: grid; grid-template-columns: minmax(0, 1fr) var(--side); grid-template-rows: auto minmax(0, 1fr);
+    background: var(--base); color: var(--text); font: 13px/1.5 "Segoe UI", system-ui, sans-serif; }
+  button, input, select { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button { padding: 6px 11px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--field); color: var(--text); cursor: pointer; }
+  button:hover { border-color: var(--accent); background: var(--soft); }
+  button:disabled { opacity: .45; cursor: default; border-color: var(--line); background: var(--field); }
+  button.primary { color: var(--base); background: var(--accent); border-color: var(--accent); font-weight: 550; }
+  button.primary:hover { background: color-mix(in srgb, var(--accent) 85%, #fff); }
+  button.primary:disabled { color: var(--muted); background: var(--field); border-color: var(--line); font-weight: 400; }
+  button[aria-pressed="true"] { border-color: var(--accent); background: var(--soft); }
+  button.ghost { background: transparent; border-style: dashed; color: var(--muted); }
+  button.ghost:hover { color: var(--text); }
+  button.mini { margin-left: 8px; padding: 1px 7px; font-size: 11px; }
+  button.mini + button.mini { margin-left: 4px; }
+  input, select { min-width: 0; background: var(--field); border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 8px; }
+  input:focus-visible, select:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  input::placeholder { color: var(--muted); }
+  input[type=checkbox], input[type=range] { accent-color: var(--accent); }
+  input[type=checkbox] { width: 16px; height: 16px; margin: 0; padding: 0; cursor: pointer; }
+  input[type=range] { padding: 0; border: 0; background: none; cursor: pointer; }
+  input[type=range]:focus-visible { box-shadow: none; outline: 2px solid var(--accent); outline-offset: 2px; }
+  input[type=number] { font-variant-numeric: tabular-nums; }
+  select option:disabled { color: #6f646b; }
+  .meta { font-size: 11px; color: var(--muted); line-height: 1.4; }
+  .key { font-family: ui-monospace, Consolas, monospace; overflow-wrap: anywhere; }
+
+  /* the title strip: the HUD and saving */
+  .app-header { grid-column: 1 / -1; display: flex; align-items: center; gap: 18px; min-width: 0; padding: 11px 18px; background: var(--surface); border-bottom: 1px solid var(--line); }
+  .app-name { font-size: 14px; font-weight: 600; white-space: nowrap; }
+  #hudbtn { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 2px 0 2px 18px; border: 0; border-left: 1px solid var(--line); border-radius: 0; background: none; color: var(--muted); }
+  #hudbtn::after { content: '⌄'; margin-left: 8px; }
+  #hudbtn:hover { color: var(--text); }
+  .app-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+  #restartmark { color: var(--accent); font-size: 16px; line-height: 1; cursor: help; }
+
+  /* the game: tools over it, messages under it */
+  .preview-area { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+  .preview-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 15px; background: var(--surface); border-bottom: 1px solid var(--line); }
+  .toolsbtn[aria-expanded="true"] { border-color: var(--accent); background: var(--soft); }
+  .toolsbtn::after { content: '⌄'; margin-left: 6px; }
+  #restart.needed { border-color: var(--accent); color: var(--accent); }
+  .gridsel { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+  .gridsel select { padding: 4px 6px; }
+  #tools { display: grid; gap: 9px; padding: 12px 15px; background: var(--surface); border-bottom: 1px solid var(--line); }
+  #tools .tline { display: flex; gap: 7px; flex-wrap: wrap; align-items: center; }
+  .glabel { min-width: 76px; font-size: 12px; color: var(--muted); }
+  #texts button { padding: 3px 10px; border-radius: 12px; font-size: 12px; }
+  #texts button[aria-pressed="false"] { opacity: .5; text-decoration: line-through; }
+  #preview { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 8px; background: #0a090b; container-type: size; }
   #stage { position: relative; max-width: 100%; max-height: 100%; }
-  #stage.schematic { width: min(100%, calc((100vh - 16px) * var(--aspect, 1.7778))); aspect-ratio: var(--aspect, 1.7778); background: #0d0e11; border: 1px solid var(--line); }
-  #video { display: block; max-width: 100%; max-height: calc(100vh - 16px); }
+  #stage.schematic { width: min(100%, calc(100cqh * var(--aspect, 1.7778))); aspect-ratio: var(--aspect, 1.7778); background: #0e0d10; border: 1px solid var(--line); }
+  #video { display: block; max-width: 100%; max-height: 100cqh; }
+  #empty { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 16px; color: var(--muted); text-align: center; pointer-events: none; }
+  #empty p { max-width: 420px; margin: 4px 0; }
+  #empty b { color: var(--text); font-weight: 550; }
+  .preview-footer { display: flex; align-items: center; justify-content: space-between; gap: 15px; min-height: 40px; padding: 9px 17px; background: var(--surface); border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+  .preview-footer .msg { display: grid; min-width: 0; }
+  .preview-footer .msg > * { grid-area: 1 / 1; transition: opacity .2s; }
+  #status { color: var(--text); opacity: 0; }
+  #status.show { opacity: 1; }
+  #status.show + #hint { opacity: 0; }
+  #gamestate { white-space: nowrap; }
+  /* boxes over the game: light while the mouse is over one, pink when selected */
   #boxes { position: absolute; inset: 0; cursor: crosshair; overflow: hidden; user-select: none; } /* a part moved off screen mustn't widen the page */
-  .box { position: absolute; border: 1px dashed rgba(255, 176, 0, .45); opacity: 0; transition: opacity .1s; pointer-events: none; }
-  .box span { position: absolute; left: -1px; bottom: 100%; display: none; padding: 0 4px; font-size: 11px; white-space: nowrap; background: rgba(0, 0, 0, .8); color: var(--accent); }
+  .box { position: absolute; border: 1px dashed rgba(230, 223, 228, .4); opacity: 0; transition: opacity .1s; pointer-events: none; }
+  .box span { position: absolute; left: -1px; bottom: 100%; display: none; padding: 0 5px; font-size: 11px; white-space: nowrap; background: rgba(17, 16, 19, .88); color: var(--text); }
   .box.thing { opacity: 0; }
   #stage:hover .box.thing, .schematic .box.thing { opacity: 1; }
-  .box.hover { opacity: 1; border: 2px solid var(--accent); background: rgba(255, 176, 0, .12); }
-  .box.hover.drag { border-style: dashed; background: rgba(255, 176, 0, .2); }
-  .box.sel { opacity: 1; border: 2px solid var(--sel); background: rgba(77, 163, 255, .15); }
-  .box.sel span { color: var(--sel); }
+  .box.hover { opacity: 1; border: 2px solid rgba(230, 223, 228, .85); background: rgba(230, 223, 228, .08); }
+  .box.hover.drag { border-style: dashed; background: rgba(232, 162, 199, .14); }
+  .box.sel { opacity: 1; border: 2px solid var(--accent); background: rgba(232, 162, 199, .14); }
+  .box.sel span { color: var(--accent); }
   .box.hover span, .box.sel span { display: block; }
-  #empty { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 16px; color: var(--dim); text-align: center; pointer-events: none; }
-  #empty p { max-width: 420px; margin: 4px 0; }
-  #empty b { color: var(--text); }
-  aside { display: flex; flex-direction: column; min-height: 0; background: var(--panel); border-left: 1px solid var(--line); }
-  .bar { display: flex; gap: 8px; flex-wrap: wrap; padding: 10px 12px; border-bottom: 1px solid var(--line); }
-  button { background: #2c3038; color: var(--text); border: 1px solid #3a3f49; border-radius: 4px; padding: 6px 10px; cursor: pointer; font: inherit; }
-  button:hover { border-color: var(--accent); }
-  button:disabled { opacity: .45; cursor: default; border-color: #3a3f49; }
-  button.primary { border-color: var(--accent); color: var(--accent); }
-  #texts button[aria-pressed="false"] { opacity: .5; text-decoration: line-through; }
-  button[aria-pressed="true"] { border-color: var(--accent); }
-  #hudbtn { flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  input[type=search], input[type=number], .row input:not([type]) { min-width: 0; background: #16181c; color: var(--text); border: 1px solid #3a3f49; border-radius: 4px; padding: 6px 8px; font: inherit; }
-  input[type=search] { flex: 1; }
-  #list { flex: 1; overflow: auto; }
-  h3 { margin: 0; padding: 14px 12px 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--accent); border-bottom: 1px solid var(--line); }
-  .crumbs { padding: 8px 12px; font-weight: 600; font-size: 14px; border-bottom: 1px solid var(--line); }
-  .crumbs .meta { font-weight: 400; }
-  .crumbs .done { float: right; padding: 2px 10px; font-size: 12px; font-weight: 400; }
-  .sub { padding: 8px 12px 4px; font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: .04em; }
-  .thing-btn { display: flex; justify-content: space-between; width: 100%; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; padding: 8px 12px; background: none; text-align: left; }
-  .thing-btn.sel { color: var(--sel); background: rgba(77, 163, 255, .08); }
-  .thing-btn { align-items: center; gap: 8px; }
-  .thing-btn .name { flex: 1; }
-  .thing-btn.hidden .name { color: var(--dim); text-decoration: line-through; }
-  .thing-btn .eye { padding: 1px 8px; border: 1px solid #3a3f49; border-radius: 4px; font-size: 11px; color: var(--dim); }
-  .thing-btn .eye:hover { border-color: var(--accent); color: var(--text); }
-  .row.note { display: block; }
-  .row.sides { grid-template-columns: 1fr repeat(4, auto) auto; gap: 8px; }
-  .row.sides label { display: flex; align-items: center; gap: 4px; cursor: pointer; }
-  .row.menuitem { grid-template-columns: 1fr repeat(3, 30px); gap: 4px; }
-  .row.cmdbtn { grid-template-columns: 1fr auto 1.3fr auto 30px; gap: 4px; }
-  .row.lineup { grid-template-columns: 54px repeat(4, 1fr); gap: 4px; }
-  .row.swatches { display: flex; flex-wrap: wrap; gap: 4px; }
-  .row.swatches .swatch { width: 26px; height: 22px; padding: 0; border: 1px solid #3a3f49; border-radius: 4px; background: var(--c); cursor: pointer; }
-  .row.swatches .swatch:hover { border-color: var(--accent); }
-  .row.lineup button { padding: 3px 2px; font-size: 11px; }
-  .box.guide { opacity: 1; top: 0; bottom: 0; width: 0; border: none; border-left: 1px dashed rgba(245, 197, 66, .8); }
-  .row.menuadd { grid-template-columns: 1fr auto; gap: 6px 8px; padding: 10px 12px; }
-  .row.menuadd > .meta, .row.menuadd > .wide { grid-column: 1 / -1; }
-  .row.menuadd > .meta { color: var(--text); font-size: 12px; font-weight: 600; }
-  .row.action { display: flex; gap: 8px; padding: 10px 12px; }
-  .row.action button { flex: 1; padding: 8px 10px; }
-  button.ghost { background: transparent; border-style: dashed; border-color: #4a505b; color: var(--dim); }
-  button.ghost:hover { color: var(--text); }
-  /* colour rows: RGB over the picker, opacity over its swatch, then the name and what it's for */
-  .row.colour { grid-template-columns: 66px 40px 1fr auto; gap: 10px; align-items: center; }
-  .row.colour .pick { display: grid; gap: 3px; justify-items: center; }
-  .row.colour .acts { display: flex; gap: 4px; align-items: center; }
-  .row.colour .acts .reset { margin: 0; padding: 1px 6px; }
-  .row.colour .val { font: 10px/1 ui-monospace, Consolas, monospace; color: var(--dim); text-align: center; white-space: nowrap; }
-  .row.colour .swatch { width: 40px; height: 26px; padding: 0; border: 1px solid #3a3f49; border-radius: 4px; cursor: pointer;
-    background: linear-gradient(var(--c), var(--c)), repeating-conic-gradient(#4a4e57 0 25%, #2b2e35 0 50%) 0 0 / 10px 10px; }
-  .row.colour .swatch:hover { border-color: var(--accent); }
-  .swatch:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-  .row.colour .name { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-  .row.colour .meta { margin-top: 1px; }
-  .row.colour .shares { margin-top: 2px; opacity: .75; }
-  /* the colour picker */
-  .cpop { position: fixed; z-index: 20; width: 236px; padding: 12px; display: grid; gap: 10px; background: #262a31; border: 1px solid #3a3f49; border-radius: 10px;
-    box-shadow: 0 12px 32px rgba(0, 0, 0, .55); }
-  .cpop .sv { position: relative; height: 140px; border-radius: 6px; cursor: crosshair; touch-action: none;
-    background: linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, var(--h)); }
-  .cpop .bar { position: relative; height: 12px; border-radius: 6px; cursor: ew-resize; touch-action: none; }
-  .cpop .hue { background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); }
-  .cpop .alpha { background: linear-gradient(to right, var(--c), transparent), repeating-conic-gradient(#4a4e57 0 25%, #2b2e35 0 50%) 0 0 / 8px 8px; }
-  .cpop i { position: absolute; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, .6), 0 1px 4px rgba(0, 0, 0, .5); pointer-events: none; }
-  .cpop .bar i { top: 50%; background: transparent; }
-  .cpop .nums { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
-  .cpop .nums label { display: grid; gap: 3px; justify-items: center; font-size: 10px; color: var(--dim); }
-  .cpop .nums input { width: 100%; padding: 4px 2px; text-align: center; background: #16181c; color: var(--text); border: 1px solid #3a3f49; border-radius: 4px; font: 12px ui-monospace, Consolas, monospace; -moz-appearance: textfield; }
-  .cpop .nums input::-webkit-inner-spin-button { -webkit-appearance: none; }
-  .cpop .foot { display: flex; gap: 6px; align-items: center; }
-  .cpop .prev { flex: 0 0 34px; height: 28px; border-radius: 5px; border: 1px solid #3a3f49;
-    background: linear-gradient(var(--c), var(--c)), repeating-conic-gradient(#4a4e57 0 25%, #2b2e35 0 50%) 0 0 / 8px 8px; }
-  .cpop .foot button { flex: 1; padding: 5px 0; }
-  .cpop.alphaonly { width: 180px; }
-  .cpop.alphaonly .nums { grid-template-columns: 1fr; }
-  /* on/off rows, as wide as the number boxes */
-  .seg { display: flex; }
-  .seg button { flex: 1; padding: 4px 0; border: 1px solid #3a3f49; border-radius: 0; background: #1b1e23; color: var(--dim); font-size: 12px; }
-  .seg button + button { border-left: 0; }
-  .seg button:first-child { border-radius: 4px 0 0 4px; }
-  .seg button:last-child { border-radius: 0 4px 4px 0; }
-  .seg button[aria-pressed="true"] { background: #2f343d; color: var(--text); border-color: #3a3f49; }
-  .seg button:last-child[aria-pressed="true"] { background: rgba(255, 176, 0, .16); color: var(--accent); }
-  /* + under a font: the settings it can also have */
-  .row.addkey { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-  .row.addkey .plus { width: 26px; height: 26px; padding: 0; border-radius: 50%; font-size: 16px; line-height: 1; color: var(--dim); }
-  .row.addkey .plus:hover, .row.addkey .plus.open { color: var(--accent); }
-  .row.addkey .chips { display: flex; flex-wrap: wrap; gap: 5px; }
-  .row.addkey .chips button { padding: 2px 9px; border-radius: 12px; font-size: 12px; }
-  .card.fonts .divider { display: flex; align-items: center; gap: 6px; }
-  .card.fonts .divider > .renamed-wrap { flex: 1; }
+  .box.guide { opacity: 1; top: 0; bottom: 0; width: 0; border: none; border-left: 1px dashed rgba(232, 162, 199, .75); }
+
+  /* the sidebar: search and parts, the selection's header, a rail of categories beside one category's settings */
+  aside { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--base); border-left: 1px solid var(--line); }
+  .sidebar-top { flex: none; padding: 14px 16px; background: var(--surface); border-bottom: 1px solid var(--line); }
+  #search { width: 100%; padding: 8px 10px; }
+  .parts { margin-top: 12px; }
+  .parts > summary { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; color: var(--muted); }
+  .parts > summary::before { display: none; }
+  .parts > summary::after { content: '⌄'; }
+  .parts[open] > summary::after { content: '⌃'; }
+  .part-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-top: 8px; max-height: 196px; overflow: auto; }
+  .part-button, .thing-btn { display: flex; align-items: center; gap: 9px; min-width: 0; padding: 7px 9px; border: 1px solid transparent; background: transparent; text-align: left; }
+  .part-button::before, .thing-btn::before { content: ''; width: 5px; height: 5px; flex: none; border: 1px solid var(--muted); border-radius: 1px; }
+  .part-button:hover, .thing-btn:hover { background: var(--raised); border-color: transparent; }
+  .part-button[aria-pressed="true"] { background: var(--soft); color: var(--accent); border-color: var(--line); }
+  .part-button[aria-pressed="true"]::before { background: var(--accent); border-color: var(--accent); }
+  .part-button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #list { flex: 1; min-height: 0; overflow: auto; padding: 4px 17px 24px; }
+  #list.picked { display: flex; flex-direction: column; overflow: hidden; padding: 0; }
+  .selected-head { flex: none; display: flex; align-items: center; gap: 10px; padding: 17px 18px 17px 12px; background: var(--surface); border-bottom: 1px solid var(--line); }
+  .selected-head .titles { flex: 1; min-width: 0; }
+  .selected-head h2 { margin: 0; font-size: 16px; font-weight: 550; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .selected-head p { margin: 2px 0 0; color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .selected-head .back { flex: none; width: 28px; height: 28px; padding: 0 0 2px; border-color: transparent; background: none; color: var(--muted); font-size: 18px; line-height: 1; }
+  .selected-head .back:hover { color: var(--text); border-color: var(--line); }
+  .settings-layout { flex: 1; min-height: 0; display: grid; grid-template-columns: 83px minmax(0, 1fr); }
+  .category-nav { display: flex; flex-direction: column; gap: 7px; padding: 12px 7px; overflow: auto; background: var(--surface); border-right: 1px solid var(--line); }
+  .category-button { padding: 9px 7px; border-color: transparent; border-radius: 6px; background: transparent; color: var(--muted); text-align: left; }
+  .category-button:hover { background: var(--raised); border-color: transparent; color: var(--text); }
+  .category-button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--base); font-weight: 550; }
+  .category-button:disabled { opacity: .35; background: transparent; border-color: transparent; }
+  .section-stack { min-width: 0; overflow: auto; padding: 6px 17px 24px; }
+  .sidebar-footer { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 16px; background: var(--surface); border-top: 1px solid var(--line); }
+  .sidebar-footer .state { color: var(--muted); font-size: 11px; }
+  .sidebar-footer .btns { display: flex; gap: 6px; }
+  .sidebar-footer button { padding: 5px 8px; }
+
+  /* sections: a quiet heading over flat rows (in the list, a click on the heading folds it) */
+  .card > .sub, .sub, #list > h3, .card.fonts .divider { display: flex; align-items: center; gap: 6px; margin: 18px 0 2px; padding: 0; font-size: 12px; font-weight: 500; color: var(--muted); }
+  .section-stack > .card:first-child > .sub, .section-stack > .card.fonts:first-child .divider:first-child { margin-top: 12px; }
+  .card > .sub.tri { cursor: pointer; user-select: none; }
+  .card > .sub > .renamed-wrap, .card.fonts .divider > .renamed-wrap { flex: 1; }
+  .card.folded > :not(.sub) { display: none; }
   .card.fonts .divider .addfont { margin: 0; font-weight: 400; }
-  /* renamed words: a small way back */
-  .unrename { margin-left: 4px; padding: 0 5px; font-size: 11px; line-height: 16px; color: var(--dim); background: transparent; border: 1px solid transparent; border-radius: 4px; vertical-align: 1px; }
-  .unrename:hover { color: var(--accent); border-color: #3a3f49; }
-  /* everything that folds has the same triangle at its left: pointing right when folded, down when open */
-  summary { list-style: none; }
+  details > summary { list-style: none; cursor: pointer; }
   summary::-webkit-details-marker { display: none; }
   summary::before, .tri::before { content: ''; display: inline-block; flex: none; width: 0; height: 0; margin-right: 8px; vertical-align: 1px;
-    border-left: 6px solid var(--dim); border-top: 4px solid transparent; border-bottom: 4px solid transparent; transition: transform .15s; }
-  details[open] > summary::before, .card:not(.folded) > .sub.tri::before, .group:not(.folded) > .tri::before, .tri[aria-expanded="true"]::before { transform: rotate(90deg); }
-  .card > .sub { display: flex; align-items: center; gap: 0; cursor: pointer; user-select: none; }
-  .card > .sub > .renamed-wrap { flex: 1; }
-  .card.folded > :not(.sub) { display: none; }
-  .card.folded > .sub { border-bottom: 0; }
-  /* a selection's sections in folders, like a directory */
-  .group { margin: 0 0 8px; }
-  .group-head { width: 100%; display: flex; align-items: center; gap: 8px; padding: 6px 4px; background: none; border: 0; border-radius: 6px; color: var(--text); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
-  .group-head:hover { background: #22262d; }
-  .group-head::before { margin-right: 0; }
-  .group-head .count { margin-left: auto; padding: 0 7px; border-radius: 9px; background: #2c3038; color: var(--dim); font-size: 11px; font-weight: 400; letter-spacing: 0; }
-  .group-body { margin: 2px 0 0 9px; padding: 4px 0 0 10px; border-left: 1px solid #343944; }
-  .group.folded .group-body { display: none; }
-  .card.fonts .divider { padding: 7px 12px; background: var(--head); color: var(--text); font-size: 12px; font-weight: 600; border-top: 2px solid #3a3f49; }
-  .card.fonts .divider:first-child { border-top: 0; }
-  .card.fonts .divider + * { border-top: 1px solid var(--line); }
-  .rename[contenteditable="plaintext-only"] { outline: 1px solid var(--accent); outline-offset: 1px; border-radius: 2px; cursor: text; }
-  .row .reset { margin-left: 8px; padding: 0 6px; font-size: 11px; color: var(--dim); }
-  .row.pick { grid-template-columns: 1fr minmax(0, 190px) auto; }
-  .row.pick .meta { grid-column: 2; }
-  .row.pick .meta:empty { display: none; }
-  /* ↶ beside a setting: back to how it was when the HUD was opened (the tooltip says "then → now") */
-  .arrows { display: flex; }
-  .undo { width: 19px; height: 22px; padding: 0; display: grid; place-items: center; background: none; border: 0; color: var(--dim); }
-  .undo:hover { color: var(--accent); }
+    border-left: 6px solid var(--muted); border-top: 4px solid transparent; border-bottom: 4px solid transparent; transition: transform .15s; }
+  details[open] > summary::before, .card:not(.folded) > .sub.tri::before, .tri[aria-expanded="true"]::before { transform: rotate(90deg); }
+  #list > details > summary { margin: 18px 0 4px; font-size: 12px; font-weight: 500; color: var(--muted); }
+  .fold > summary { padding: 13px 0 3px; font-weight: 550; }
+  .fold[open] > summary { padding-bottom: 0; }
+  :is(.row, .fold, .thing-btn) + :is(.row, .fold) { border-top: 1px solid var(--thin); }
+
+  /* a setting: its name (and a note under it) at the left, the control at the right, then ↺ and ↶ */
+  .row { min-width: 0; padding: 13px 0; }
+  :is(.row.num, .row.pick, .row.check, .row.colour, .row.toggle) { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; column-gap: 10px; align-items: center; }
+  :is(.row.num, .row.pick, .row.check, .row.colour, .row.toggle) > * { grid-column: 1; grid-row: 1; min-width: 0; }
+  :is(.row.num, .row.pick, .row.check, .row.colour, .row.toggle) > .meta { grid-column: 1 / -1; grid-row: 2; margin-top: 5px; }
+  :is(.row.num, .row.pick, .row.check, .row.colour, .row.toggle) > :nth-child(2) { grid-column: 2; }
+  :is(.row.num, .row.pick, .row.check, .row.colour, .row.toggle) > .arrows { grid-column: 3; }
+  .row.check, .row.toggle { cursor: pointer; }
+  .row .meta:empty { display: none; }
+  .row.note { display: block; padding: 10px 0; }
+  .row select, .fontpick { width: 150px; }
+  .row.num > input:not([type]) { width: 150px; }
+  .row .reset { margin-left: 8px; padding: 0 6px; font-size: 11px; color: var(--muted); }
+  /* ↺ the game's value, ↶ back to how it was opened */
+  .arrows { display: flex; justify-content: flex-end; width: 38px; } /* (the same room with or without ↺, so rows line up) */
+  .undo { width: 19px; height: 24px; padding: 0; display: grid; place-items: center; background: none; border: 0; color: var(--muted); }
+  .undo:hover { color: var(--accent); background: none; }
   .undo.off { visibility: hidden; }
   .undo svg { width: 14px; height: 14px; }
+  /* numbers: − box +, focus drawn round the whole */
+  .step { display: grid; grid-template-columns: 32px minmax(0, 1fr) 32px; width: 120px; overflow: hidden; background: var(--field); border: 1px solid var(--line); border-radius: 6px; }
+  .step input { width: 100%; padding: 7px 2px; text-align: center; background: transparent; border: 0; border-radius: 0; appearance: textfield; }
+  .step input::-webkit-inner-spin-button, .step input::-webkit-outer-spin-button, .weight input::-webkit-inner-spin-button, .rgb input::-webkit-inner-spin-button, .cpop input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .step button { padding: 0; background: var(--raised); border: 0; border-radius: 0; font-size: 16px; line-height: 1; }
+  .step button:first-child { border-right: 1px solid var(--line); }
+  .step button:last-child { border-left: 1px solid var(--line); }
+  .step button:hover { background: var(--soft); color: var(--accent); }
+  .step:focus-within { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .step :focus-visible { outline: none; box-shadow: none; }
+  .weight { display: flex; align-items: center; gap: 8px; width: 120px; }
+  .weight input[type=range] { width: 60px; min-width: 0; }
+  .weight input[type=number] { width: 52px; padding: 7px 2px; text-align: center; appearance: textfield; }
+  .range-value { display: flex; align-items: center; gap: 9px; width: 120px; }
+  .range-value input { width: 76px; min-width: 0; }
+  .range-value output { width: 35px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
+  .row.check > input, .row.toggle > input { justify-self: end; }
+  /* colours: opacity over a swatch, then R G B boxes */
+  .rgb { display: grid; grid-template-columns: 32px repeat(3, minmax(0, 1fr)); gap: 4px 6px; width: 158px; align-items: end; }
+  .rgb > span { font-size: 11px; line-height: 1; color: var(--muted); text-align: center; }
+  .rgb input { width: 100%; padding: 7px 2px; text-align: center; appearance: textfield; }
+  .rgb input:invalid, .cpop input:invalid { border-style: dashed; border-color: var(--accent); }
+  .swatch { width: 32px; height: 34px; padding: 0; border: 1px solid var(--line); border-radius: 5px; box-shadow: inset 0 0 0 3px var(--field);
+    background: linear-gradient(135deg, var(--o) 0 50%, var(--c) 50%), var(--check) 0 0 / 10px 10px; }
+  .swatch:hover { border-color: var(--accent); background: linear-gradient(135deg, var(--o) 0 50%, var(--c) 50%), var(--check) 0 0 / 10px 10px; }
+  .row.colour .shares { margin-top: 2px; opacity: .8; }
+  .row.colour > .arrows { align-self: end; margin-bottom: 5px; } /* level with the boxes, under their R G B */
+  /* the colour pop-out: R G B (and opacity) sliders beside their numbers */
+  .cpop { position: fixed; z-index: 20; width: min(276px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow: auto; padding: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 12px 40px #0008; }
+  .cpop header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
+  .cpop h3 { margin: 0; font-size: 13px; font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cpop header button { flex: none; width: 28px; height: 28px; padding: 0; }
+  .cpop .prev { height: 46px; margin-bottom: 16px; border: 1px solid var(--line); border-radius: 5px; background: linear-gradient(var(--c), var(--c)), var(--check) 0 0 / 12px 12px; }
+  .cpop .chan { display: grid; grid-template-columns: 14px minmax(0, 1fr) 48px; align-items: center; gap: 10px; margin: 12px 0; }
+  .cpop .chan > label { font-size: 12px; color: var(--muted); }
+  .cpop input[type=range] { width: 100%; min-width: 0; height: 8px; appearance: none; border-radius: 5px; }
+  .cpop input[type=range]::-webkit-slider-thumb { appearance: none; width: 15px; height: 15px; border: 2px solid var(--text); border-radius: 50%; background: var(--accent); }
+  .cpop input[type=number] { width: 48px; padding: 7px 2px; text-align: center; appearance: textfield; }
+  .cpop footer { display: flex; gap: 6px; margin-top: 16px; }
+  .cpop footer .primary { margin-left: auto; }
+  .cpop footer button:not(.primary) { background: transparent; }
+  /* tick boxes in two columns: a border's sides, a font's effects */
+  :is(.row.sides, .row.flags) { display: grid; grid-template-columns: minmax(0, 1fr) auto; row-gap: 10px; align-items: center; }
+  .opts { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .opts label { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 12px; cursor: pointer; }
+  .opts > .row.toggle { display: flex; align-items: center; gap: 8px; padding: 0; border: 0; font-size: 12px; }
+  .opts > .row.toggle > input { order: -1; }
+  .opts > .row.toggle > .meta, .opts .undo.off { display: none; }
+  .opts .arrows { width: auto; }
+  /* a font's extra options: + opens what it can also have */
+  .row.addkey { display: grid; grid-template-columns: minmax(0, 1fr) auto; row-gap: 10px; align-items: center; }
+  .addhead { font-size: 12px; font-weight: 500; color: var(--muted); }
+  .row.addkey .plus { width: 28px; height: 28px; padding: 0; font-size: 18px; line-height: 1; }
+  .row.addkey .chips { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 8px; background: var(--field); border: 1px solid var(--line); border-radius: 5px; }
+  .row.addkey .chips button { padding: 7px; border: 0; background: transparent; text-align: left; }
+  .row.addkey .chips button:hover { background: var(--soft); }
+  /* rows with several controls */
+  .row.menuitem { display: grid; grid-template-columns: 1fr repeat(3, 30px); gap: 4px; align-items: center; padding: 8px 0; }
+  .row.menuitem button, .row.cmdbtn > button { padding: 3px 0; }
+  .row.cmdbtn { display: grid; grid-template-columns: 1fr auto 1.3fr auto 30px; gap: 4px; align-items: center; }
+  .row.lineup { display: grid; grid-template-columns: 54px repeat(4, 1fr); gap: 4px; align-items: center; }
+  .row.lineup button { padding: 4px 2px; font-size: 11px; }
+  .row.swatches { display: flex; flex-wrap: wrap; gap: 4px; }
+  .row.swatches .swatch { width: 26px; height: 22px; background: var(--c); box-shadow: none; }
+  .row.menuadd { display: grid; grid-template-columns: 1fr auto; gap: 6px 8px; }
+  .row.menuadd > .meta, .row.menuadd > .wide { grid-column: 1 / -1; }
+  .row.menuadd > .meta { color: var(--text); font-size: 12px; font-weight: 550; }
+  .row.action { display: flex; flex-wrap: wrap; gap: 8px; }
+  .row.action button { flex: 1; padding: 7px 10px; }
+  .thing-btn { width: 100%; }
+  .thing-btn .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .thing-btn.sel { color: var(--accent); background: var(--soft); }
+  .thing-btn.hidden .name { color: var(--muted); text-decoration: line-through; }
+  .thing-btn .eye { padding: 1px 8px; border: 1px solid var(--line); border-radius: 5px; font-size: 11px; color: var(--muted); }
+  .thing-btn .eye:hover { border-color: var(--accent); color: var(--text); }
   /* font drop-down: a filter box over the names, faces drawn in themselves */
-  .fontpick { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; padding: 5px 8px; background: #16181c; }
-  .fontpick::after { content: ''; float: right; margin: 6px 0 0 6px; border-top: 5px solid var(--dim); border-left: 4px solid transparent; border-right: 4px solid transparent; }
-  .fpop { position: fixed; z-index: 20; width: 250px; display: grid; gap: 6px; padding: 8px; background: #262a31; border: 1px solid #3a3f49; border-radius: 8px; box-shadow: 0 12px 32px rgba(0, 0, 0, .55); }
-  .fpop input { width: 100%; background: #16181c; color: var(--text); border: 1px solid #3a3f49; border-radius: 4px; padding: 6px 8px; font: inherit; }
+  .fontpick { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; padding: 6px 8px; background: var(--field); }
+  .fontpick::after { content: ''; float: right; margin: 7px 0 0 6px; border-top: 5px solid var(--muted); border-left: 4px solid transparent; border-right: 4px solid transparent; }
+  .fpop { position: fixed; z-index: 20; width: 250px; display: grid; gap: 6px; padding: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 12px 40px #0008; }
+  .fpop input { width: 100%; }
   .fpop .flist { position: relative; max-height: 280px; overflow: auto; display: flex; flex-direction: column; }
-  .fpop .flist button { flex: none; border: 0; border-radius: 4px; background: none; text-align: left; padding: 5px 8px; font-size: 14px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .fpop .flist button:hover, .fpop .flist button.hi { background: #343944; }
+  .fpop .flist button { flex: none; padding: 5px 8px; border: 0; border-radius: 4px; background: none; text-align: left; font-size: 14px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fpop .flist button:hover, .fpop .flist button.hi { background: var(--soft); }
   .fpop .flist button.cur { color: var(--accent); }
-  .fpop .flist .typed { font: 12px system-ui, sans-serif; color: var(--dim); }
-  select { min-width: 0; background: #16181c; color: var(--text); border: 1px solid #3a3f49; border-radius: 4px; padding: 5px 6px; font: inherit; }
-  details { border-bottom: 1px solid var(--line); }
-  summary { padding: 9px 12px; cursor: pointer; font-weight: 600; }
-  .fold summary { font-weight: 400; border-top: 1px solid var(--line); }
-  .row { display: grid; grid-template-columns: 40px 1fr 72px; gap: 10px; align-items: center; padding: 6px 12px; border-top: 1px solid var(--line); }
-  .row.num { grid-template-columns: 1fr 112px auto 84px; gap: 8px; }
-  .row button.mini { margin-left: 8px; padding: 1px 7px; font-size: 11px; }
-  .row button.mini + button.mini { margin-left: 4px; }
-  .step { display: flex; }
-  .step input { width: 100%; text-align: center; border-radius: 0; -moz-appearance: textfield; }
-  .step input::-webkit-inner-spin-button, .step input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-  .step button { flex: 0 0 26px; padding: 0; background: #22262d; color: var(--dim); border: 1px solid #3a3f49; font: inherit; font-size: 15px; line-height: 1; cursor: pointer; }
-  .step button:hover { color: var(--text); background: #2b3038; border-color: var(--accent); }
-  .step button:first-child { border-radius: 4px 0 0 4px; border-right: 0; }
-  .step button:last-child { border-radius: 0 4px 4px 0; border-left: 0; }
-  .row.check { grid-template-columns: 40px 1fr auto; cursor: pointer; }
-  .row input[type=color] { width: 40px; height: 26px; padding: 0; border: 1px solid #3a3f49; border-radius: 4px; background: none; cursor: pointer; }
-  .row input[type=range] { width: 72px; }
-  .row input[type=checkbox] { justify-self: center; }
-  .key { font-family: ui-monospace, Consolas, monospace; overflow-wrap: anywhere; }
-  .meta { font-size: 11px; color: var(--dim); }
-  #picker { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, .6); z-index: 10; }
-  #picker > div { width: min(520px, 92vw); max-height: 80vh; overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; }
-  #picker h2 { margin: 0 0 4px; font-size: 16px; }
-  #picker .hud { display: block; width: 100%; margin: 6px 0; text-align: left; }
-  #newform { display: flex; gap: 8px; margin: 6px 0; }
-  #newform[hidden] { display: none; }
-  #newform input { flex: 1; min-width: 0; background: #16181c; color: var(--text); border: 1px solid #3a3f49; border-radius: 4px; padding: 6px 8px; font: inherit; }
+  .fpop .flist .typed { font: 12px "Segoe UI", system-ui, sans-serif; color: var(--muted); }
+  /* renamed words: a small way back */
+  .rename[contenteditable="plaintext-only"] { outline: 1px solid var(--accent); outline-offset: 1px; border-radius: 2px; cursor: text; }
+  .unrename { margin-left: 4px; padding: 0 5px; font-size: 11px; line-height: 16px; color: var(--muted); background: transparent; border: 1px solid transparent; border-radius: 4px; vertical-align: 1px; }
+  .unrename:hover { color: var(--accent); border-color: var(--line); background: transparent; }
+
+  /* which HUD to edit */
+  #picker { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, .6); }
+  #picker > div { width: min(520px, 92vw); max-height: 80vh; overflow: auto; padding: 20px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 12px 40px #0008; }
+  #picker h2 { margin: 0 0 4px; font-size: 16px; font-weight: 550; }
+  #picker .hud { display: block; width: 100%; margin: 6px 0; padding: 9px 12px; text-align: left; }
+  #picker .hud.primary { color: var(--text); background: var(--soft); border-color: var(--accent); font-weight: 400; }
   #picker .hud .meta { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  @media (max-width: 860px) { body { grid-template-columns: 1fr; grid-template-rows: 45vh 1fr; } aside { border-left: 0; border-top: 1px solid var(--line); } }
-  /* sidebar: a header with the HUD and game tools, then cards of settings */
-  :root { --card: #23262d; --head: #292d35; }
-  aside { background: var(--bg); }
-  .top { padding: 10px; display: grid; gap: 8px; border-bottom: 1px solid var(--line); background: var(--panel); }
-  .top .line { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
-  .top .glabel { font-size: 11px; color: var(--dim); min-width: 62px; }
-  .top .line button { padding: 5px 9px; }
-  #texts button { padding: 3px 9px; border-radius: 12px; font-size: 12px; }
-  .bar { padding: 8px 10px; border-bottom: 0; }
-  /* messages: a note that pops up at the bottom of the sidebar and fades */
-  aside { position: relative; }
-  #status { position: absolute; left: 10px; right: 10px; bottom: 12px; z-index: 5; padding: 9px 12px; border: 1px solid #3a3f49; border-radius: 8px;
-    background: rgba(40, 44, 52, .97); color: var(--text); box-shadow: 0 8px 24px rgba(0, 0, 0, .45); pointer-events: none;
-    opacity: 0; transform: translateY(8px); transition: opacity .2s, transform .2s; }
-  #status.show { opacity: 1; transform: none; }
-  /* test tools: folded under the Test server button */
-  .toolsbtn { display: inline-flex; align-items: center; }
-  .toolsbtn[aria-expanded="true"] { border-color: var(--accent); }
-  /* the game needs a restart to show some changes: a mark by Save, and the button lit */
-  #restartmark { color: var(--accent); font-size: 16px; line-height: 1; cursor: help; }
-  #restart.needed { border-color: var(--accent); color: var(--accent); }
-  .gridsel { margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--dim); }
-  .gridsel select { padding: 4px 4px; }
-  #tools { display: grid; gap: 8px; padding: 10px; background: var(--card); border: 1px solid var(--line); border-radius: 8px; }
-  #tools .tline { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
-  #list { padding: 0 10px 16px; }
-  #list h3 { border: 0; padding: 4px 2px 8px; }
-  .card, #list > details { background: var(--card); border: 1px solid var(--line); border-radius: 8px; margin: 0 0 10px; overflow: hidden; }
-  .card > .sub { padding: 8px 12px; background: var(--head); color: var(--text); font-size: 12px; font-weight: 600; text-transform: none; letter-spacing: 0; }
-  .card > .sub + * { border-top: 1px solid var(--line); }
-  .card .row { border-top-color: #2a2e35; }
-  .card .thing-btn { border-bottom-color: #2a2e35; }
-  .card .thing-btn:last-child { border-bottom: 0; }
-  #list > details > summary { background: var(--head); }
-  .crumbs { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 8px; margin: 0 -10px 10px; padding: 8px 10px; background: var(--panel); border-bottom: 1px solid var(--line); }
-  .crumbs .what { font-weight: 600; }
-  .crumbs .meta { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .crumbs .done { float: none; margin-left: auto; padding: 4px 14px; font-size: 13px; }
-  .crumbs .back { padding: 4px 10px; font-size: 12px; font-weight: 400; }
-  .crumbs .hidebtn { margin-left: auto; }
-  .crumbs .hidebtn + .done { margin-left: 0; }
-  select option:disabled { color: #666; }
+  #newform { display: flex; gap: 8px; margin: 6px 0; }
+  #newform input { flex: 1; }
+
+  @media (max-width: 860px) { body { grid-template-columns: 1fr; grid-template-rows: auto 50vh minmax(0, 1fr); } aside { border-left: 0; border-top: 1px solid var(--line); } }
+  @media (max-width: 440px) { .settings-layout { grid-template-columns: 71px minmax(0, 1fr); } .section-stack { padding: 6px 10px 15px; } .category-button { padding: 8px 4px; font-size: 12px; } }
 </style>
 </head>
 <body>
-<main id="preview">
-  <div id="stage" class="schematic">
-    <canvas id="video" hidden></canvas>
-    <div id="empty"><p><b>Starting...</b></p></div>
-    <div id="boxes"></div>
-  </div>
-</main>
-<aside>
-  <div class="top">
-  <div class="line">
-    <button id="hudbtn" title="Pick which HUD to edit">No HUD open</button>
-    <button id="save" class="primary" disabled>Save HUD</button>
+<header class="app-header">
+  <span class="app-name">CS:S HUD Editor</span>
+  <button id="hudbtn" title="Pick which HUD to edit">No HUD open</button>
+  <div class="app-actions">
     <span id="restartmark" hidden>⟳</span>
     <button id="explore" title="Open the HUD's folder">Folder</button>
+    <button id="save" class="primary" disabled>Save HUD</button>
   </div>
-  <div class="line">
+</header>
+<section class="preview-area">
+  <div class="preview-toolbar">
     <button id="testserver" title="Offline game with a frozen bot and bhop/surf-style timer texts on screen">Test server</button>
-    <button id="toolsbtn" class="toolsbtn tri" aria-expanded="false" title="Scoreboard and the sample texts on the test server">Test tools</button>
+    <button id="toolsbtn" class="toolsbtn" aria-expanded="false" title="Scoreboard and the sample texts on the test server">Test tools</button>
     <button id="restart" title="Quit the game and start it again, for changes the game only reads when it starts. Unsaved changes stay.">Restart game</button>
     <button id="capture" hidden>Capture game</button>
     <button id="launch" hidden>Launch game</button>
@@ -297,10 +320,22 @@
       <button id="guide43" aria-pressed="false" title="Dashed lines where a 4:3 screen (1024x768, 1280x960...) ends: parts outside them are off screen there">4:3 edges</button>
     </div>
   </div>
+  <main id="preview">
+    <div id="stage" class="schematic">
+      <canvas id="video" hidden></canvas>
+      <div id="empty"><p><b>Starting...</b></p></div>
+      <div id="boxes"></div>
+    </div>
+  </main>
+  <footer class="preview-footer"><div class="msg"><span id="status">Starting...</span><span id="hint">Click a part of the game to edit it; Ctrl+click adds more.</span></div><span id="gamestate"></span></footer>
+</section>
+<aside>
+  <div class="sidebar-top">
+    <input type="search" id="search" placeholder="Find a HUD part or setting…" aria-label="Find a HUD part or setting">
+    <div id="parts"></div>
   </div>
-  <div class="bar"><input type="search" id="search" placeholder="Search everything, e.g. health, timer, button"></div>
-  <div id="status">Starting...</div>
   <div id="list"></div>
+  <div class="sidebar-footer" id="foot" hidden><span class="state" id="savestate"></span><span class="btns" id="footbtns"></span></div>
 </aside>
 <div id="picker" hidden><div>
   <h2>Which HUD do you want to edit?</h2>
@@ -801,6 +836,7 @@ function setDirty(d) {
   dirty = d;
   $('save').disabled = !d;
   $('save').textContent = d ? 'Save HUD *' : 'Save HUD';
+  $('savestate').textContent = d ? 'Unsaved changes' : 'No unsaved changes';
 }
 
 // Changes the game only reads when it starts: a mark by Save until the game restarts (see poll), saying which.
@@ -1447,9 +1483,7 @@ function customRows(id, lay = F(L)) {
   }
   if (inWindow) rows.push(inputRow('Layer', p.zpos || '0', v => save(lay, 'zpos', v, id), { type: 'number', step: 1, title: 'Higher is in front' }));
   if ((p.controlname || '').toLowerCase() === 'label') {
-    const r = inputRow('Text', p.labeltext || '', v => save(lay, 'labelText', v.replace(/["\\]/g, ''), id));
-    r.querySelector('input').style.width = '100%';
-    rows.push(r);
+    rows.push(inputRow('Text', p.labeltext || '', v => save(lay, 'labelText', v.replace(/["\\]/g, ''), id)));
   }
   if ((p.controlname || '').toLowerCase() === 'imagepanel') {
     const pick = el('input', { type: 'file', accept: 'image/png,image/jpeg,image/gif,image/webp', hidden: true });
@@ -1640,7 +1674,7 @@ async function select(sel) {
   selected = sel;
   render();
   drawBoxes();
-  $('list').scrollTop = 0;
+  scroller().scrollTop = 0;
 }
 
 // Where a HUD part can be clicked: its panel, or its "hit" areas (one, or a list) when the panel is bigger than what it
@@ -1733,20 +1767,19 @@ function renameable(text) {
   return wrap;
 }
 
-// The colour picker: a square for shade, a bar for hue, a bar fading the colour from 100% to 0% opacity, the numbers,
-// and Copy / Paste ("R G B A", also takes #hex and rgb()). Opens from either swatch of a colour row.
+// The colour pop-out: a preview, then R, G, B and opacity each as a slider beside its number, and Copy / Paste
+// ("R G B A", also takes #hex and rgb()). Opens from a colour row's swatch, at the right edge of its boxes.
 let cpop = null, colourClip = '';
-const closePicker = () => { if (cpop) { cpop.remove(); cpop = null; } };
+const closePicker = () => {
+  if (!cpop) return;
+  const back = cpop.contains(document.activeElement) && cpop.owner && cpop.owner.querySelector && cpop.owner.querySelector('.swatch');
+  cpop.remove();
+  cpop = null;
+  if (back) back.focus();
+};
 document.addEventListener('pointerdown', e => { if (cpop && !cpop.contains(e.target) && !e.target.closest('.swatch')) closePicker(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closePicker(); });
 const clamp = (n, a = 0, b = 1) => Math.min(b, Math.max(a, n));
-function toHsv([r, g, b]) {
-  [r, g, b] = [r / 255, g / 255, b / 255];
-  const mx = Math.max(r, g, b), d = mx - Math.min(r, g, b);
-  const h = !d ? 0 : mx === r ? ((g - b) / d + 6) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
-  return [h * 60, mx ? d / mx : 0, mx];
-}
-const fromHsv = (h, s, v) => [5, 3, 1].map(n => { const k = (n + h / 60) % 6; return Math.round(255 * v * (1 - s * clamp(Math.min(k, 4 - k)))); });
 // "255 128 0", "255 128 0 200", "255, 128, 0", "#ff8000", "#ff8000c8", "rgb(255 128 0)", "rgba(255, 128, 0, 0.5)"
 function parseColour(s) {
   s = (s || '').trim();
@@ -1759,51 +1792,46 @@ function parseColour(s) {
   return n.map(x => Math.round(clamp(x, 0, 255)));
 }
 
-// alphaOnly: just the opacity slider and its number (from a colour row's opacity swatch)
-function openPicker(anchor, rgba, onPick, owner, alphaOnly = false) {
+// alpha: false where the game sets the opacity itself (no opacity row)
+function openPicker(anchor, rgba, onPick, owner, title = 'Colour', alpha = true) {
   closePicker();
   closeFontPop();
-  let c = [...rgba], [h, s, v] = toHsv(c);
-  const pop = cpop = el('div', { className: alphaOnly ? 'cpop alphaonly' : 'cpop' });
+  let c = [...rgba];
+  const pop = cpop = el('div', { className: 'cpop', role: 'dialog' });
+  pop.setAttribute('aria-label', title);
   pop.owner = owner;
   pop.anchor = anchor;
-  const sv = el('div', { className: 'sv' }), hue = el('div', { className: 'bar hue' }), alpha = el('div', { className: 'bar alpha' });
-  const knobs = [sv, hue, alpha].map(b => b.appendChild(el('i')));
-  const prev = el('div', { className: 'prev' }), nums = el('div', { className: 'nums' });
-  const fields = ['R', 'G', 'B', 'A %'].map((n, i) => {
-    const input = el('input', { type: 'number', min: 0, max: i < 3 ? 255 : 100, step: 1 });
-    input.setAttribute('aria-label', n);
-    const lab = el('label');
-    lab.append(input, el('span', { textContent: n }));
-    nums.append(lab);
-    return input;
+  const head = el('header'), x = el('button', { type: 'button', textContent: '×', title: 'Close', onclick: closePicker });
+  x.setAttribute('aria-label', 'Close');
+  head.append(el('h3', { textContent: title }), x);
+  const prev = el('div', { className: 'prev' });
+  const chans = ['R', 'G', 'B', 'A'].map((n, i) => {
+    const row = el('div', { className: 'chan', hidden: i === 3 && !alpha }), max = i < 3 ? 255 : 100;
+    const range = el('input', { type: 'range', min: 0, max, step: 1 }), num = el('input', { type: 'number', min: 0, max, step: 1, required: true, id: `cpop${i}` });
+    const word = i < 3 ? ['Red', 'Green', 'Blue'][i] : 'Opacity %';
+    range.setAttribute('aria-label', word);
+    num.setAttribute('aria-label', word);
+    row.append(el('label', { textContent: n, htmlFor: num.id, title: word }), range, num);
+    const put = (v, from) => { c[i] = i < 3 ? v : Math.round(v * 2.55); emit(from); };
+    range.oninput = () => put(+range.value, range);
+    num.oninput = () => { if (num.value !== '' && num.validity.valid) put(+num.value, num); };
+    num.onblur = () => { if (num.value === '' || !num.validity.valid) show(); };
+    return { row, range, num };
   });
-  const copy = el('button', { textContent: 'Copy', title: 'Copy as "R G B A"' }), paste = el('button', { textContent: 'Paste', title: 'Paste "R G B A", #hex or rgb()' });
   const show = from => {
-    const rgb = c.slice(0, 3).join(' ');
-    sv.style.setProperty('--h', `hsl(${h} 100% 50%)`);
-    knobs[0].style.cssText = `left:${s * 100}%;top:${(1 - v) * 100}%;background:rgb(${rgb})`;
-    knobs[1].style.left = `${h / 3.6}%`;
-    knobs[2].style.left = `${(1 - c[3] / 255) * 100}%`;
-    alpha.style.setProperty('--c', `rgb(${rgb})`);
-    prev.style.setProperty('--c', `rgb(${rgb} / ${c[3] / 255})`);
-    fields.forEach((f, i) => { if (f !== from) f.value = i < 3 ? c[i] : Math.round(c[3] / 2.55); });
+    const [r, g, b] = c, ends = [[`0 ${g} ${b}`, `255 ${g} ${b}`], [`${r} 0 ${b}`, `${r} 255 ${b}`], [`${r} ${g} 0`, `${r} ${g} 255`]];
+    prev.style.setProperty('--c', `rgb(${r} ${g} ${b} / ${c[3] / 255})`);
+    chans.forEach(({ range, num }, i) => {
+      const v = i < 3 ? c[i] : Math.round(c[3] / 2.55);
+      if (range !== from) range.value = v;
+      if (num !== from) num.value = v;
+      range.style.background = i < 3 ? `linear-gradient(to right, rgb(${ends[i][0]}), rgb(${ends[i][1]}))`
+        : `linear-gradient(to right, transparent, rgb(${r} ${g} ${b})), var(--check) 0 0 / 8px 8px`;
+    });
   };
   const emit = from => { show(from); onPick([...c]); };
-  const drag = (bar, fn) => {
-    const at = e => { const r = bar.getBoundingClientRect(); fn(clamp((e.clientX - r.left) / r.width), clamp((e.clientY - r.top) / r.height)); emit(); };
-    bar.onpointerdown = e => { bar.setPointerCapture(e.pointerId); at(e); bar.onpointermove = at; };
-    bar.onpointerup = () => { bar.onpointermove = null; };
-  };
-  drag(sv, (x, y) => { s = x; v = 1 - y; c = [...fromHsv(h, s, v), c[3]]; });
-  drag(hue, x => { h = x * 360; c = [...fromHsv(h, s, v), c[3]]; });
-  drag(alpha, x => { c[3] = Math.round((1 - x) * 255); }); // 100% at the left, like the swatch strip before
-  fields.forEach((f, i) => f.oninput = () => {
-    if (f.value === '') return;
-    if (i < 3) { c[i] = Math.round(clamp(+f.value, 0, 255)); const n = toHsv(c); if (n[1]) h = n[0]; [s, v] = n.slice(1); }
-    else c[3] = Math.round(clamp(+f.value, 0, 100) * 2.55);
-    emit(f);
-  });
+  pop.sync = v => { c = [...v]; show(); }; // the row's own boxes changed it
+  const copy = el('button', { type: 'button', textContent: 'Copy', title: 'Copy as "R G B A"' }), paste = el('button', { type: 'button', textContent: 'Paste', title: 'Paste "R G B A", #hex or rgb()' });
   const flash = (b, t) => { const was = b.textContent; b.textContent = t; setTimeout(() => { b.textContent = was; }, 900); };
   copy.onclick = async () => {
     colourClip = c.join(' ');
@@ -1815,22 +1843,20 @@ function openPicker(anchor, rgba, onPick, owner, alphaOnly = false) {
     try { text = await navigator.clipboard.readText(); } catch {}
     const p = parseColour(text) || parseColour(colourClip);
     if (!p) return flash(paste, 'No colour');
-    c = p;
-    const n = toHsv(c);
-    if (n[1]) h = n[0];
-    [s, v] = n.slice(1);
+    c = alpha ? p : [...p.slice(0, 3), c[3]];
     emit();
     flash(paste, 'Pasted');
   };
-  const foot = el('div', { className: 'foot' });
-  foot.append(prev, copy, paste);
-  if (alphaOnly) { const a = el('div', { className: 'nums' }); a.append(nums.lastElementChild); pop.append(alpha, a); }
-  else pop.append(sv, hue, alpha, nums, foot);
+  const foot = el('footer');
+  foot.append(copy, paste, el('button', { type: 'button', className: 'primary', textContent: 'Done', onclick: closePicker }));
+  pop.append(head, prev, ...chans.map(ch => ch.row), foot);
   show();
   document.body.append(pop);
+  // below the boxes (above them near the bottom), its right edge at theirs, kept 12px inside the window
   const r = anchor.getBoundingClientRect();
-  pop.style.left = `${clamp(r.left - 20, 8, innerWidth - pop.offsetWidth - 8)}px`;
-  pop.style.top = `${r.bottom + pop.offsetHeight + 12 > innerHeight ? Math.max(8, r.top - pop.offsetHeight - 6) : r.bottom + 6}px`;
+  pop.style.left = `${clamp(r.right - pop.offsetWidth, 12, innerWidth - pop.offsetWidth - 12)}px`;
+  pop.style.top = `${r.bottom + 8 + pop.offsetHeight > innerHeight - 12 ? Math.max(12, r.top - 8 - pop.offsetHeight) : r.bottom + 8}px`;
+  chans[0].num.focus({ preventScroll: true });
 }
 
 // ↶ beside every setting: puts back its value from when the HUD was opened (for a new HUD, the defaults it started with);
@@ -1860,44 +1886,40 @@ function undoArrow(id, now, show, put, dflt = null) {
 }
 const rgbaText = v => { const c = toRgba(v); return `${c.slice(0, 3).join(' ')} ${Math.round(c[3] / 2.55)}%`; };
 
-// A colour: its RGB over a swatch of it, its opacity over a second swatch (the colour over a checkerboard; it opens just
-// the opacity slider), then its name and what it's for, and at the far right ↶ and Default. where: the file and block it
-// is in, so rows with the same name in different places keep their own ↶.
+// A colour: its name and what it's for, then its opacity over a swatch (half the colour, half the colour at its
+// opacity over a checkerboard) beside R G B boxes to type in, then ↺ and ↶. The swatch opens the pop-out. where: the
+// file and block it is in, so rows with the same name in different places keep their own ↶.
 function colorRow(label, note, value, onChange, keys = [], dflt = null, where = '') {
   let rgba = toRgba(value);
-  const row = el('div', { className: 'row colour' });
-  const rgbText = el('div', { className: 'val' }), swatch = el('button', { className: 'swatch' });
-  const aText = el('div', { className: 'val' }), aBtn = el('button', { className: 'swatch aswatch' });
-  const pick = el('div', { className: 'pick' }), alpha = el('div', { className: 'pick alpha' }), name = el('div', { className: 'name' }), meta = el('div', { className: 'meta' });
+  const row = el('div', { className: 'row colour' }), name = el('div', { className: 'name' }), meta = el('div', { className: 'meta' });
+  const rgb = el('div', { className: 'rgb' }), aText = el('span', { className: 'alpha', title: 'Opacity' }), swatch = el('button', { className: 'swatch', type: 'button' });
   let undo = null;
-  const show = () => {
-    const rgb = rgba.slice(0, 3).join(' ');
-    rgbText.textContent = rgb;
+  const chans = [0, 1, 2].map(i => {
+    const n = el('input', { type: 'number', min: 0, max: 255, step: 1, required: true });
+    n.setAttribute('aria-label', `${label}: ${['red', 'green', 'blue'][i]}`);
+    n.oninput = () => { if (n.value !== '' && n.validity.valid) { const c = [...rgba]; c[i] = +n.value; set(c, n); } };
+    n.onblur = () => { if (n.value === '' || !n.validity.valid) n.value = rgba[i]; };
+    return n;
+  });
+  const show = from => {
+    const rgbT = rgba.slice(0, 3).join(' ');
     aText.textContent = `${Math.round(rgba[3] / 2.55)}%`;
-    swatch.style.setProperty('--c', `rgb(${rgb})`);
-    aBtn.style.setProperty('--c', `rgb(${rgb} / ${rgba[3] / 255})`);
-    swatch.title = `${rgb}: click to change`;
-    aBtn.title = `Opacity ${aText.textContent}: click to change`;
+    swatch.style.setProperty('--o', `rgb(${rgbT})`);
+    swatch.style.setProperty('--c', `rgb(${rgbT} / ${rgba[3] / 255})`);
+    swatch.title = `${rgbT}, opacity ${aText.textContent}: click to change`;
+    chans.forEach((n, i) => { if (n !== from) n.value = rgba[i]; });
     if (undo) undo.update(rgba.join(' '));
   };
-  const set = c => { rgba = c; show(); onChange(rgba.join(' ')); };
+  const set = (c, from) => { rgba = c; show(from); onChange(rgba.join(' ')); if (cpop && cpop.owner === row && from !== cpop) cpop.sync(rgba); };
   undo = undoArrow(`${where || rowScope}|${label}|${keys.join('+')}`, rgba.join(' '), rgbaText, v => { closePicker(); set(toRgba(v)); }, dflt ? toRgba(dflt).join(' ') : null);
-  swatch.setAttribute('aria-label', `${label} colour`);
-  aBtn.setAttribute('aria-label', `${label} opacity`);
-  swatch.onclick = aBtn.onclick = e => cpop && cpop.owner === row && cpop.anchor === e.currentTarget ? closePicker() : openPicker(e.currentTarget, rgba, set, row, e.currentTarget === aBtn);
-  aBtn.onkeydown = e => {
-    const d = { ArrowRight: 13, ArrowUp: 13, ArrowLeft: -13, ArrowDown: -13 }[e.key];
-    if (d) { e.preventDefault(); set([...rgba.slice(0, 3), clamp(rgba[3] + d, 0, 255)]); }
-  };
-  pick.append(rgbText, swatch);
-  alpha.append(aText, aBtn);
+  swatch.setAttribute('aria-label', `Choose the ${label} colour`);
+  swatch.setAttribute('aria-haspopup', 'dialog');
+  swatch.onclick = () => cpop && cpop.owner === row ? closePicker() : openPicker(rgb, rgba, c => set(c, cpop), row, label, !aText.hidden);
+  rgb.append(aText, ...['R', 'G', 'B'].map(t => el('span', { textContent: t })), swatch, ...chans);
   name.append(renameable(label));
   if (note) meta.append(renameable(note));
-  const text = el('div'), acts = el('div', { className: 'acts' });
-  text.append(name, meta);
-  acts.append(undo);
   row.dataset.keys = keys.join(' + '); // shown over the section's title (see card)
-  row.append(pick, alpha, text, acts);
+  row.append(name, rgb, undo, meta);
   show();
   row.dataset.q = `${label} ${note} ${keys.join(' ')}`.toLowerCase();
   return row;
@@ -1914,6 +1936,7 @@ function numRow(lay, id, key, label, raw) {
   const show = r => { [prefix, num] = split(r); input.value = num; meta.textContent = ANCHOR[key][prefix] || ''; };
   show(raw);
   row.dataset.q = `${label} position size`.toLowerCase();
+  Object.assign(row.dataset, { cat: 'layout', head: key.endsWith('pos') ? 'Position' : 'Box size' }); // (see selectionSections)
   const set = r => { show(r); save(lay, key, r, id); undo.update(prefix + num); };
   const game = gameProps(lay.name, id)[key];
   undo = undoArrow(`${lay.name}/${id}/${key}`, prefix + num, v => v, set, game === undefined ? null : split(game).join(''));
@@ -1964,12 +1987,13 @@ function selectRow(label, options, value, onChange, keys = [], id = null, dflt =
 // 0-255 as a percentage slider.
 function rangeRow(label, value, onChange, id = null, dflt = null) {
   const row = el('div', { className: 'row num' }), input = el('input', { type: 'range', min: 0, max: 255, value: +value || 0 });
-  const pct = el('div', { className: 'meta', textContent: `${Math.round(input.value / 2.55)}%` });
+  const wrap = el('div', { className: 'range-value' }), pct = el('output', { textContent: `${Math.round(input.value / 2.55)}%` });
   input.setAttribute('aria-label', label);
   const put = () => { pct.textContent = `${Math.round(input.value / 2.55)}%`; undo.update(input.value); onChange(input.value); };
   const undo = undoArrow(id || `${rowScope}|${label}`, input.value, v => `${Math.round(v / 2.55)}%`, v => { input.value = v; put(); }, dflt === null ? null : String(dflt));
   input.oninput = put;
-  row.append(el('div', { textContent: label }), input, undo, pct);
+  wrap.append(input, pct);
+  row.append(el('div', { textContent: label }), wrap, undo);
   row.dataset.q = label.toLowerCase();
   return row;
 }
@@ -1984,9 +2008,9 @@ function noteRow(text) {
 function checkRow(label, checked, onChange, id = null, dflt = null) {
   const row = document.createElement('label');
   row.className = 'row check';
-  row.innerHTML = `<input type="checkbox"${checked ? ' checked' : ''}><div></div>`;
-  row.lastElementChild.textContent = label;
-  const box = row.firstElementChild, word = on => on ? 'on' : 'off';
+  row.innerHTML = `<div></div><input type="checkbox"${checked ? ' checked' : ''}>`;
+  row.firstElementChild.textContent = label;
+  const box = row.lastElementChild, word = on => on ? 'on' : 'off';
   const undo = undoArrow(id || `${rowScope}|${label}`, word(checked), v => v, v => { box.checked = v === 'on'; onChange(box.checked); }, dflt === null ? null : word(dflt));
   box.onchange = e => { undo.update(word(e.target.checked)); onChange(e.target.checked); };
   row.append(undo);
@@ -2142,6 +2166,7 @@ function hudRows(id, hud) {
     const ks = keys.split('|'), now = p[ks[0].toLowerCase()] || dflt, names = fontNames(C);
     rows.push(pickRow(label, names.find(n => n.toLowerCase() === now.toLowerCase()) || now, () => fontNames(C).sort(),
       v => { ks.forEach(k => save(lay, k, v, id)); refreshSoon(); }, { id: `${L}/${id}/${ks[0]}`.toLowerCase(), keys: [ks[0]], dflt: gameProps(L, id)[ks[0].toLowerCase()] || dflt }));
+    Object.assign(rows[rows.length - 1].dataset, { cat: 'font', head: 'Fonts it uses' });
   }
   if (!hud.noPos) for (const [k, label] of [['xpos', 'X position'], ['ypos', 'Y position'], ['wide', 'Width'], ['tall', 'Height']])
     if ((k in p || ((hud.pos || canHide(id)) && k.endsWith('pos'))) && !(hud.lockX && k === 'xpos')) rows.push(numRow(lay, id, k, label, p[k]));
@@ -2196,14 +2221,14 @@ function visibilityRows(id) {
 function hideButton(sel) {
   if (sel.info.id === 'gamelogo' && F(C)) {
     const n = sel.info.title, hidden = !logoShown(n);
-    return el('button', { className: 'back hidebtn', textContent: hidden ? 'Show' : 'Hide', title: hidden ? 'Show this line of the logo again' : 'Hide this line of the logo (its place is kept)',
+    return el('button', { className: 'hidebtn', textContent: hidden ? 'Show' : 'Hide', title: hidden ? 'Show this line of the logo again' : 'Hide this line of the logo (its place is kept)',
       onclick: () => { setLogoShown(n, hidden); refreshSoon(); } });
   }
   const own = sel.res && sel.node && ownBlock(sel);
   const hud = sel.info.kind === 'hud' && !sel.control && canHide(sel.info.id) ? sel.info.id : null;
   if (!hud && !own) return null;
   const hidden = hud ? isHidden(hud) : partHidden(sel.res, own.block);
-  return el('button', { className: 'back hidebtn', textContent: hidden ? 'Show' : 'Hide', title: hidden ? 'Show it on screen again' : 'Hide it (its place is kept)',
+  return el('button', { className: 'hidebtn', textContent: hidden ? 'Show' : 'Hide', title: hidden ? 'Show it on screen again' : 'Hide it (its place is kept)',
     onclick: () => {
       if (hud) setHidden(hud, !hidden);
       else { partsListed.add(`${sel.res.name}/${own.block}`); setPartHidden(sel.res, own.block, !hidden); }
@@ -2272,6 +2297,7 @@ function boxRows(lay, id, p, t, hud) {
     r.append(b);
     rows.push(r);
   }
+  for (const r of rows.slice(hud.rounded ? 0 : 1)) Object.assign(r.dataset, { cat: 'border', head: 'Box' });
   return rows;
 }
 
@@ -2385,17 +2411,18 @@ function borderRows(file, name) {
     const now = borderOf(file, name), own = now && now.name.toLowerCase() === name.toLowerCase();
     return borderBody(cur, own ? now : { props: now ? now.props : {}, base: readBorder(f, name).base, sides: now ? now.sides : null });
   }, ['Borders']);
-  const sides = el('div', { className: 'row sides' }), on = () => sidesOf(cur);
+  const sides = el('div', { className: 'row sides' }), opts = el('div', { className: 'opts' }), on = () => sidesOf(cur);
   const boxes = {}, undo = undoArrow(`${file}/${name}/sides`, on(), v => v, v => { for (const s of SIDES) boxes[s].checked = cur.on[s] = v.split(', ').includes(s); write(); }, game && sidesOf(game));
-  sides.append(el('div', { textContent: 'Border sides' }), ...['Top', 'Left', 'Right', 'Bottom'].map(s => {
+  opts.append(...['Top', 'Right', 'Bottom', 'Left'].map(s => {
     const l = el('label'), box = boxes[s] = el('input', { type: 'checkbox', checked: cur.on[s], onchange: () => { cur.on[s] = box.checked; undo.update(on()); write(); } });
     l.append(box, s);
     return l;
-  }), undo);
+  }));
+  sides.append(el('div', { textContent: 'Border sides' }), undo, opts);
   sides.dataset.q = 'border sides top left right bottom';
-  const rows = [sides,
+  const rows = [colorRow('Border colour', 'The ticked sides', cur.colour, v => { cur.colour = v; write(); }, [name], game && game.colour, file),
     inputRow('Thickness', String(cur.n), v => { cur.n = v; write(); }, { type: 'number', min: 1, max: 8, step: 1, title: 'pixels', undoId: `${file}/${name}/thickness`, dflt: game ? String(game.n) : null }),
-    colorRow('Border colour', 'The ticked sides', cur.colour, v => { cur.colour = v; write(); }, [name], game && game.colour, file)];
+    sides];
   const notes = [cur.mixed && 'The HUD gives this border more than one colour; a change here makes every side this colour.',
     b && b.name.toLowerCase() !== name.toLowerCase() && `Now the same as ${b.name}; a change here gives this one its own.`,
     BORDER_SHARED[name] && `Also changes ${BORDER_SHARED[name]}.`].filter(Boolean);
@@ -2465,11 +2492,13 @@ function resRows(f, block, defaults, schemeFile, ctl) {
     if ('fillcolor' in p) own('fillcolor', 'Fill', null);
     // which font this one control draws with: any font in its scheme (the game reads "font" from the .res)
     const deflt = CONTROL_FONTS[ctl] && CONTROL_FONTS[ctl][0][1];
-    if (!CODE_FONTS[block.toLowerCase()] && (p.font || deflt)) rows.push(pickRow('Font', p.font || deflt, () => fontNames(schemeFile), v => save(f, 'font', v, block),
-      { id: `${f.name}/${block}/font`, note: `Just this one; any font in ${schemeFile}`, keys: ['font'], dflt: g.font || deflt || null }));
+    // (its font goes under Fonts, its alignment under Layout: see selectionSections)
+    const tag = (r, cat, head) => { Object.assign(r.dataset, { cat, head }); rows.push(r); };
+    if (!CODE_FONTS[block.toLowerCase()] && (p.font || deflt)) tag(pickRow('Font', p.font || deflt, () => fontNames(schemeFile), v => save(f, 'font', v, block),
+      { id: `${f.name}/${block}/font`, note: `Just this one; any font in ${schemeFile}`, keys: ['font'], dflt: g.font || deflt || null }), 'font', 'Its own font');
     // where a text sits in its box: a right-aligned one grows leftwards from its right edge
     const align = v => (v || 'west').toLowerCase().replace(/^(north|south)(west|east)$/, '$1-$2');
-    if (ctl === 'Label' || 'textalignment' in p) rows.push(selectRow('Text alignment', TEXT_ALIGN, align(p.textalignment), v => save(f, 'textAlignment', v, block), ['textAlignment'], `${f.name}/${block}/textalignment`, align(g.textalignment)));
+    if (ctl === 'Label' || 'textalignment' in p) tag(selectRow('Text alignment', TEXT_ALIGN, align(p.textalignment), v => save(f, 'textAlignment', v, block), ['textAlignment'], `${f.name}/${block}/textalignment`, align(g.textalignment)), 'layout', 'Text');
   }
   for (const [k, label] of POS) if (k in p || k.endsWith('pos')) rows.push(numRow(f, block, k, label, p[k]));
   return rows;
@@ -2677,18 +2706,24 @@ function pickRow(label, value, names, onChange, { faces = false, id = null, note
 }
 
 // attrs: the input's own attributes, plus undoId (what its ↶ is kept by) or noUndo (the caller makes its own, in row.arrow's
-// place)
+// place), and slider (a slider up to that beside the box, instead of − and +)
 function inputRow(label, value, onChange, attrs = {}) {
-  const { undoId, noUndo, dflt = null, ...own } = attrs;
+  const { undoId, noUndo, dflt = null, slider = 0, ...own } = attrs;
   const row = el('div', { className: 'row num' });
   const input = el('input', { value });
   for (const [k, v] of Object.entries(own)) input.setAttribute(k, v);
   input.setAttribute('aria-label', label);
-  const undo = noUndo ? el('span') : undoArrow(undoId || `${rowScope}|${label}`, String(value), v => v, v => { input.value = v; onChange(v); }, dflt === null ? null : String(dflt));
+  const range = slider ? el('input', { type: 'range', min: own.min ?? 0, max: slider, step: own.step ?? 1, value: +value || 0 }) : null;
+  const undo = noUndo ? el('span') : undoArrow(undoId || `${rowScope}|${label}`, String(value), v => v, v => { input.value = v; if (range) range.value = +v || 0; onChange(v); }, dflt === null ? null : String(dflt));
   row.arrow = undo;
-  input.oninput = () => { if (input.value === '') return; if (!noUndo) undo.update(input.value); onChange(input.value); };
+  input.oninput = () => { if (input.value === '') return; if (range) range.value = input.value; if (!noUndo) undo.update(input.value); onChange(input.value); };
   let box = input;
-  if (attrs.type === 'number') { // - and + beside the box instead of the browser's arrows inside it
+  if (range) {
+    range.setAttribute('aria-label', label);
+    range.oninput = () => { input.value = range.value; input.oninput(); };
+    box = el('div', { className: 'weight' });
+    box.append(range, input);
+  } else if (attrs.type === 'number') { // - and + beside the box instead of the browser's arrows inside it
     const step = (up, text) => el('button', { textContent: text, tabIndex: -1, title: up ? 'Up' : 'Down',
       onclick: () => { try { up ? input.stepUp() : input.stepDown(); } catch { return; } input.oninput(); } });
     box = el('div', { className: 'step' });
@@ -2702,18 +2737,16 @@ function inputRow(label, value, onChange, attrs = {}) {
   return row;
 }
 
-// On/off, in the same column as the number boxes: Off | On, the lit half is the setting. row.set(on) shows a new value.
+// On/off: a tick box at the right (the whole row clicks it). row.set(on) shows a new value.
 function toggleRow(label, on, onChange, note = '', id = null, dflt = null) {
-  const row = el('div', { className: 'row num' }), seg = el('div', { className: 'seg', role: 'group' }), word = v => v ? 'on' : 'off';
-  const halves = ['Off', 'On'].map((t, i) => el('button', { textContent: t, onclick: () => { if (on !== !!i) { row.set(!!i); onChange(on); } } }));
+  const row = el('label', { className: 'row toggle' }), box = el('input', { type: 'checkbox' }), word = v => v ? 'on' : 'off';
   const undo = undoArrow(id || `${rowScope}|${label}`, word(on), v => v, v => { row.set(v === 'on'); onChange(on); }, dflt === null ? null : word(dflt));
-  row.set = v => { on = v; halves.forEach((b, i) => b.setAttribute('aria-pressed', String(on === !!i))); undo.update(word(on)); };
-  seg.setAttribute('aria-label', label);
-  seg.append(...halves);
+  row.set = v => { on = v; box.checked = v; undo.update(word(on)); };
+  box.onchange = () => { row.set(box.checked); onChange(on); };
   const name = el('div'), meta = el('div', { className: 'meta' });
   name.append(renameable(label));
-  if (note) meta.append(renameable(note));
-  row.append(name, seg, undo, meta);
+  if (note) { meta.append(renameable(note)); row.title = note; }
+  row.append(name, box, undo, meta);
   row.set(on);
   row.dataset.q = label.toLowerCase();
   return row;
@@ -2744,30 +2777,37 @@ function fontRows(file, font) {
       if (on && (key === 'outline' || key === 'dropshadow') && +(p.additive ?? 0) > 0) { flags.additive.set(false); put('additive', '0'); }
       p[key] = on ? '1' : '0';
     }, note, id(key), gp ? +(gp[key] ?? 0) > 0 : null);
-  const rows = [
-    pickRow('Font', p.name || '', () => fontFaces, val => put('name', val), { faces: true, id: id('name'), note: vars.size > 1 ? `Entry "${v}", for ${H}p screens` : '', dflt: dv('name') }),
-    inputRow('Size', p.tall || '', val => put('tall', val), { type: 'number', step: 1, undoId: id('tall'), dflt: dv('tall') }),
-    inputRow('Weight', p.weight || '400', val => put('weight', val), { type: 'number', step: 100, min: 0, undoId: id('weight'), dflt: dv('weight', '400') }),
-    inputRow('Blur', p.blur || '0', val => put('blur', val), { type: 'number', step: 1, min: 0, undoId: id('blur'), dflt: dv('blur', '0') }),
-    ...FONT_FLAGS.map(rowFor),
-    ...FONT_EXTRA.filter(([k]) => k in p).map(rowFor),
-  ];
-  // +: the settings this font doesn't have yet; picking one adds it (switched on, or a starting value) and its row
-  const add = el('div', { className: 'row addkey' }), plus = el('button', { className: 'plus', textContent: '+', title: 'Add a font setting' });
+  // on/off settings as tick boxes in two columns (Effects); + lists what the font can also have and adds it (switched
+  // on, or a starting value): ticks join Effects, numbers and text go under it
+  const effects = el('div', { className: 'row flags' }), opts = el('div', { className: 'opts' }), isFlag = x => (x[2] || 'flag') === 'flag';
+  opts.append(...FONT_FLAGS.map(rowFor), ...FONT_EXTRA.filter(x => isFlag(x) && x[0] in p).map(rowFor));
+  effects.append(el('div', { textContent: 'Effects' }), opts);
+  effects.dataset.q = FONT_FLAGS.map(x => x[1]).join(' ').toLowerCase();
+  const extras = FONT_EXTRA.filter(x => !isFlag(x) && x[0] in p).map(rowFor);
+  let last = extras[extras.length - 1] || effects;
+  const add = el('div', { className: 'row addkey' }), plus = el('button', { className: 'plus', textContent: '+', title: 'Add a font option' });
+  plus.setAttribute('aria-label', 'Add a font option');
+  plus.setAttribute('aria-expanded', 'false');
   const menu = el('div', { className: 'chips', hidden: true });
-  const fill = () => menu.replaceChildren(...FONT_EXTRA.filter(([k]) => !(k in p)).map(x => el('button', { textContent: x[1], onclick: () => {
+  const fill = () => menu.replaceChildren(...FONT_EXTRA.filter(([k]) => !(k in p)).map(x => el('button', { textContent: x[1], title: x[4] || '', onclick: () => {
     p[x[0]] = x[3];
     put(x[0], x[3]);
-    add.before(rowFor(x));
+    const r = rowFor(x);
+    if (isFlag(x)) opts.append(r); else { last.after(r); last = r; }
     fill();
-    menu.hidden = plus.hidden = !menu.childElementCount;
+    if (!menu.childElementCount) { menu.hidden = true; plus.disabled = true; }
   } })));
-  plus.onclick = () => { menu.hidden = !menu.hidden; plus.classList.toggle('open', !menu.hidden); };
+  plus.onclick = () => { menu.hidden = !menu.hidden; plus.setAttribute('aria-expanded', String(!menu.hidden)); };
   fill();
-  plus.hidden = !menu.childElementCount;
-  add.append(plus, menu);
+  plus.disabled = !menu.childElementCount;
+  add.append(el('div', { className: 'addhead', textContent: 'Font options' }), plus, menu);
   add.dataset.q = FONT_EXTRA.map(x => x[1]).join(' ').toLowerCase();
-  return [...rows, add];
+  return [
+    pickRow('Face', p.name || '', () => fontFaces, val => put('name', val), { faces: true, id: id('name'), note: vars.size > 1 ? `Entry "${v}", for ${H}p screens` : '', dflt: dv('name') }),
+    inputRow('Size', p.tall || '', val => put('tall', val), { type: 'number', step: 1, undoId: id('tall'), dflt: dv('tall') }),
+    inputRow('Weight', p.weight || '400', val => put('weight', val), { type: 'number', step: 100, min: 0, slider: 1000, undoId: id('weight'), dflt: dv('weight', '400') }),
+    inputRow('Blur', p.blur || '0', val => put('blur', val), { type: 'number', step: 1, min: 0, undoId: id('blur'), dflt: dv('blur', '0') }),
+    add, effects, ...extras];
 }
 
 // Copies a font file into the HUD and lists it in CustomFontFiles of the given schemes (the game registers it, live);
@@ -2801,7 +2841,8 @@ function logoRows(n) {
   if (!F(C)) return [];
   const lines = [['Logo', LOGO_KEYS[0], '"COUNTER-STRIKE"', 1], ['Logo, second line', LOGO_KEYS[1], '"SOURCE"', 2]].filter(l => l[3] === n);
   return [...schemeRows(C, lines.map(l => l.slice(0, 3))),
-    ...lines.flatMap(([label, , , i]) => [menuPosRow(`${label}: X`, `Main.Title${i}.X`, 'From the left'), menuPosRow(`${label}: Y`, `Main.Title${i}.Y`, 'From the top')])];
+    ...lines.flatMap(([label, , , i]) => [menuPosRow(`${label}: X`, `Main.Title${i}.X`, 'From the left'), menuPosRow(`${label}: Y`, `Main.Title${i}.Y`, 'From the top')])
+      .map(r => Object.assign(r.dataset, { cat: 'layout', head: 'Position' }) && r)];
 }
 // A logo line is hidden by its colour's opacity; shown again, it gets the game's opacity back.
 const logoShown = n => toRgba(resolve(tables(F(C)), LOGO_KEYS[n - 1]) || '0 0 0 0')[3] > 0;
@@ -3027,18 +3068,17 @@ async function setBackground(file) {
   }
 }
 
-// Everything editable for a selection, as [subheading, rows] pairs.
-// Everything editable for a selection, as [title, rows] pairs: colours first, then fonts, then borders, then the
-// rest (what's shown, the menu's buttons...). Titles say the kind first, then what it's for.
+// Everything editable for a selection, as [title, rows, kind]: colours, fonts, borders, layout (places and sizes), then
+// the rest (what's shown, the menu's buttons...). Titles say the kind first, then what it's for.
 function selectionSections(sel) {
-  const groups = { colour: [], font: [], border: [], other: [] }, add = (kind, title, rows) => groups[kind].push([title, rows]);
+  const groups = { colour: [], font: [], border: [], layout: [], other: [] }, add = (kind, title, rows) => groups[kind].push([title, rows]);
   const { info, control } = sel, fonts = fontsOf(sel), own = sel.res && ownBlock(sel);
   // the main menu's background and logo: their own few settings
   if (info.id === 'menubg') return [['Menu background', backgroundRows(), 'other']];
   if (info.id === 'gamelogo') {
     add('colour', info.name, logoRows(info.title));
     for (const [f, font, what] of fonts) add('font', 'Font (a change shows everywhere the font is used)', [fontFold(f, font, what, true)]);
-    return Object.entries(groups).flatMap(([kind, list]) => list.map(([t, r]) => [t, r, kind])).filter(([, rows]) => rows.length);
+    return byKind(groups);
   }
   // what was clicked, on its own: its position and its own colours over the shared ones below, named as it is in its
   // file (these menus read their .res only when the game makes them; the scoreboard and spectator bars read it on a reload)
@@ -3065,7 +3105,7 @@ function selectionSections(sel) {
     if (info.id === 'FreezePanel' && sel.res) { const [c, p] = freezeRows(sel.res); add('colour', 'Killer panel: colours', c); add('other', 'Killer panel: show or hide parts', p); }
     add('colour', info.name, hudRows(info.id, info.hud));
     add('other', `${info.name}: settings`, hudSettingRows(info.id, info.hud));
-    if (info.id === 'HudChat' && sel.res) add('other', 'Chat: space inside', chatPaddingRows(sel));
+    if (info.id === 'HudChat' && sel.res) add('layout', 'Chat: space inside', chatPaddingRows(sel));
     // parts moved off screen (the chat's Filters button) can't be clicked any more
     add('other', `${info.name}: ${WINDOW_PARTS[info.id] ? 'show or hide parts' : 'hidden parts'}`, windowPartRows(sel));
   } else {
@@ -3074,12 +3114,12 @@ function selectionSections(sel) {
       const frame = info.file === S;
       // the Borders colours only while some border still draws with them (see bordersUse)
       add('colour', 'Colours: the window', schemeRows(info.file, WINDOW_COLOURS[info.file].filter(([, k]) => !k.startsWith('Border.') || bordersUse(info.file, k.split('|')))));
-      if (frame) add('border', 'Border: window edge (every window)', [windowCornerRow(S), ...borderRows(S, 'FrameBorder')]);
+      if (frame) { const [colour, ...rest] = borderRows(S, 'FrameBorder'); add('border', 'Border: window edge (every window)', [colour, windowCornerRow(S), ...rest]); }
       add('other', `Fading (every ${frame ? 'menu' : 'in-game'} window)`, fadeRows(info.file));
     }
     if (EXTRA[info.id]) add('colour', `Colours: ${info.name.toLowerCase()}`, schemeRows(S, EXTRA[info.id]).concat(info.file === C ? schemeRows(C, EXTRA[info.id]) : []));
     if (CMD_WINDOWS.has(info.id)) add('other', 'Command buttons', commandRows(sel));
-    if (CMD_WINDOWS.has(info.id) && sel.res) add('other', 'Button places', buttonPlaceRows(sel.res));
+    if (CMD_WINDOWS.has(info.id) && sel.res) add('layout', 'Button places', buttonPlaceRows(sel.res));
     if (ADD_WINDOWS.has(info.id) && sel.res) add('other', 'Add to this window', addRows(sel.res));
     if (info.id !== 'loadingdialog') add('other', `${info.name}: show or hide parts`, windowPartRows(sel)); // its own rows do both files
     // the MOTD, team and class select: the game centres one its .res places at 0,0 (as its own files do), its box at the
@@ -3090,13 +3130,13 @@ function selectionSections(sel) {
       const opts = [['0|0', 'Middle, box at the top (the game\'s)']];
       if (solid.length) opts.push([`c-${(+p.wide || 640) / 2}|${Math.round((480 - Math.max(...solid.map(q => q.y + q.h - open.y)) / (live.H / 480)) / 2)}`, 'Middle, box in the middle']);
       if (!opts.some(([v]) => v === now)) opts.push([now, `Where you moved it (${now.replace('|', ', ')})`]);
-      add('other', `${info.name}: position`, [selectRow('Where it sits', opts, now, v => { const [x, y] = v.split('|'); save(sel.res, 'xpos', x, info.id); save(sel.res, 'ypos', y, info.id); refreshSoon(); },
+      add('layout', `${info.name}: position`, [selectRow('Where it sits', opts, now, v => { const [x, y] = v.split('|'); save(sel.res, 'xpos', x, info.id); save(sel.res, 'ypos', y, info.id); refreshSoon(); },
         ['xpos', 'ypos'], `${sel.res.name}/${info.id}/place`, '0|0'),
         noteRow('The game centres this window when its place is 0, 0 (as in the game\'s own files), with its box at the top of the screen. Any other place is used as it is, counted from the top left.')]);
     }
     if (info.id === 'scores') for (const [t, r] of scoreboardSections(sel, fonts.map(([, n]) => n))) add(/fonts$/.test(t) ? 'font' : 'colour', t, r);
-    if (info.id === 'gamemenu') for (const [t, r] of mainMenuSections()) add('other', t, r);
-    if (info.id === 'loadingdialog' && sel.res) add('other', 'Loading screen: layout', loadingRows(sel.res));
+    if (info.id === 'gamemenu') for (const [t, r] of mainMenuSections()) add(/(position|items)$/.test(t) ? 'layout' : 'other', t, r);
+    if (info.id === 'loadingdialog' && sel.res) add('layout', 'Loading screen: layout', loadingRows(sel.res));
   }
   if (fonts.length) add('font', `${fonts.length > 1 ? 'Fonts' : 'Font'} (a change shows everywhere the font is used)`,
     fonts.map(([file, font, what]) => fontFold(file, font, what, fonts.length <= 2 && (control || info.kind === 'hud'))));
@@ -3112,8 +3152,23 @@ function selectionSections(sel) {
       return r;
     }));
   }
-  // [title, rows, kind]: shown grouped by kind (see group)
-  return Object.entries(groups).flatMap(([kind, list]) => list.map(([t, r]) => [t, r, kind])).filter(([, rows]) => rows.length);
+  return byKind(groups);
+}
+// [title, rows, kind] in category order. Rows tagged with another category (dataset.cat: a part's position and size, its
+// box corners, a control's own font) go there, under their heading (dataset.head), before that category's own sections.
+function byKind(groups) {
+  const out = Object.entries(groups).flatMap(([kind, list]) => list.map(([t, r]) => [t, r, kind])), moved = new Map();
+  for (const s of out) {
+    const go = s[1].filter(r => r.dataset && r.dataset.cat && r.dataset.cat !== s[2]);
+    if (!go.length) continue;
+    s[1] = s[1].filter(r => !go.includes(r));
+    for (const r of go) {
+      const k = `${r.dataset.cat}|${r.dataset.head}`;
+      if (!moved.has(k)) moved.set(k, [r.dataset.head, [], r.dataset.cat]);
+      moved.get(k)[1].push(r);
+    }
+  }
+  return [...moved.values(), ...out].filter(([, rows]) => rows.length);
 }
 
 // Things on screen now (or every known HUD part when the game isn't reporting).
@@ -3160,30 +3215,35 @@ function render() {
   // a row drawn now would show the value from before an edit still waiting to be written (a tick box would untick)
   if (waiting.size) { renderAfterSave = true; return; }
   // emptying the list scrolls it to the top; keep the reader's place (select() scrolls up itself)
-  const top = $('list').scrollTop;
+  const top = scroller().scrollTop;
   renderList();
-  $('list').scrollTop = top;
+  scroller().scrollTop = top;
   if (fpop && !document.contains(fpop.owner)) closeFontPop(); // its row has gone
-
+  if (cpop && !document.contains(cpop.owner)) closePicker();
 }
+// What scrolls: the list, or with a selection its settings beside the categories.
+const scroller = () => document.querySelector('#list .section-stack') || $('list');
 
-// A bordered group of rows with a title.
-// A click on its title folds it (remembered by title), like every fold here with the triangle at its left; a search
-// shows everything it finds anyway.
+// A heading over rows. In the list, a click on it folds them (remembered by title), like every fold here with the
+// triangle at its left; a search shows everything it finds anyway. fold false: a plain heading; no title: none.
 let folded = new Set();
 try { folded = new Set(JSON.parse(localStorage.getItem('folded') || '[]')); } catch {}
-function card(title, rows) {
+function card(title, rows, fold = true) {
   const c = el('section', { className: 'card' });
-  const sub = el('div', { className: 'sub tri', title: 'Fold or unfold' });
-  const set = on => { c.classList.toggle('folded', on); sub.setAttribute('aria-expanded', !on); };
-  sub.onclick = e => {
-    if (e.target.closest('button') || e.target.isContentEditable) return; // its own buttons, a title being renamed
-    const on = !c.classList.contains('folded');
-    set(on);
-    on ? folded.add(title) : folded.delete(title);
-    try { localStorage.setItem('folded', JSON.stringify([...folded])); } catch {}
-  };
-  set(folded.has(title) && !$('search').value.trim());
+  if (!title) { c.append(...rows); return c; }
+  const sub = el('div', { className: fold ? 'sub tri' : 'sub' });
+  if (fold) {
+    sub.title = 'Fold or unfold';
+    const set = on => { c.classList.toggle('folded', on); sub.setAttribute('aria-expanded', !on); };
+    sub.onclick = e => {
+      if (e.target.closest('button') || e.target.isContentEditable) return; // its own buttons, a title being renamed
+      const on = !c.classList.contains('folded');
+      set(on);
+      on ? folded.add(title) : folded.delete(title);
+      try { localStorage.setItem('folded', JSON.stringify([...folded])); } catch {}
+    };
+    set(folded.has(title) && !$('search').value.trim());
+  }
   sub.append(renameable(title));
   keysTip(sub, rows);
   c.append(sub, ...rows);
@@ -3196,21 +3256,33 @@ function keysTip(head, rows) {
   if (keys.length && name) name.title = `${keys.join('\n')}\n\nDouble-click to rename`;
 }
 
-// A folder of sections for one selection (Colours, Fonts, Borders, More), folding like a directory; remembered.
-function group(name, count, children) {
-  const g = el('div', { className: 'group' }), head = el('button', { className: 'group-head tri' }), body = el('div', { className: 'group-body' });
-  head.append(el('span', { textContent: name }), el('span', { className: 'count', textContent: count }));
-  const key = `group:${name}`, set = on => { g.classList.toggle('folded', on); head.setAttribute('aria-expanded', !on); };
-  head.onclick = () => {
-    const on = !g.classList.contains('folded');
-    set(on);
-    on ? folded.add(key) : folded.delete(key);
-    try { localStorage.setItem('folded', JSON.stringify([...folded])); } catch {}
-  };
-  set(folded.has(key) && !$('search').value.trim());
-  body.append(...children);
-  g.append(head, body);
-  return g;
+// A selection's settings come in five categories, one shown at a time (remembered).
+const CATEGORIES = [['colour', 'Colours'], ['font', 'Fonts'], ['border', 'Borders'], ['layout', 'Layout'], ['other', 'Extras']];
+let category = 'colour', openParts = false;
+try { category = localStorage.getItem('category') || 'colour'; } catch {}
+// Under the selection's name: what it is.
+const subtitle = s => s.control ? `${controlIn(s.control, s.thing)[1]}${s.control.name ? ` "${s.control.name}"` : ''}`
+  : s.info.kind === 'hud' ? `HUD part · ${s.info.id}` : `${s.info.tag || 'Window'}${s.thing.name ? ` · ${s.thing.name}` : ''}`;
+// A section's heading under its category: without the selection's name or the category's word in front ("Health:
+// settings" is "Settings"); none where it is only the name again.
+function sectionTitle(t) {
+  const name = selected.info.name, rest = t === name ? '' : t.startsWith(`${name}: `) ? t.slice(name.length + 2) : t.replace(/^(Colours|Border): /, '');
+  return rest && rest[0].toUpperCase() + rest.slice(1);
+}
+// On screen now, folded over the selection: the other parts, a click away.
+function partsFold() {
+  const d = el('details', { className: 'parts', open: openParts }), grid = el('div', { className: 'part-grid' });
+  d.ontoggle = () => { openParts = d.open; };
+  const things = onScreen();
+  if (menuUp()) things.push({ thing: BG_SEL().thing, info: BG_SEL().info });
+  for (const t of things) {
+    const b = el('button', { className: 'part-button', title: t.info.name, onclick: () => select({ thing: t.thing, info: t.info, control: null }) });
+    b.setAttribute('aria-pressed', String(!selected.control && selected.info.id === t.info.id));
+    b.append(el('span', { textContent: t.info.name }));
+    grid.append(b);
+  }
+  d.append(el('summary', { textContent: live ? 'On screen now' : 'HUD parts' }), grid);
+  return d;
 }
 
 // Every font section of a selection in one card, each under a line with its title.
@@ -3232,6 +3304,10 @@ function renderList() {
   pendingRender = false;
   const list = $('list'), q = $('search').value.trim().toLowerCase();
   list.innerHTML = '';
+  list.classList.remove('picked');
+  $('parts').replaceChildren();
+  $('footbtns').replaceChildren();
+  $('foot').hidden = true;
   if (!files.length) return;
   if (q) {
     // search: every HUD part, window type and control type, plus all other colours
@@ -3259,33 +3335,58 @@ function renderList() {
     return;
   }
   if (selected) {
-    const crumbs = el('div', { className: 'crumbs' });
-    crumbs.append(el('span', { className: 'what', textContent: selected.info.name }));
-    if (selected.control) crumbs.append(el('span', { className: 'meta', textContent: `  ›  ${controlIn(selected.control, selected.thing)[1]}${selected.control.name ? ` "${selected.control.name}"` : ''}` }));
-    const back = el('button', { className: 'back', textContent: '‹ Back', title: 'Back to the list (changes stay unsaved until Save HUD)' });
-    back.onclick = () => select(null);
-    const done = el('button', { className: 'done primary', textContent: 'Done', title: 'Save the changes into the HUD and go back to the list' });
+    list.classList.add('picked');
+    $('parts').append(partsFold());
+    const head = el('div', { className: 'selected-head' }), titles = el('div', { className: 'titles' });
+    const back = el('button', { className: 'back', textContent: '‹', title: 'Back to the list (changes stay unsaved until Save HUD)', onclick: () => select(null) });
+    back.setAttribute('aria-label', 'Back to the list');
+    titles.append(el('h2', { textContent: selected.info.name }), el('p', { textContent: subtitle(selected) }));
+    head.append(back, titles);
+    const hide = hideButton(selected);
+    if (hide) head.append(hide);
+    list.append(head);
+    rowScope = [selected.thing.key, selected.control?.key, selected.node?.key].filter(Boolean).join('/');
+    const sections = selectionSections(selected);
+    rowScope = '';
+    // one category at a time (the one picked last, else the first this selection has)
+    const has = k => sections.some(s => s[2] === k), shown = has(category) ? category : (CATEGORIES.find(([k]) => has(k)) || ['colour'])[0];
+    const nav = el('nav', { className: 'category-nav' }), stack = el('div', { className: 'section-stack' }), layout = el('div', { className: 'settings-layout' });
+    nav.setAttribute('aria-label', 'Settings');
+    for (const [k, name] of CATEGORIES) {
+      const b = el('button', { className: 'category-button', textContent: name, disabled: !has(k), onclick: () => {
+        category = k;
+        try { localStorage.setItem('category', k); } catch {}
+        closePicker();
+        render();
+        scroller().scrollTop = 0;
+      } });
+      b.setAttribute('aria-pressed', String(k === shown));
+      nav.append(b);
+    }
+    if (also.length) stack.append(card(`Line up ${also.length + 1} parts`, lineUpRows(), false));
+    const mine = sections.filter(s => s[2] === shown).map(([t, r]) => [sectionTitle(t), r]);
+    // every font in one card, each part's set under a line with its name
+    if (mine.length) stack.append(...(shown === 'font' ? [fontsCard(mine)] : mine.map(([t, r]) => card(t, r, false))));
+    else stack.append(el('p', { className: 'meta', textContent: 'Nothing to edit here yet.' }));
+    layout.append(nav, stack);
+    list.append(layout);
+    // at the bottom: every ↶ of this selection at once (the ones lit when clicked, in every category), and Done
+    const reset = el('button', { textContent: `↶ Reset ${selected.info.kind === 'hud' && !selected.control ? 'part' : 'all'}`,
+      title: 'Put every setting here back to how it was when the HUD was opened', onclick: () => {
+        const undos = sections.flatMap(s => s[1]).flatMap(r => [...r.querySelectorAll('.undo:not(.dflt):not(.off)')]);
+        if (!undos.length) return status('Nothing here has changed since the HUD was opened.');
+        for (const u of undos) u.onclick();
+        refreshSoon();
+      } });
+    const done = el('button', { className: 'primary', textContent: 'Done', title: 'Save the changes into the HUD and go back to the list' });
     done.onclick = async () => {
       await sleep(300); // a change still being typed
       await writing;
       if (dirty) await saveHud();
       await select(null);
     };
-    crumbs.prepend(back);
-    const hide = hideButton(selected);
-    if (hide) crumbs.append(hide);
-    crumbs.append(done);
-    list.append(crumbs);
-    if (also.length) list.append(card(`Line up ${also.length + 1} parts`, lineUpRows()));
-    rowScope = [selected.thing.key, selected.control?.key, selected.node?.key].filter(Boolean).join('/');
-    const sections = selectionSections(selected);
-    rowScope = '';
-    for (const [kind, name] of [['colour', 'Colours'], ['font', 'Fonts'], ['border', 'Borders'], ['other', 'More']]) {
-      const mine = sections.filter(s => s[2] === kind);
-      // every font in one card, each part's set under a line with its name
-      if (mine.length) list.append(group(name, mine.length, kind === 'font' ? [fontsCard(mine)] : mine.map(([t, r]) => card(t, r))));
-    }
-    if (!sections.length) list.append(el('p', { className: 'meta', style: 'padding: 0 12px', textContent: 'Nothing to edit here yet.' }));
+    $('footbtns').append(reset, done);
+    $('foot').hidden = false;
     return; // one thing at a time: the lists come back with Back or Done
   }
   const things = onScreen();
@@ -3412,7 +3513,7 @@ const gridded = v => { const m = /^([rc]?)(-?[\d.]+)$/i.exec(v ?? ''); return !g
 function showGrid(t) {
   const box = $('boxes');
   if (!grid || !t) { box.style.backgroundImage = ''; return; }
-  const k = box.getBoundingClientRect().width / live.W, step = grid * t.s * k, line = 'rgba(255, 176, 0, .22)';
+  const k = box.getBoundingClientRect().width / live.W, step = grid * t.s * k, line = 'rgba(232, 162, 199, .22)';
   const origin = (key, full) => {
     const a = (/^\s*([rc]?)/i.exec(t.p[key] || '') || [, ''])[1].toLowerCase();
     if (a === 'c') return full / 2;
@@ -3599,6 +3700,7 @@ async function poll() {
   liveRaw = raw;
   live = raw ? parsePanels(raw) : null;
   $('launch').hidden = !!live;
+  $('gamestate').textContent = !live ? 'Waiting for the game' : `${menuUp() ? 'Main menu' : live.local ? 'Test game' : 'In a game'} · ${live.W}×${live.H}`;
   testTools();
   // the game quit without the capture noticing (a quick quit): the next game gets a new capture
   if (!live && captured) captureEnded();
@@ -3761,7 +3863,7 @@ async function openHud(path) {
   try {
     hudName = await call('open', path);
     $('picker').hidden = true;
-    $('hudbtn').textContent = `HUD: ${hudName}`;
+    $('hudbtn').textContent = hudName;
     selected = null;
     undoSteps.length = 0;
     for (const k in opened) delete opened[k]; // ↶ goes back to this HUD as opened
@@ -4135,12 +4237,17 @@ if (host && location.hash === '#hosttest') (async () => {
     delete renamed['Colours: the window'];
     check(renamedOk && card('Colours: the window', []).querySelector('.rename').textContent === 'Colours: the window', 'sidebar titles can be renamed');
     let picked = '';
-    const cr = colorRow('Test', 'note', '10 20 30 128', v => { picked = v; }), crVals = [...cr.querySelectorAll('.val')].map(v => v.textContent).join('|');
-    cr.querySelector('.aswatch').onkeydown({ key: 'ArrowRight', preventDefault() {} });
-    const stepped = picked;
-    cr.querySelector('.acts .undo:not(.dflt)').onclick();
-    check(crVals === '10 20 30|50%' && stepped === '10 20 30 141' && picked === '10 20 30 128' && !cr.querySelector('.setting'),
-      `colour rows: RGB and opacity shown, opacity steps from its swatch, the row's Undo goes back to the value at opening (${crVals}, ${stepped}, ${picked})`);
+    const cr = colorRow('Test', 'note', '10 20 30 128', v => { picked = v; }), rgbBoxes = cr.querySelectorAll('.rgb input');
+    const crVals = `${[...rgbBoxes].map(b => b.value).join(' ')}|${cr.querySelector('.alpha').textContent}`;
+    rgbBoxes[1].value = '300';
+    rgbBoxes[1].oninput();
+    const refused = picked;
+    rgbBoxes[1].value = '99';
+    rgbBoxes[1].oninput();
+    const typed = picked;
+    cr.querySelector('.undo:not(.dflt)').onclick();
+    check(crVals === '10 20 30|50%' && refused === '' && typed === '10 99 30 128' && picked === '10 20 30 128' && rgbBoxes[1].value === '20',
+      `colour rows: R G B boxes and opacity shown, a value over 255 not taken, a typed one is, the row's Undo goes back to the value at opening (${crVals}, ${typed}, ${picked})`);
     const pasted = ['1 2 3', '1 2 3 4', '#ff8000', '#ff800080', 'rgba(255, 128, 0, 0.5)', '10, 20, 30', 'x'].map(s => String(parseColour(s))).join('|');
     check(pasted === '1,2,3,255|1,2,3,4|255,128,0,255|255,128,0,128|255,128,0,128|10,20,30,255|null', `Paste reads R G B A, #hex and rgb() (${pasted})`);
     const btnRes = { name: 'b', text: '', parsed: parse('"x" { "autobutton" { "xpos" "1" } }'), bases: [] };
@@ -4148,9 +4255,10 @@ if (host && location.hash === '#hosttest') (async () => {
     check(btnKeys.startsWith('defaultFgColor_override,defaultBgColor_override,armedFgColor_override') && !btnKeys.includes('bgcolor_override,'),
       `a button's own colours use the keys buttons read (${btnKeys})`);
     let flip = null;
-    const tg = toggleRow('Outline', false, on => { flip = on; });
-    tg.querySelectorAll('.seg button')[1].onclick();
-    check(flip === true && tg.querySelectorAll('[aria-pressed="true"]')[0].textContent === 'On', 'on/off rows switch');
+    const tg = toggleRow('Outline', false, on => { flip = on; }), tick = tg.querySelector('input');
+    tick.checked = true;
+    tick.onchange();
+    check(flip === true && tick.checked && !tg.querySelector('.undo:not(.dflt)').classList.contains('off'), 'on/off rows switch');
     const hs = hudSettingRows('HudVoiceStatus', HUD.HudVoiceStatus).map(r => r.dataset.keys);
     check(hs.length === HUD.HudVoiceStatus.settings.length && hs.includes('avatar_wide + avatar_tall'), `a part's own HudLayout settings are listed (${hs.length})`);
     check(JSON.stringify(left) === '{"xpos":"1"}' && JSON.stringify(corner) === '{"xpos":"r101","ypos":"r61"}',
