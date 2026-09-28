@@ -337,6 +337,7 @@
   <div id="list"></div>
   <div class="sidebar-footer" id="foot" hidden><span class="state" id="savestate"></span><span class="btns" id="footbtns"></span></div>
 </aside>
+<input type="file" id="fontfile" accept=".ttf,.otf" hidden>
 <div id="picker" hidden><div>
   <h2>Which HUD do you want to edit?</h2>
   <p class="meta">Changes show in game straight away. They are kept when you click Done or Save HUD.</p>
@@ -858,6 +859,9 @@ function save(f, key, value, section = null) {
   if (f.name === L && section === 'HudChat' && /^(xpos|ypos|wide|tall)$/i.test(key)) chatResFirst(/^wide$/i.test(key) ? value : null);
   // the game copies these into its one tooltip box when it makes it, so a reload doesn't reach them
   if (/^tooltip\./i.test(key)) needRestart('tooltip colours');
+  // the loading screen's two files (see loadingRows): what's added to one goes into the other (VAC servers') too
+  const added = typeof section === 'string' ? /^hudeditor_/i.test(section) : Array.isArray(section) && !section.length && /^hudeditor_/i.test(key);
+  if (f.name === UI_RES.loadingdialog && added && F(LOADING_VAC)) save(F(LOADING_VAC), key, value, section);
   clearTimeout(timers[id]);
   waiting.add(id);
   timers[id] = setTimeout(() => {
@@ -1042,7 +1046,9 @@ const WINDOW_PARTS = { specgui: [['Top bar', 'topbar', 'tall', '0'], ['Bottom ba
   specmenu: [['Settings menu', 'settingscombo'], ['Player menu', 'playercombo'], ['View menu', 'viewcombo'], ['Previous and next buttons', 'specprev|specnext']],
   WinPanel_Round: [['Title (who won)', 'WinLabel'], ['How they won', 'WinDescription'], ['Timer', 'TimerIcon|TimerText'],
     ['MVP', 'MVP_AvatarGlow|MVP_Avatar|MVP_Text|MVP_Foreground_Star'], ['Fun fact', 'FunFact'], ['Top box', 'UpperPanel'], ['Middle box', 'MiddlePanel'], ['Bottom box', 'LowerPanel']],
-  info: [['Title', 'MessageTitle'], ['Text message', 'TextMessage'], ['Web page message', 'HTMLMessage']] };
+  info: [['Title', 'MessageTitle'], ['Text message', 'TextMessage'], ['Web page message', 'HTMLMessage']],
+  // (the class picture and description that change with the button under the mouse take their place from ClassInfo)
+  class_ct: [['Class picture and description', 'ClassInfo']], class_ter: [['Class picture and description', 'ClassInfo']] };
 const hideHow = block => {
   const part = Object.values(WINDOW_PARTS).flat().find(([, b]) => b === block);
   return part && part.length > 2 ? part.slice(2) : ['xpos', '9999'];
@@ -1331,19 +1337,26 @@ const LOADING_SEL = () => ({ thing: { name: 'LoadingDialog', key: 'loadingdialog
 function loadingRows(f) {
   const both = [f, F(LOADING_VAC)].filter(Boolean), has = (x, block) => Object.keys(layoutProps(x, block)).length > 0;
   const set = (block, key, v) => { for (const x of both) if (has(x, block)) save(x, key, v, block); };
-  const n = (block, key, label, note = '', only = false) => {
-    const r = inputRow(label, layoutProps(f, block)[key.toLowerCase()] || '0', v => only ? save(f, key, v, block) : set(block, key, v), { type: 'number', step: 1, dflt: gameProps(f.name, block)[key.toLowerCase()] ?? null, ...(note ? { title: note } : {}) });
+  // (at: the file the row shows and, with only, the one it writes: the VAC box has its own height and notice)
+  const n = (block, key, label, note = '', only = false, at = f) => {
+    const r = inputRow(label, layoutProps(at, block)[key.toLowerCase()] || '0', v => only ? save(at, key, v, block) : set(block, key, v), { type: 'number', step: 1, dflt: gameProps(at.name, block)[key.toLowerCase()] ?? null, ...(note ? { title: note } : {}) });
     r.dataset.keys = key;
     return r;
   };
+  // the VAC notice's text and shield move together (the shield 10 below the text's top, as in the game's file)
+  const vac = F(LOADING_VAC), gv = gameProps(LOADING_VAC, 'VACImage').ypos - gameProps(LOADING_VAC, 'VACInfoLabel').ypos || 10;
+  const vacRows = vac && has(vac, 'VACInfoLabel') ? [n('LoadingDialog', 'tall', 'Box height on VAC servers', 'Taller than the other, for the VAC notice under the bar', true, vac),
+    inputRow('VAC notice Y', layoutProps(vac, 'VACInfoLabel').ypos || '100', v => { save(vac, 'ypos', v, 'VACInfoLabel'); save(vac, 'ypos', String(+v + gv), 'VACImage'); },
+      { type: 'number', step: 1, dflt: gameProps(LOADING_VAC, 'VACInfoLabel').ypos ?? null, title: 'The VAC shield and its text, from the top of the box' }),
+    n('TimeRemainingLabel', 'ypos', 'Time left Y', 'The time left to load, under the bar')] : [];
   const show = (block, label) => checkRow(label, !partHidden(f, block), on => { for (const x of both) if (has(x, block)) setPartHidden(x, block, !on); refreshSoon(); }, null, gameProps(f.name, block).visible !== '0');
   const see = el('div', { className: 'row action' });
   see.append(el('button', { textContent: 'See it: start the test game again', onclick: () => testServer() }));
   return [show('InfoLabel', 'Show the loading text'), show('progress', 'Show the progress bar'), show('CancelButton', 'Show the Cancel button'),
-    n('LoadingDialog', 'wide', 'Box width'), n('LoadingDialog', 'tall', 'Box height', 'On VAC-secured servers the box is taller, for the VAC notice', true),
+    n('LoadingDialog', 'wide', 'Box width'), n('LoadingDialog', 'tall', 'Box height', 'On VAC-secured servers the box has its own height (below)', true),
     n('InfoLabel', 'xpos', 'Text X', 'From the box\'s left edge'), n('InfoLabel', 'ypos', 'Text Y'),
     n('progress', 'xpos', 'Progress bar X'), n('progress', 'ypos', 'Progress bar Y'), n('progress', 'wide', 'Progress bar width'), n('progress', 'tall', 'Progress bar height'),
-    n('CancelButton', 'xpos', 'Cancel X'), n('CancelButton', 'ypos', 'Cancel Y'), see,
+    n('CancelButton', 'xpos', 'Cancel X'), n('CancelButton', 'ypos', 'Cancel Y'), ...vacRows, see,
     noteRow('The game centres the box. Changes show the next time a map loads.')];
 }
 
@@ -1444,7 +1457,12 @@ async function addToHud(kind, file, lay = F(L)) {
   const inWindow = lay !== F(L), win = inWindow && selected;
   let n = 1;
   while (Object.keys(layoutProps(lay, `hudeditor_${kind}${n}`)).length) n++;
-  const name = `hudeditor_${kind}${n}`, at = (w, h) => [['xpos', `c${-Math.round(w / 2)}`], ['ypos', `c${-Math.round(h / 2)}`], ['wide', `${w}`], ['tall', `${h}`]];
+  // (the loading screen's box is placed by the game, so its parts count from its corner: "c" would be the screen's middle)
+  // a window narrower than the screen (team select, the MOTD) takes "c" as half the screen from its own left edge, so
+  // on a wide screen a part there goes in the middle of what shows of it in plain numbers (see windowShows)
+  const box = lay.name === UI_RES.loadingdialog, span = k => inWindow && !box ? windowShows(lay, 'hudeditor_new', k) : null;
+  const place = (k, n) => box ? '8' : span(k) !== null ? `${Math.round((span(k) - n) / 2)}` : `c${-Math.round(n / 2)}`;
+  const name = `hudeditor_${kind}${n}`, at = (w, h) => [['xpos', place('xpos', w)], ['ypos', place('ypos', h)], ['wide', `${w}`], ['tall', `${h}`]];
   let body;
   try {
     if (kind === 'pic') {
@@ -1462,6 +1480,7 @@ async function addToHud(kind, file, lay = F(L)) {
   await sleep(400);
   await writing;
   if (!inWindow) return select({ thing: { name, key: name.toLowerCase() }, info: customInfo(name), control: null });
+  if (box) { status('Added: its settings are under Extras and Layout here. It shows the next time a map loads.'); return refreshSoon(); }
   // in a window: selected as if clicked, once the game has made it
   for (let i = 0; i < 20; i++) {
     const p = live && live.panels.find(q => q.key === name.toLowerCase());
@@ -1518,7 +1537,8 @@ function setEdge(lay, id, rgba) {
   if ((layoutProps(lay, id).border || '') !== name) save(lay, 'border', name, id);
 }
 // windows whose own .res is read again on a change (the scoreboard itself, the others through the plugin)
-const ADD_WINDOWS = new Set(['scores', 'team', 'class_ct', 'class_ter', 'info']);
+// (and the loading screen: it can't be clicked in the preview, so what's added to it is listed under it, see selectionSections)
+const ADD_WINDOWS = new Set(['scores', 'team', 'class_ct', 'class_ter', 'info', 'loadingdialog']);
 function addRows(lay = F(L)) {
   const pick = el('input', { type: 'file', accept: 'image/png,image/jpeg,image/gif,image/webp', hidden: true });
   pick.onchange = () => { if (pick.files[0]) addToHud('pic', pick.files[0], lay); pick.value = ''; };
@@ -2810,22 +2830,36 @@ function fontRows(file, font) {
     add, effects, ...extras];
 }
 
-// Copies a font file into the HUD and lists it in CustomFontFiles of the given schemes (the game registers it, live);
-// then it can be typed into any Font box.
-async function addFontFile(schemes) {
+// Copies a font file (picked with the file chooser, like pictures) into the HUD's resource/fonts and lists it in
+// CustomFontFiles of the given schemes (the game registers it, live); then it can be picked in any Face box, where the
+// editor draws its name in it too.
+let fontSchemes = [];
+function addFontFile(schemes) {
+  fontSchemes = schemes;
+  $('fontfile').value = '';
+  $('fontfile').click();
+}
+$('fontfile').onchange = async () => {
+  const file = $('fontfile').files[0];
+  if (!file) return;
   try {
-    const [rel, family] = (await call('addfont')).split('\t');
-    for (const f of schemes.map(F).filter(Boolean)) {
+    const rel = `resource/fonts/${file.name.replace(/[^\w.()' -]/g, '_')}`, data = await file.arrayBuffer();
+    // (one already in the HUD under that name is listed as it is: the game keeps a font file it has loaded locked)
+    if (await call('exists', rel) !== '1') await call('writebin', rel, await base64(new Uint8Array(data)));
+    const family = (await call('fontfamily', rel)) || file.name.replace(/\.\w+$/, '');
+    for (const f of fontSchemes.map(F).filter(Boolean)) {
       const used = [...f.bases, f.parsed].flatMap(p => p.entries).filter(e => e.path.length === 2 && e.path[1].toLowerCase() === 'customfontfiles');
       if (used.some(e => e.value.replace(/\\/g, '/').toLowerCase() === rel.toLowerCase())) continue;
       save(f, String(Math.max(0, ...used.map(e => +e.key).filter(n => n > 0)) + 1), rel, ['CustomFontFiles']);
     }
-    fontFaces.unshift(family);
-    status(`Added "${family}". Type it into any Font box to use it.`);
+    if (!fontFaces.includes(family)) fontFaces.unshift(family);
+    try { const face = new FontFace(family, data); await face.load(); document.fonts.add(face); } catch {} // (the list shows it in itself)
+    setDirty(true);
+    status(`Added "${family}". Pick it in any Face box, or in All fonts > Every text font at once.`);
   } catch (err) {
-    if (err.message !== 'cancelled') status(err.message);
+    status(`Couldn't add that font: ${err.message}`);
   }
-}
+};
 
 // The main menu's logo (ClientScheme Main.Title1.Color "COUNTER-STRIKE", Main.Title2.Color "SOURCE") and item
 // height (MainMenu.MenuItemHeight, before the game scales it to the screen: 22 is 66 pixels at 1440p).
@@ -3120,6 +3154,11 @@ function selectionSections(sel) {
     if (EXTRA[info.id]) add('colour', `Colours: ${info.name.toLowerCase()}`, schemeRows(S, EXTRA[info.id]).concat(info.file === C ? schemeRows(C, EXTRA[info.id]) : []));
     if (CMD_WINDOWS.has(info.id)) add('other', 'Command buttons', commandRows(sel));
     if (CMD_WINDOWS.has(info.id) && sel.res) add('layout', 'Button places', buttonPlaceRows(sel.res));
+    // the MOTD's parts: its message boxes are empty (so not there to click) until a server sends one
+    if (info.id === 'info' && sel.res) add('layout', 'Part places', ['MessageTitle', 'HTMLMessage', 'TextMessage', 'ok'].flatMap(b => {
+      const p = layoutProps(sel.res, b), what = { MessageTitle: 'Title', HTMLMessage: 'Web page message', TextMessage: 'Text message', ok: 'OK' }[b];
+      return Object.keys(p).length ? POS.map(([k, l]) => numRow(sel.res, b, k, `${what}: ${l.replace(' position', '')}`, p[k])) : [];
+    }));
     if (ADD_WINDOWS.has(info.id) && sel.res) add('other', 'Add to this window', addRows(sel.res));
     if (info.id !== 'loadingdialog') add('other', `${info.name}: show or hide parts`, windowPartRows(sel)); // its own rows do both files
     // the MOTD, team and class select: the game centres one its .res places at 0,0 (as its own files do), its box at the
@@ -3127,16 +3166,28 @@ function selectionSections(sel) {
     if (['info', 'team', 'class_ct', 'class_ter'].includes(info.id) && sel.res) {
       const p = layoutProps(sel.res, info.id), now = `${p.xpos || '0'}|${p.ypos || '0'}`, open = live && live.panels.find(q => q === q.thing && q.key === info.id);
       const solid = open ? live.panels.filter(q => q.parent === open && /solid$/.test(q.key)) : [];
-      const opts = [['0|0', 'Middle, box at the top (the game\'s)']];
-      if (solid.length) opts.push([`c-${(+p.wide || 640) / 2}|${Math.round((480 - Math.max(...solid.map(q => q.y + q.h - open.y)) / (live.H / 480)) / 2)}`, 'Middle, box in the middle']);
+      // (the MOTD isn't centred by the game: at 0, 0 it sits at the left of a wide screen)
+      const motd = info.id === 'info', half = `c-${(+p.wide || 640) / 2}`;
+      const opts = motd ? [['0|0', 'At the left, box at the top (the game\'s)'], [`${half}|0`, 'Middle, box at the top']] : [['0|0', 'Middle, box at the top (the game\'s)']];
+      if (solid.length) opts.push([`${half}|${Math.round((480 - Math.max(...solid.map(q => q.y + q.h - open.y)) / (live.H / 480)) / 2)}`, 'Middle, box in the middle']);
       if (!opts.some(([v]) => v === now)) opts.push([now, `Where you moved it (${now.replace('|', ', ')})`]);
       add('layout', `${info.name}: position`, [selectRow('Where it sits', opts, now, v => { const [x, y] = v.split('|'); save(sel.res, 'xpos', x, info.id); save(sel.res, 'ypos', y, info.id); refreshSoon(); },
         ['xpos', 'ypos'], `${sel.res.name}/${info.id}/place`, '0|0'),
-        noteRow('The game centres this window when its place is 0, 0 (as in the game\'s own files), with its box at the top of the screen. Any other place is used as it is, counted from the top left.')]);
+        noteRow(motd ? 'The game puts the MOTD where its place says, counted from the top left: at 0, 0 (its own file) that is the left of a wide screen.'
+          : 'The game centres this window when its place is 0, 0 (as in the game\'s own files), with its box at the top of the screen. Any other place is used as it is, counted from the top left.')]);
     }
     if (info.id === 'scores') for (const [t, r] of scoreboardSections(sel, fonts.map(([, n]) => n))) add(/fonts$/.test(t) ? 'font' : 'colour', t, r);
     if (info.id === 'gamemenu') for (const [t, r] of mainMenuSections()) add(/(position|items)$/.test(t) ? 'layout' : 'other', t, r);
-    if (info.id === 'loadingdialog' && sel.res) add('layout', 'Loading screen: layout', loadingRows(sel.res));
+    if (info.id === 'loadingdialog' && sel.res) {
+      add('layout', 'Loading screen: layout', loadingRows(sel.res));
+      // what's been added to it, each under its own headings (it can't be clicked in the preview)
+      for (const s of sel.res.parsed.sections.filter(s => s.path.length === 2 && /^hudeditor_/i.test(s.path[1]))) {
+        const b = s.path[1], p = layoutProps(sel.res, b), what = `${CUSTOM[(p.controlname || '').toLowerCase()]?.word || 'Part'} ${b.replace(/\D+/g, '')}`;
+        const rows = [...resRows(sel.res, b, [], S, p.controlname), ...customRows(b, sel.res)];
+        for (const r of rows) if (r.dataset.cat) r.dataset.head = `${what}: ${r.dataset.head.toLowerCase()}`;
+        add('other', what, rows);
+      }
+    }
   }
   if (fonts.length) add('font', `${fonts.length > 1 ? 'Fonts' : 'Font'} (a change shows everywhere the font is used)`,
     fonts.map(([file, font, what]) => fontFold(file, font, what, fonts.length <= 2 && (control || info.kind === 'hud'))));

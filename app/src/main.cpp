@@ -523,23 +523,6 @@ static wstring PickFolder()
 	return out;
 }
 
-static wstring PickFontFile()
-{
-	ComPtr< IFileOpenDialog > dlg;
-	if ( FAILED( CoCreateInstance( CLSID_FileOpenDialog, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS( &dlg ) ) ) )
-		return wstring();
-	COMDLG_FILTERSPEC filter = { L"Fonts (*.ttf, *.otf)", L"*.ttf;*.otf" };
-	dlg->SetFileTypes( 1, &filter );
-	dlg->SetTitle( L"Pick a font file to add to the HUD" );
-	ComPtr< IShellItem > item;
-	wchar_t *path = NULL;
-	if ( FAILED( dlg->Show( g_hwnd ) ) || FAILED( dlg->GetResult( &item ) ) || FAILED( item->GetDisplayName( SIGDN_FILESYSPATH, &path ) ) )
-		return wstring();
-	wstring out = path;
-	CoTaskMemFree( path );
-	return out;
-}
-
 // The family name inside a .ttf/.otf (name table, name ID 1): the name the game's "name" key must use.
 static wstring FontFamily( const string &d )
 {
@@ -978,19 +961,13 @@ static void OnMessage( const wstring &msg )
 		else
 			out = Decode( data );
 	}
-	else if ( op == L"addfont" ) // copy a font file into the HUD: "resource/fonts/x.ttf\tFamily"
+	else if ( op == L"fontfamily" ) // arg = a font file in the HUD (the page copies it in): its family name
 	{
-		wstring src = PickFontFile(), dest = g_hudPath + L"\\resource\\fonts\\" + NameOf( src );
 		string data;
-		if ( src.empty() )
-			fail( L"cancelled" );
-		else if ( g_hudPath.empty() || !ReadAll( src, data ) || ( KeepSaved( dest ), !WriteAll( dest, data ) ) )
-			fail( L"Couldn't copy " + src );
+		if ( !InHud( arg, path ) || !ReadAll( path, data ) )
+			fail( L"missing" );
 		else
-		{
-			wstring family = FontFamily( data );
-			out = L"resource/fonts/" + NameOf( src ) + L"\t" + ( family.empty() ? NameOf( src ).substr( 0, NameOf( src ).rfind( L'.' ) ) : family );
-		}
+			out = FontFamily( data );
 	}
 	else if ( op == L"hudfonts" ) // family names of the font files in the HUD
 	{
