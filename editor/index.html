@@ -55,6 +55,8 @@
   .toolsbtn[aria-expanded="true"] { border-color: var(--accent); background: var(--soft); }
   .toolsbtn::after { content: '⌄'; margin-left: 6px; }
   #restart.needed { border-color: var(--accent); color: var(--accent); }
+  .zoombtn { margin-left: auto; padding: 4px 10px; border-color: var(--accent); color: var(--accent); font-size: 12px; }
+  .zoombtn:not([hidden]) + .gridsel { margin-left: 0; }
   .gridsel { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
   .gridsel select { padding: 4px 6px; }
   #tools { display: grid; gap: 9px; padding: 12px 15px; background: var(--surface); border-bottom: 1px solid var(--line); }
@@ -62,8 +64,9 @@
   .glabel { min-width: 76px; font-size: 12px; color: var(--muted); }
   #texts button { padding: 3px 10px; border-radius: 12px; font-size: 12px; }
   #texts button[aria-pressed="false"] { opacity: .5; text-decoration: line-through; }
-  #preview { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 8px; background: #0a090b; container-type: size; }
-  #stage { position: relative; max-width: 100%; max-height: 100%; }
+  #preview { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 8px; background: #0a090b; container-type: size; overflow: hidden; }
+  #stage { position: relative; max-width: 100%; max-height: 100%; transform-origin: 0 0; --z: 1; }
+  #stage.sharp #video { image-rendering: pixelated; }
   #stage.schematic { width: min(100%, calc(100cqh * var(--aspect, 1.7778))); aspect-ratio: var(--aspect, 1.7778); background: #0e0d10; border: 1px solid var(--line); }
   #video { display: block; max-width: 100%; max-height: 100cqh; }
   #empty { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 16px; color: var(--muted); text-align: center; pointer-events: none; }
@@ -78,16 +81,17 @@
   #gamestate { white-space: nowrap; }
   /* boxes over the game: light while the mouse is over one, pink when selected */
   #boxes { position: absolute; inset: 0; cursor: crosshair; overflow: hidden; user-select: none; } /* a part moved off screen mustn't widen the page */
-  .box { position: absolute; border: 1px dashed rgba(230, 223, 228, .4); opacity: 0; transition: opacity .1s; pointer-events: none; }
-  .box span { position: absolute; left: -1px; bottom: 100%; display: none; padding: 0 5px; font-size: 11px; white-space: nowrap; background: rgba(17, 16, 19, .88); color: var(--text); }
+  /* (zoomed in, lines and labels keep their size on screen: --z is the zoom) */
+  .box { position: absolute; border: calc(1px / var(--z)) dashed rgba(230, 223, 228, .4); opacity: 0; transition: opacity .1s; pointer-events: none; }
+  .box span { position: absolute; left: calc(-1px / var(--z)); bottom: 100%; display: none; padding: 0 calc(5px / var(--z)); font-size: calc(11px / var(--z)); white-space: nowrap; background: rgba(17, 16, 19, .88); color: var(--text); }
   .box.thing { opacity: 0; }
   #stage:hover .box.thing, .schematic .box.thing { opacity: 1; }
-  .box.hover { opacity: 1; border: 2px solid rgba(230, 223, 228, .85); background: rgba(230, 223, 228, .08); }
+  .box.hover { opacity: 1; border: calc(2px / var(--z)) solid rgba(230, 223, 228, .85); background: rgba(230, 223, 228, .08); }
   .box.hover.drag { border-style: dashed; background: rgba(232, 162, 199, .14); }
-  .box.sel { opacity: 1; border: 2px solid var(--accent); background: rgba(232, 162, 199, .14); }
+  .box.sel { opacity: 1; border: calc(2px / var(--z)) solid var(--accent); background: rgba(232, 162, 199, .14); }
   .box.sel span { color: var(--accent); }
   .box.hover span, .box.sel span { display: block; }
-  .box.guide { opacity: 1; top: 0; bottom: 0; width: 0; border: none; border-left: 1px dashed rgba(232, 162, 199, .75); }
+  .box.guide { opacity: 1; top: 0; bottom: 0; width: 0; border: none; border-left: calc(1px / var(--z)) dashed rgba(232, 162, 199, .75); }
 
   /* the sidebar: search and parts, the selection's header, a rail of categories beside one category's settings */
   aside { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--base); border-left: 1px solid var(--line); }
@@ -228,6 +232,11 @@
   .row.menuadd { display: grid; grid-template-columns: 1fr auto; gap: 6px 8px; }
   .row.menuadd > .meta, .row.menuadd > .wide { grid-column: 1 / -1; }
   .row.menuadd > .meta { color: var(--text); font-size: 12px; font-weight: 550; }
+  .row.added { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto 30px; gap: 8px; align-items: center; padding: 7px 0; }
+  .row.added .thumb { width: 22px; height: 22px; border-radius: 4px; border: 1px solid var(--line); background: var(--c, var(--field)); }
+  .row.added .meta { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row.added button { padding: 3px 9px; }
+  .row.added[aria-current="true"] .name { color: var(--accent); }
   .row.action { display: flex; flex-wrap: wrap; gap: 8px; }
   .row.action button { flex: 1; padding: 7px 10px; }
   .thing-btn { width: 100%; }
@@ -282,6 +291,7 @@
     <button id="restart" title="Quit the game and start it again, for changes the game only reads when it starts. Unsaved changes stay.">Restart game</button>
     <button id="capture" hidden>Capture game</button>
     <button id="launch" hidden>Launch game</button>
+    <button id="zoom" class="zoombtn" hidden title="Zoomed in with the mouse wheel: click for 100%">100%</button>
     <label class="gridsel" title="Dragged parts land on a grid this many units apart (a unit is the screen height / 480)">Grid
       <select id="grid"><option value="0">Off</option><option>2</option><option>4</option><option>5</option><option>8</option><option>10</option><option>16</option><option>20</option></select></label>
   </div>
@@ -327,7 +337,7 @@
       <div id="boxes"></div>
     </div>
   </main>
-  <footer class="preview-footer"><div class="msg"><span id="status">Starting...</span><span id="hint">Click a part of the game to edit it; Ctrl+click adds more.</span></div><span id="gamestate"></span></footer>
+  <footer class="preview-footer"><div class="msg"><span id="status">Starting...</span><span id="hint">Click a part of the game to edit it (again: the one under it); Ctrl+click adds more. The wheel zooms.</span></div><span id="gamestate"></span></footer>
 </section>
 <aside>
   <div class="sidebar-top">
@@ -1261,6 +1271,15 @@ async function runCheckup() {
   for (const f of files) for (const e of f.parsed.entries)
     if (e.key.toLowerCase() === 'image' && /^replay\/thumbnails\//i.test(e.value) && (await call('exists', `materials/vgui/${e.value}.vmt`)) !== '1')
       add(`${f.name}: ${e.path[1]} shows the picture ${e.value}, which isn't in the HUD.`);
+  // a menu background the editor set before 2026-09-30: no picture for the game to show while it starts
+  for (const [name] of BACKGROUNDS) {
+    const tex = (/"\$basetexture"\s*"console\/([^"]+)"/i.exec(await readHud(`materials/console/${name}.vmt`) || '') || [])[1];
+    if (tex && tex.toLowerCase() !== name && (await call('exists', `materials/console/${name}.vtf`)) !== '1')
+      add(`The game shows its own menu background for a moment while it starts (${name}.vtf isn't in the HUD).`, ['Add the first frame', async () => {
+        try { await addStartupBackground(name, tex); setDirty(true); status('Added: the game shows it while it starts. Save HUD to keep it.'); }
+        catch (err) { status(`Couldn't add it: ${err.message}`); }
+      }]);
+  }
   // the chat's own file as the editor wrote it before 2026-09-28: without the message box's size, messages wrap after
   // every word
   const chat = await readHud(UI_RES.hudchat), has = (p, b) => p.sections.some(s => s.path.length === 2 && s.path[1].toLowerCase() === b.toLowerCase());
@@ -1366,6 +1385,20 @@ function loadingRows(f) {
 // put theirs (TF2 lets that folder past sv_pure; CS:S's pure_server_full.txt doesn't name it, so on sv_pure 1/2
 // servers pictures are blocked like any material). An animated one (GIF) plays with the AnimatedTexture proxy.
 const PICTURES = 'materials/vgui/replay/thumbnails';
+// Files the editor made that may be used by nothing now (a removed or changed picture, an old menu background): they
+// go (to the Recycle Bin) when the HUD is saved, unless something uses them again by then (an undo). path -> used()
+const dropped = new Map();
+function dropPicture(image) {
+  if (!/^replay\/thumbnails\//i.test(image || '')) return; // the editor's own pictures only
+  // (the windows' files the editor hasn't opened this time too)
+  const used = async () => [...files.map(f => f.text), ...await Promise.all([...new Set([...Object.values(UI_RES), LOADING_VAC, ...Object.values(BUY_PAGES)])].filter(p => !F(p)).map(readHud))]
+    .some(t => (t || '').toLowerCase().includes(image.toLowerCase()));
+  for (const ext of ['vtf', 'vmt']) dropped.set(`materials/vgui/${image}.${ext}`, used);
+}
+async function dropUnused() {
+  for (const [path, used] of dropped) if (!(await used())) await call('remove', path).catch(err => status(`Couldn't remove ${path}: ${err.message}`));
+  dropped.clear();
+}
 const CUSTOM = {
   imagepanel: { word: 'Picture', layoutColours: [['Tint', 'drawcolor', '255 255 255 255']], settings: [['Layer', 'zpos', 'num', '1', 'Higher is in front']] },
   label: { word: 'Text', layoutColours: [['Text', 'fgcolor_override', '255 255 255 255']], fontKeys: [['Font', 'font', 'Default']],
@@ -1508,7 +1541,7 @@ function customRows(id, lay = F(L)) {
     const pick = el('input', { type: 'file', accept: 'image/png,image/jpeg,image/gif,image/webp', hidden: true });
     pick.onchange = async () => {
       if (!pick.files[0]) return;
-      try { status('Making the picture...'); save(lay, 'image', (await importPicture(pick.files[0], pictureName())).image, id); }
+      try { status('Making the picture...'); const old = p.image; save(lay, 'image', (await importPicture(pick.files[0], pictureName())).image, id); dropPicture(old); }
       catch (err) { status(`Couldn't use that picture: ${err.message}`); }
     };
     const r = el('div', { className: 'row action' });
@@ -1516,12 +1549,47 @@ function customRows(id, lay = F(L)) {
     rows.push(r);
   }
   const r = el('div', { className: 'row action' });
-  r.append(el('button', { className: 'ghost', textContent: inWindow ? 'Remove from the window' : 'Remove from the HUD', onclick: () => {
-    commit(lay, `${lay.name}/${id}/remove`, () => dropBlock(lay, [], id));
-    select(inWindow ? { ...selected, control: null, node: null } : null);
-  } }));
+  r.append(el('button', { className: 'ghost', textContent: inWindow ? 'Remove from the window' : 'Remove from the HUD', onclick: () => removeAdded(lay, id) }));
   rows.push(r);
   return rows;
+}
+// Takes an added thing out (of both loading screen files), with its edge line; its picture file goes when the HUD is
+// saved. The selection goes back to the window (or the list) if it was the thing.
+function removeAdded(lay, id) {
+  const p = layoutProps(lay, id), inWindow = lay !== F(L);
+  for (const f of lay.name === UI_RES.loadingdialog ? [lay, F(LOADING_VAC)] : [lay])
+    if (f && Object.keys(layoutProps(f, id)).length) commit(f, `${f.name}/${id}/remove`, () => dropBlock(f, [], id));
+  if (/^HudEditorEdge_/i.test(p.border || '') && F(C)) commit(F(C), `${C}/${p.border}/remove`, () => dropBlock(F(C), ['Borders'], p.border));
+  dropPicture(p.image);
+  const was = selected && (inWindow ? selected.res === lay && (ownBlock(selected) || {}).block?.toLowerCase() === id.toLowerCase() : selected.info.id === id);
+  if (was) select(inWindow ? { ...selected, control: null, node: null } : null);
+  else { writing.then(render); refreshSoon(); }
+  const what = addedName(lay, id);
+  writing.then(() => status(`${what} removed. Click Done or Save HUD to keep it that way (Ctrl+Z puts it back).`));
+}
+const addedName = (lay, id) => `${CUSTOM[(layoutProps(lay, id).controlname || '').toLowerCase()]?.word || 'Part'} ${/\d+$/.exec(id)?.[0] || ''}`.trim();
+// Everything added (pictures, texts, colour boxes), one row each: Select picks it as a click in the preview would (one
+// under other parts can't be clicked), ✕ takes it out.
+function addedList(lay = F(L)) {
+  if (!lay) return [];
+  const inWindow = lay !== F(L), win = inWindow && selected && selected.thing;
+  return lay.parsed.sections.filter(s => s.path.length === 2 && /^hudeditor_(pic|text|box)\d+$/i.test(s.path[1])).map(s => {
+    const id = s.path[1], p = layoutProps(lay, id), kind = (p.controlname || '').toLowerCase(), r = el('div', { className: 'row added' });
+    const thumb = el('span', { className: 'thumb' }), rgba = kind === 'editablepanel' ? p.bgcolor_override : kind === 'label' ? p.fgcolor_override : null;
+    if (rgba) thumb.style.setProperty('--c', `rgba(${toRgba(resolve(F(C) ? tables(F(C)) : EMPTY_TABLES, rgba) || rgba).map((x, i) => i < 3 ? x : x / 255).join(',')})`);
+    const what = kind === 'imagepanel' ? (p.image || '').split('/').pop() : kind === 'label' ? `"${p.labeltext || ''}"` : `${p.wide || '?'} × ${p.tall || '?'}`;
+    const text = el('div');
+    text.append(el('div', { className: 'name', textContent: addedName(lay, id) }), el('span', { className: 'meta', textContent: `${what} · layer ${p.zpos || '0'}` }));
+    // (a window's part as the game shows it now, else none: the window is closed or the part is off screen)
+    const panel = live && (inWindow ? win && live.panels.find(q => q.thing && q.thing.key === win.key && q.key === id.toLowerCase())
+      : live.panels.find(q => q === q.thing && q.key === id.toLowerCase()));
+    const pickIt = el('button', { textContent: 'Select', disabled: inWindow && !panel, title: panel || !inWindow ? 'Select it, as a click on it in the preview would' : 'Open the window in the game to select it' });
+    pickIt.onclick = () => { $('search').value = ''; select(inWindow ? { thing: panel.thing, info: thingInfo(panel.thing), control: controlIn(panel, panel.thing) ? panel : null, node: panel } : { thing: panel || { name: id, key: id.toLowerCase() }, info: customInfo(id), control: null }); };
+    r.setAttribute('aria-current', String(!!selected && (inWindow ? !!selected.node && selected.node.key === id.toLowerCase() : selected.info.id === id)));
+    r.append(thumb, text, pickIt, el('button', { textContent: '✕', title: `Remove ${addedName(lay, id).toLowerCase()}`, onclick: () => removeAdded(lay, id) }));
+    r.dataset.q = `added ${addedName(lay, id)} ${what}`.toLowerCase();
+    return r;
+  });
 }
 // A box's edge line is a border of its own in ClientScheme (HudEditorEdge_<box>), 1 unit on each side.
 const EDGE = id => `HudEditorEdge_${id.replace(/^hudeditor_/i, '')}`;
@@ -1545,9 +1613,9 @@ function addRows(lay = F(L)) {
   const r = el('div', { className: 'row action' });
   r.append(pick, el('button', { textContent: '+ Picture', title: 'PNG, JPG, GIF (animated too) or WebP', onclick: () => pick.click() }),
     el('button', { textContent: '+ Text', onclick: () => addToHud('text', null, lay) }), el('button', { textContent: '+ Colour box', onclick: () => addToHud('box', null, lay) }));
-  if (lay !== F(L)) { r.dataset.q = 'add picture gif text box window'; return [r]; }
+  if (lay !== F(L)) { r.dataset.q = 'add picture gif text box window'; return [...addedList(lay), r]; }
   r.dataset.q = 'add picture image gif logo text label box colour background';
-  return [r, noteRow('These go on the HUD you see while playing, in the middle of the screen, over the game (HudLayout). For a window (scoreboard, team select, class select, MOTD), open it, click it in the preview and use its "Add to this window".'),
+  return [...addedList(), r, noteRow('These go on the HUD you see while playing, in the middle of the screen, over the game (HudLayout). For a window (scoreboard, team select, class select, MOTD), open it, click it in the preview and use its Extras > "Pictures, texts and boxes".'),
     noteRow('Pictures are materials, which servers with sv_pure 1 or 2 replace with the game\'s own, so there they don\'t show. Texts, boxes, colours and fonts show everywhere.')];
 }
 
@@ -1718,17 +1786,18 @@ function clickRects(p, info, W, H) {
 // A window that covers the HUD (scoreboard, team and class select, MOTD, buy menu) is open: only it has boxes and clicks.
 const COVERING = new Set(['scores', 'team', 'class_ct', 'class_ter', 'info', 'buy_ct', 'buy_ter']);
 const covered = () => !!live && live.panels.some(p => p.thing === p && COVERING.has(p.key));
-function pickAt(fx, fy) {
+// Everything under the mouse, the one a click picks first: a click on the same spot again picks the next (a box behind
+// the scoreboard's lists, the window itself last).
+function pickAll(fx, fy) {
   if (!live) {
-    const b = boxList().boxes.filter(b => fx >= b.r.x / boxList().W && fx <= (b.r.x + b.r.w) / boxList().W && fy >= b.r.y / boxList().H && fy <= (b.r.y + b.r.h) / boxList().H)
-      .sort((a, b) => a.r.w * a.r.h - b.r.w * b.r.h)[0];
-    return b ? { thing: b.thing, info: b.info, control: null } : null;
+    return boxList().boxes.filter(b => fx >= b.r.x / boxList().W && fx <= (b.r.x + b.r.w) / boxList().W && fy >= b.r.y / boxList().H && fy <= (b.r.y + b.r.h) / boxList().H)
+      .sort((a, b) => a.r.w * a.r.h - b.r.w * b.r.h).map(b => ({ thing: b.thing, info: b.info, control: null }));
   }
   const x = fx * live.W, y = fy * live.H;
   // parts thinner than a few screen pixels (1-unit lines) get that much room round them, or no click lands on them
   const tol = 3 * live.W / Math.max(1, $('boxes').getBoundingClientRect().width);
   const inside = r => { const ex = r.w < 2 * tol ? tol : 0, ey = r.h < 2 * tol ? tol : 0; return x >= r.x - ex && y >= r.y - ey && x <= r.x + r.w + ex && y <= r.y + r.h + ey; };
-  let best = null, cover = covered();
+  const found = [], cover = covered();
   for (const p of live.panels) {
     if (!p.thing || p.w * p.h <= 0 || CONTAINERS.has(p.key) || p.key.startsWith('frame_') && p.key.endsWith('grip')) continue;
     const info = thingInfo(p.thing);
@@ -1740,19 +1809,34 @@ function pickAt(fx, fy) {
     // windows themselves or their see-through frame pieces, which span most of the screen
     const area = r.w * r.h, layer = p.module !== 'ClientDLL' ? 2 : info.kind === 'window' && p !== p.thing && /button/i.test(p.cls) ? 1 : 0;
     if (area > 0.9 * live.W * live.H && p !== p.thing) continue;
-    if (!best || layer > best.layer || (layer === best.layer && area < best.area)) best = { p, info, area, layer, r };
+    found.push({ p, info, area, layer, r });
   }
-  if (!best) return null;
-  // the control is the nearest panel (clicked one or a parent) that is a known control type; not inside HUD parts (but
-  // the chat: its filter button, scroll bar and history) or the main menu
-  let c = best.p;
-  // (the nearest one with a name: a text box's unnamed inside is the box; failing that an unnamed one, the console's text)
-  let unnamed = null;
-  while (c && c !== best.p.thing && !(controlOf(c.cls) && c.name)) { if (!unnamed && controlOf(c.cls)) unnamed = c; c = c.parent; }
-  if ((!c || c === best.p.thing) && unnamed) c = unnamed;
-  const control = (best.info.kind === 'window' && best.info.id !== 'gamemenu' || best.info.id === 'HudChat' || best.info.id === 'WinPanel_Round') && c && c !== best.p.thing ? c : null;
-  return { thing: best.p.thing, info: best.info, control, node: best.p !== best.p.thing ? best.p : null, r: best.r };
+  const hits = [], seen = new Set();
+  for (const best of found.sort((a, b) => b.layer - a.layer || a.area - b.area)) {
+    // the control is the nearest panel (clicked one or a parent) that is a known control type; not inside HUD parts (but
+    // the chat: its filter button, scroll bar and history) or the main menu
+    let c = best.p;
+    // (the nearest one with a name: a text box's unnamed inside is the box; failing that an unnamed one, the console's text)
+    let unnamed = null;
+    while (c && c !== best.p.thing && !(controlOf(c.cls) && c.name)) { if (!unnamed && controlOf(c.cls)) unnamed = c; c = c.parent; }
+    if ((!c || c === best.p.thing) && unnamed) c = unnamed;
+    const control = (best.info.kind === 'window' && best.info.id !== 'gamemenu' || best.info.id === 'HudChat' || best.info.id === 'WinPanel_Round') && c && c !== best.p.thing ? c : null;
+    const hit = { thing: best.p.thing, info: best.info, control, node: best.p !== best.p.thing ? best.p : null, r: best.r };
+    // once each: a control's inside is the control again
+    const key = pickKey(hit);
+    if (!seen.has(key)) seen.add(key), hits.push(hit);
+  }
+  return hits;
 }
+const pickAt = (fx, fy) => pickAll(fx, fy)[0] || null;
+// What a pick is, the same across panel lists: its thing and its control, else the named part clicked (a picture, a
+// box), else the thing itself.
+function partPanel(h) {
+  let part = h.control;
+  for (let q = h.node; !part && q && q !== h.thing; q = q.parent) if (q.name) part = q;
+  return part || null;
+}
+const pickKey = h => `${h.thing.key}/${partPanel(h)?.key || ''}`;
 
 // ---------- list ----------
 // The sidebar's own words (section titles, row names, descriptions) can be renamed: double-click one. Kept in this
@@ -2905,7 +2989,7 @@ function backgroundRows() {
   add.append(pick, el('button', { className: 'primary', textContent: 'Import a picture…', onclick: () => pick.click() }),
     el('button', { className: 'ghost', textContent: 'The game\'s picture', onclick: () => setBackground(null) }));
   add.dataset.q = 'background picture image wallpaper import';
-  return [add, noteRow('PNG, JPG, WebP, or an animated GIF, which moves (at half the sharpness). It is cropped to fill the screen, and shows straight away.')];
+  return [add, noteRow('PNG, JPG, WebP, or an animated GIF or WebP, which moves at its own speed (at half the sharpness; up to 120 frames: 25 to 30 a second looks smooth). It is cropped to fill the screen, and shows straight away.')];
 }
 // The background as a thing of its own (the list at the main menu, or a click on the empty background there).
 const BG_SEL = () => ({ thing: { name: 'MenuBackground', key: 'menubackground' }, info: { kind: 'window', id: 'menubg', name: 'Menu background', file: C, tag: 'Picture' }, control: null });
@@ -3041,39 +3125,123 @@ function menuRows() {
 }
 
 // The main menu background: the game stretches materials/console/background01 (4:3 screens) or
-// background01_widescreen over the screen, read once at startup. The picture is cropped to that shape and written
-// as VTF 7.2, BGR888 (no compression, so dark gradients don't band), one mip level, power-of-two sizes.
-function backgroundVtf(imgs, w, h, aspect) {
-  const cv = el('canvas', { width: w, height: h }), g = cv.getContext('2d', { willReadFrequently: true });
-  const out = new Uint8Array(80 + w * h * 3 * imgs.length), v = new DataView(out.buffer);
+// background01_widescreen over the screen. The picture is cropped to that shape and written as VTF 7.2, one mip level,
+// power-of-two sizes: BGR888 (no compression, so dark gradients don't band), or for an animation DXT1 (an eighth of
+// the size, so a smooth one fits: 25-30 frames a second instead of a few). progress(i) after each frame.
+async function backgroundVtf(imgs, w, h, aspect, dxt = false, progress = () => {}) {
+  const cv = el('canvas', { width: w, height: h }), g = cv.getContext('2d', { willReadFrequently: true }), size = dxt ? w * h / 2 : w * h * 3;
+  const out = new Uint8Array(80 + size * imgs.length), v = new DataView(out.buffer);
   out.set([86, 84, 70]); // "VTF"
   v.setUint32(4, 7, true), v.setUint32(8, 2, true), v.setUint32(12, 80, true), v.setUint16(16, w, true), v.setUint16(18, h, true);
   v.setUint32(20, 0x4 | 0x8 | 0x100 | 0x200, true); // clamp S and T, no mipmaps, no LOD
-  v.setUint16(24, imgs.length, true), v.setFloat32(48, 1, true), v.setUint32(52, 3, true); // frames, bumpmap scale, BGR888
+  v.setUint16(24, imgs.length, true), v.setFloat32(48, 1, true), v.setUint32(52, dxt ? 13 : 3, true); // frames, bumpmap scale, DXT1 or BGR888
   out[56] = 1, v.setInt32(57, -1, true), v.setUint16(63, 1, true); // one mip level, no low-res image, depth 1
   let o = 80;
-  for (const img of imgs) {
+  for (const [n, img] of imgs.entries()) {
     const iw = img.displayWidth || img.naturalWidth || img.width, ih = img.displayHeight || img.naturalHeight || img.height, sw = Math.min(iw, ih * aspect), sh = sw / aspect;
     g.imageSmoothingQuality = 'high';
     g.fillStyle = '#000';
     g.fillRect(0, 0, w, h); // black behind see-through pictures
     g.drawImage(img, (iw - sw) / 2, (ih - sh) / 2, sw, sh, 0, 0, w, h);
     const px = g.getImageData(0, 0, w, h).data;
-    for (let i = 0; i < px.length; i += 4, o += 3) out[o] = px[i + 2], out[o + 1] = px[i + 1], out[o + 2] = px[i];
+    if (dxt) dxt1(px, w, h, out, o), o += size;
+    else for (let i = 0; i < px.length; i += 4, o += 3) out[o] = px[i + 2], out[o + 1] = px[i + 1], out[o + 2] = px[i];
+    if (imgs.length > 1) { progress(n + 1); await sleep(0); }
   }
   return out;
+}
+// DXT1 (BC1): each 4x4 block is two 5:6:5 colours and, per pixel, one of them or a mix a third or two thirds of the
+// way. The two: the block's spread along its main direction (power iteration), then least squares on the picks; and
+// for its average colour, the two whose two-thirds mix is closest in each channel (FIT: smooth dark skies would
+// otherwise shift hue where 5 bits of red and blue round differently). The closest of the tries is kept.
+let FIT = null; // [5-bit, 6-bit]: per 8-bit value, the two values whose 2/3 : 1/3 mix is nearest
+function dxt1(px, w, h, out, o) {
+  FIT = FIT || [5, 6].map(bits => {
+    const m = (1 << bits) - 1, ex = v => bits === 5 ? v << 3 | v >> 2 : v << 2 | v >> 4, t = [];
+    for (let c = 0; c < 256; c++) {
+      let best = [0, 0], be = Infinity;
+      for (let a = 0; a <= m; a++) for (let b = 0; b <= m; b++) { const e = Math.abs((2 * ex(a) + ex(b)) / 3 - c); if (e < be) be = e, best = [a, b]; }
+      t.push(best);
+    }
+    return t;
+  });
+  const P = new Float32Array(48), idx = new Uint8Array(16), best = new Uint8Array(16), pal = new Float32Array(12);
+  const q = (x, m) => Math.max(0, Math.min(m, Math.round(x * m / 255)));
+  const enc = e => q(e[0], 31) << 11 | q(e[1], 63) << 5 | q(e[2], 31);
+  const dec = (c, k) => { const r = c >> 11, g = c >> 5 & 63, b = c & 31; pal[k] = r << 3 | r >> 2; pal[k + 1] = g << 2 | g >> 4; pal[k + 2] = b << 3 | b >> 2; };
+  const W = [[1, 0], [0, 1], [2 / 3, 1 / 3], [1 / 3, 2 / 3]]; // how much of each colour a pick is
+  // picks for colours c0 > c1 (four-colour mode); returns the error
+  const pick = (c0, c1) => {
+    dec(c0, 0), dec(c1, 3);
+    for (let k = 0; k < 3; k++) pal[6 + k] = (2 * pal[k] + pal[3 + k]) / 3, pal[9 + k] = (pal[k] + 2 * pal[3 + k]) / 3;
+    let err = 0;
+    for (let i = 0; i < 16; i++) {
+      let bi = 0, bd = Infinity;
+      for (let j = 0; j < 4; j++) { const dr = P[i * 3] - pal[j * 3], dg = P[i * 3 + 1] - pal[j * 3 + 1], db = P[i * 3 + 2] - pal[j * 3 + 2], d = dr * dr + dg * dg + db * db; if (d < bd) bd = d, bi = j; }
+      idx[i] = bi, err += bd;
+    }
+    return err;
+  };
+  for (let by = 0; by < h; by += 4) for (let bx = 0; bx < w; bx += 4, o += 8) {
+    const m = [0, 0, 0];
+    for (let i = 0; i < 16; i++) { const s = ((by + (i >> 2)) * w + bx + (i & 3)) * 4; for (let k = 0; k < 3; k++) m[k] += (P[i * 3 + k] = px[s + k]) / 16; }
+    const C = [0, 0, 0, 0, 0, 0]; // covariance: rr rg rb gg gb bb
+    for (let i = 0; i < 16; i++) { const r = P[i * 3] - m[0], g = P[i * 3 + 1] - m[1], b = P[i * 3 + 2] - m[2]; C[0] += r * r, C[1] += r * g, C[2] += r * b, C[3] += g * g, C[4] += g * b, C[5] += b * b; }
+    let a = [1, 1, 1];
+    for (let it = 0; it < 6; it++) {
+      const n = [C[0] * a[0] + C[1] * a[1] + C[2] * a[2], C[1] * a[0] + C[3] * a[1] + C[4] * a[2], C[2] * a[0] + C[4] * a[1] + C[5] * a[2]], len = Math.hypot(...n);
+      if (len < 1e-6) break;
+      a = n.map(x => x / len);
+    }
+    let lo = Infinity, hi = -Infinity;
+    for (let i = 0; i < 16; i++) { const t = (P[i * 3] - m[0]) * a[0] + (P[i * 3 + 1] - m[1]) * a[1] + (P[i * 3 + 2] - m[2]) * a[2]; lo = Math.min(lo, t), hi = Math.max(hi, t); }
+    let e0 = m.map((x, k) => x + a[k] * hi), e1 = m.map((x, k) => x + a[k] * lo), c0 = 0, c1 = 0, bestErr = Infinity;
+    for (let tr = 0; tr < 3; tr++) {
+      let x0 = enc(e0), x1 = enc(e1);
+      if (x0 < x1) [x0, x1] = [x1, x0];
+      if (x0 === x1) { if (x0 < 0xffff) x0++; else x1--; } // (equal ones mean three colours and black)
+      const err = pick(x0, x1);
+      if (err < bestErr) bestErr = err, c0 = x0, c1 = x1, best.set(idx);
+      // least squares: the two colours that best make the pixels from these picks
+      let aa = 0, ab = 0, bb = 0;
+      const ap = [0, 0, 0], bp = [0, 0, 0];
+      for (let i = 0; i < 16; i++) { const [wa, wb] = W[idx[i]]; aa += wa * wa, ab += wa * wb, bb += wb * wb; for (let k = 0; k < 3; k++) ap[k] += wa * P[i * 3 + k], bp[k] += wb * P[i * 3 + k]; }
+      const det = aa * bb - ab * ab;
+      if (Math.abs(det) < 1e-6) break;
+      e0 = ap.map((x, k) => (bb * x - ab * bp[k]) / det), e1 = bp.map((x, k) => (aa * x - ab * ap[k]) / det);
+    }
+    // the average colour, made by a two-thirds mix
+    const [fr, fg, fb] = [FIT[0][Math.round(m[0])], FIT[1][Math.round(m[1])], FIT[0][Math.round(m[2])]];
+    let x0 = fr[0] << 11 | fg[0] << 5 | fb[0], x1 = fr[1] << 11 | fg[1] << 5 | fb[1];
+    if (x0 < x1) [x0, x1] = [x1, x0];
+    if (x0 === x1) { if (x0 < 0xffff) x0++; else x1--; }
+    const err = pick(x0, x1);
+    if (err < bestErr) bestErr = err, c0 = x0, c1 = x1, best.set(idx);
+    out[o] = c0 & 255, out[o + 1] = c0 >> 8, out[o + 2] = c1 & 255, out[o + 3] = c1 >> 8;
+    for (let r = 0; r < 4; r++) out[o + 4 + r] = best[r * 4] | best[r * 4 + 1] << 2 | best[r * 4 + 2] << 4 | best[r * 4 + 3] << 6;
+  }
 }
 const base64 = bytes => new Promise(res => {
   const r = new FileReader();
   r.onload = () => res(r.result.slice(r.result.indexOf(',') + 1));
   r.readAsDataURL(new Blob([bytes]));
 });
-// An animated picture (GIF...) plays too, at half the size (every frame is a full picture in the file).
+// An animated picture (GIF, WebP...) plays too, at half the size (every frame is a full picture in the file).
+// While the game starts it draws the texture with the material's own name (console/background01_widescreen), not the
+// material: without one in the HUD, the game's own picture shows for a moment first. That one is the first frame, at
+// half the size.
+const BACKGROUNDS = [['background01', 4 / 3], ['background01_widescreen', 16 / 9]];
+const bgVmt = (tex, proxies = '') => `"UnlitGeneric"\n{\n\t"$basetexture"\t"console/${tex}"\n\t"$vertexcolor"\t"1"\n\t"$vertexalpha"\t"1"\n`
+  + `\t"$ignorez"\t"1"\n\t"$no_fullbright"\t"1"\n\t"$nolod"\t"1"\n${proxies}}\n`;
+const bgUses = (name, tex) => async () => new RegExp(`console/${tex}"`, 'i').test(await readHud(`materials/console/${name}.vmt`) || '');
 async function setBackground(file) {
-  if (!file) { // the game's own pictures again (its textures have the materials' names)
+  if (!file) { // the game's own pictures again (its textures have the materials' names: the HUD's go when it's saved)
     try {
-      for (const name of ['background01', 'background01_widescreen'])
-        await call('write', `materials/console/${name}.vmt`, `"UnlitGeneric"\n{\n\t"$basetexture"\t"console/${name}"\n\t"$vertexcolor"\t"1"\n\t"$vertexalpha"\t"1"\n\t"$ignorez"\t"1"\n\t"$no_fullbright"\t"1"\n\t"$nolod"\t"1"\n}\n`);
+      for (const [name] of BACKGROUNDS) {
+        await call('write', `materials/console/${name}.vmt`, bgVmt(name));
+        for (const tex of [`${name}_a`, `${name}_b`]) dropped.set(`materials/console/${tex}.vtf`, bgUses(name, tex));
+        dropped.set(`materials/console/${name}.vtf`, async () => false); // (set a picture again: it's kept)
+      }
       await call('cmd', '', 'mat_reloadmaterial background01').catch(() => {});
       setDirty(true);
       status('The game\'s background is back. Click Done or Save HUD to keep it.');
@@ -3082,24 +3250,42 @@ async function setBackground(file) {
   }
   try {
     const frames = await pictureFrames(file), imgs = frames.map(f => f.image), anim = imgs.length > 1;
-    const ms = frames.reduce((s, f) => s + (f.ms || 100), 0) / frames.length, fps = Math.max(1, Math.min(30, Math.round(1000 / ms)));
+    const ms = frames.reduce((s, f) => s + (f.ms || 100), 0) / frames.length, fps = Math.max(1, Math.min(60, Math.round(1000 / ms)));
     const proxies = anim ? `\t"Proxies"\n\t{\n\t\t"AnimatedTexture"\n\t\t{\n\t\t\t"animatedtexturevar"\t"$basetexture"\n\t\t\t"animatedtextureframenumvar"\t"$frame"\n\t\t\t"animatedtextureframerate"\t"${fps}"\n\t\t}\n\t}\n` : '';
     status('Making the background...');
-    for (const [name, w, h, aspect] of [['background01', anim ? 512 : 1024, anim ? 512 : 1024, 4 / 3], ['background01_widescreen', anim ? 1024 : 2048, anim ? 512 : 1024, 16 / 9]]) {
+    for (const [i, [name, aspect]] of BACKGROUNDS.entries()) {
+      const h = anim ? 512 : 1024, w = aspect > 1.5 ? 2 * h : h;
       // the picture goes under a name the running game hasn't loaded (it keeps a texture once loaded), taking turns
-      // between two so old ones don't pile up; the material the game asks for points at it
-      const vmt = `materials/console/${name}.vmt`, tex = new RegExp(`${name}_a"`).test(await readHud(vmt) || '') ? `${name}_b` : `${name}_a`;
-      await call('writebin', `materials/console/${tex}.vtf`, await base64(backgroundVtf(imgs, w, h, aspect)));
-      await call('write', vmt, `"UnlitGeneric"\n{\n\t"$basetexture"\t"console/${tex}"\n\t"$vertexcolor"\t"1"\n\t"$vertexalpha"\t"1"\n`
-        + `\t"$ignorez"\t"1"\n\t"$no_fullbright"\t"1"\n\t"$nolod"\t"1"\n${proxies}}\n`);
+      // between two (the other goes when the HUD is saved); the material the game asks for points at it
+      const vmt = `materials/console/${name}.vmt`, [tex, old] = new RegExp(`${name}_a"`).test(await readHud(vmt) || '') ? [`${name}_b`, `${name}_a`] : [`${name}_a`, `${name}_b`];
+      const vtf = await backgroundVtf(imgs, w, h, aspect, anim, n => status(`Making the background: frame ${n} of ${imgs.length}${i ? ', 4:3 screens' : ''}...`));
+      await call('writebin', `materials/console/${tex}.vtf`, await base64(vtf));
+      await call('write', vmt, bgVmt(tex, proxies));
+      dropped.set(`materials/console/${old}.vtf`, bgUses(name, old));
+      // what the game shows while it starts
+      await call('writebin', `materials/console/${name}.vtf`, await base64(await backgroundVtf(imgs.slice(0, 1), anim ? w : w / 2, anim ? h : h / 2, aspect)));
+      dropped.delete(`materials/console/${name}.vtf`);
     }
     imgs.forEach(i => i.close?.());
     await call('cmd', '', 'mat_reloadmaterial background01').catch(() => {});
     setDirty(true);
-    status(`Background set${anim ? `, ${imgs.length} frames moving` : ''}. Click Done or Save HUD to keep it.`);
+    status(`Background set${anim ? `, ${imgs.length} frames at ${fps} a second` : ''}. Click Done or Save HUD to keep it.`);
   } catch (err) {
     status(`Couldn't use that picture: ${err.message}`);
   }
+}
+// A background set before the editor wrote the startup picture (2026-09-30): its first frame, from its own file
+// (BGR888, as the editor wrote them then), at most 1024 wide.
+async function addStartupBackground(name, tex) {
+  const head = Uint8Array.from(atob(await call('readbin', `materials/console/${tex}.vtf`, '80')), c => c.charCodeAt(0)), v = new DataView(head.buffer);
+  const w = v.getUint16(16, true), h = v.getUint16(18, true), at = v.getUint32(12, true);
+  if (v.getUint32(52, true) !== 3) throw new Error(`${tex}.vtf isn't a kind the editor reads: set the background again`);
+  const b = Uint8Array.from(atob(await call('readbin', `materials/console/${tex}.vtf`, String(at + w * h * 3))), c => c.charCodeAt(0)).subarray(at);
+  const cv = el('canvas', { width: w, height: h }), px = new ImageData(w, h);
+  for (let i = 0, o = 0; i < w * h * 3; i += 3, o += 4) px.data[o] = b[i + 2], px.data[o + 1] = b[i + 1], px.data[o + 2] = b[i], px.data[o + 3] = 255;
+  cv.getContext('2d').putImageData(px, 0, 0);
+  const s = w > 1024 ? 2 : 1;
+  await call('writebin', `materials/console/${name}.vtf`, await base64(await backgroundVtf([cv], w / s, h / s, w / h)));
 }
 
 // Everything editable for a selection, as [title, rows, kind]: colours, fonts, borders, layout (places and sizes), then
@@ -3117,7 +3303,7 @@ function selectionSections(sel) {
   // what was clicked, on its own: its position and its own colours over the shared ones below, named as it is in its
   // file (these menus read their .res only when the game makes them; the scoreboard and spectator bars read it on a reload)
   if (own) {
-    const p = layoutProps(sel.res, own.block), name = /^hudeditor/i.test(own.block) && p.labeltext ? `"${p.labeltext}"` : prettify(own.block);
+    const p = layoutProps(sel.res, own.block), name = partName(sel) || (/^hudeditor/i.test(own.block) && p.labeltext ? `"${p.labeltext}"` : prettify(own.block));
     add('colour', `${name}: this ${own.what} only`, [
       noteRow(`Only ${name}${name !== own.block ? ` (${own.block})` : ''} in ${sel.res.name.split('/').pop()} changes here. Further down: the colours ${own.what === 'part' ? 'it shares with others like it' : `every ${own.what} shares`}.`),
       ...(STARTUP_RES.has(info.id) ? [noteRow('The buy menu reads its own settings when the game makes it: these show after a game restart. The shared colours and fonts below change straight away.')] : []),
@@ -3159,7 +3345,7 @@ function selectionSections(sel) {
       const p = layoutProps(sel.res, b), what = { MessageTitle: 'Title', HTMLMessage: 'Web page message', TextMessage: 'Text message', ok: 'OK' }[b];
       return Object.keys(p).length ? POS.map(([k, l]) => numRow(sel.res, b, k, `${what}: ${l.replace(' position', '')}`, p[k])) : [];
     }));
-    if (ADD_WINDOWS.has(info.id) && sel.res) add('other', 'Add to this window', addRows(sel.res));
+    if (ADD_WINDOWS.has(info.id) && sel.res) add('other', 'Pictures, texts and boxes', addRows(sel.res));
     if (info.id !== 'loadingdialog') add('other', `${info.name}: show or hide parts`, windowPartRows(sel)); // its own rows do both files
     // the MOTD, team and class select: the game centres one its .res places at 0,0 (as its own files do), its box at the
     // top of the screen; any other place is used as it is (checked in game). Its box is the panels named ...solid.
@@ -3311,8 +3497,17 @@ function keysTip(head, rows) {
 const CATEGORIES = [['colour', 'Colours'], ['font', 'Fonts'], ['border', 'Borders'], ['layout', 'Layout'], ['other', 'Extras']];
 let category = 'colour', openParts = false;
 try { category = localStorage.getItem('category') || 'colour'; } catch {}
+// A part of a window picked on its own (an added picture or box, the scoreboard's background box): its name, as the
+// list of added things calls it, for the selection's heading.
+function partName(s) {
+  const own = s.res && s.node && ownBlock(s);
+  if (!own || (s.control && !/^hudeditor/i.test(own.block))) return null;
+  const p = layoutProps(s.res, own.block);
+  return /^hudeditor_(pic|text|box)\d+$/i.test(own.block) ? addedName(s.res, own.block) : own.block === SB_BOX ? 'Colour box behind the scoreboard'
+    : p.labeltext && /^hudeditor/i.test(own.block) ? `"${p.labeltext}"` : prettify(own.block);
+}
 // Under the selection's name: what it is.
-const subtitle = s => s.control ? `${controlIn(s.control, s.thing)[1]}${s.control.name ? ` "${s.control.name}"` : ''}`
+const subtitle = s => partName(s) ? `In ${s.info.name} · ${ownBlock(s).block}` : s.control ? `${controlIn(s.control, s.thing)[1]}${s.control.name ? ` "${s.control.name}"` : ''}`
   : s.info.kind === 'hud' ? `HUD part · ${s.info.id}` : `${s.info.tag || 'Window'}${s.thing.name ? ` · ${s.thing.name}` : ''}`;
 // A section's heading under its category: without the selection's name or the category's word in front ("Health:
 // settings" is "Settings"); none where it is only the name again.
@@ -3389,9 +3584,12 @@ function renderList() {
     list.classList.add('picked');
     $('parts').append(partsFold());
     const head = el('div', { className: 'selected-head' }), titles = el('div', { className: 'titles' });
-    const back = el('button', { className: 'back', textContent: '‹', title: 'Back to the list (changes stay unsaved until Save HUD)', onclick: () => select(null) });
+    // (from a part of a window: back to the window)
+    const up = (selected.control || selected.node) && selected.info.kind === 'window';
+    const back = el('button', { className: 'back', textContent: '‹', title: up ? `Back to ${selected.info.name}` : 'Back to the list (changes stay unsaved until Save HUD)',
+      onclick: () => select(up ? { ...selected, control: null, node: null } : null) });
     back.setAttribute('aria-label', 'Back to the list');
-    titles.append(el('h2', { textContent: selected.info.name }), el('p', { textContent: subtitle(selected) }));
+    titles.append(el('h2', { textContent: partName(selected) || selected.info.name }), el('p', { textContent: subtitle(selected) }));
     head.append(back, titles);
     const hide = hideButton(selected);
     if (hide) head.append(hide);
@@ -3458,8 +3656,11 @@ function renderList() {
   // at the main menu, its background is a thing of its own too (clicking the empty background selects it as well)
   if (menuUp()) parts.push(partRow({ thing: BG_SEL().thing, info: BG_SEL().info }));
   list.append(card(live ? 'On screen now' : 'HUD parts', parts));
-  // only while playing: what it adds is part of the HUD in a map (windows have their own, see addRows)
+  // adding only while playing: what it adds is part of the HUD in a map (windows have their own, see addRows); what's
+  // been added is listed anyway
+  const added = F(L) ? addedList() : [];
   if (F(L) && live && live.panels.some(p => p.module === 'ClientDLL' && HUD[p.name])) list.append(card('Add to the HUD', addRows()));
+  else if (added.length) list.append(card('Added to the HUD', [...added, noteRow('In a map (Test server) they show, and more can be added.')]));
   const screens = el('div', { className: 'row action' });
   screens.append(el('button', { textContent: 'Loading screen', title: 'The box that shows while a map loads', onclick: async () => { await uiFile(LOADING_VAC); select(LOADING_SEL()); } }),
     el('button', { textContent: 'Bomb screen', title: 'The C4\'s little screen', onclick: async () => { await uiFile(C4); select(C4_SEL()); } }));
@@ -3495,6 +3696,7 @@ function boxList() {
         if (r.w * r.h <= 0.9 * live.W * live.H && r.x < live.W && r.y < live.H && r.x + r.w > 0 && r.y + r.h > 0) boxes.push({ thing: p, info, r, cls: 'thing' });
     }
     for (const s of [sel, ...also]) if (s && s.control) boxes.push({ thing: s.thing, info: s.info, r: s.control, cls: 'sel', label: controlIn(s.control, s.thing)[1] });
+      else if (s && partName(s) && partPanel(s)) boxes.push({ thing: s.thing, info: s.info, r: partPanel(s), cls: 'sel', label: partName(s) }); // (a window's picture, box...)
     return { W: live.W, H: live.H, boxes };
   }
   const v = $('video'), W = v.hidden ? 1920 : v.width || 1920, H = v.hidden ? 1080 : v.height || 1080;
@@ -3507,7 +3709,7 @@ function drawBoxes() {
   $('stage').style.setProperty('--aspect', W / H);
   host.innerHTML = '';
   for (const b of boxes) {
-    const isSel = selected && (b.cls === 'sel' || [selected, ...also].some(s => !s.control && s.info.id === b.info.id && s.thing.key === b.thing.key));
+    const isSel = selected && (b.cls === 'sel' || [selected, ...also].some(s => !s.control && !partName(s) && s.info.id === b.info.id && s.thing.key === b.thing.key));
     const d = el('div', { className: `box ${b.cls}${isSel ? ' sel' : ''}` });
     Object.assign(d.style, { left: `${b.r.x / W * 100}%`, top: `${b.r.y / H * 100}%`, width: `${b.r.w / W * 100}%`, height: `${b.r.h / H * 100}%` });
     d.append(el('span', { textContent: b.label || b.info.name }));
@@ -3564,7 +3766,7 @@ const gridded = v => { const m = /^([rc]?)(-?[\d.]+)$/i.exec(v ?? ''); return !g
 function showGrid(t) {
   const box = $('boxes');
   if (!grid || !t) { box.style.backgroundImage = ''; return; }
-  const k = box.getBoundingClientRect().width / live.W, step = grid * t.s * k, line = 'rgba(232, 162, 199, .22)';
+  const k = box.offsetWidth / live.W, step = grid * t.s * k, line = 'rgba(232, 162, 199, .22)'; // (in the preview's own pixels, zoomed with it)
   const origin = (key, full) => {
     const a = (/^\s*([rc]?)/i.exec(t.p[key] || '') || [, ''])[1].toLowerCase();
     if (a === 'c') return full / 2;
@@ -3622,8 +3824,12 @@ $('boxes').onmousedown = e => {
   // (no text selection: dragging selected text starts the browser's own drag, which keeps the mouse-up from us)
   e.preventDefault();
   document.activeElement?.blur(); // (what focus would have done: arrow keys nudge, not type)
-  const hit = pickAt(...stagePoint(e));
-  if (hit && movable(hit)) drag = { at: stagePoint(e), hit, rect: hitRect(hit), moved: false, target: undefined };
+  // the selection moves when it's under the mouse, even under something else (picked by clicking again)
+  // (or one of the parts Ctrl+clicked with it: they all move)
+  const group = [selected, ...also].filter(Boolean).map(pickKey);
+  const hits = pickAll(...stagePoint(e)), mine = hits.find(h => movable(h) && group.includes(pickKey(h))), hit = mine || hits[0];
+  if (hit && movable(hit)) drag = { at: stagePoint(e), hit, rect: hitRect(hit), moved: false, target: undefined, others: [] };
+  else if (zoom.z > 1) pan = { x: e.clientX - zoom.x, y: e.clientY - zoom.y, moved: false }; // zoomed in: the empty game moves the view
 };
 window.addEventListener('mousemove', e => {
   if (!drag) return;
@@ -3632,10 +3838,15 @@ window.addEventListener('mousemove', e => {
     if (Math.hypot(dx, dy) < 6) return;
     drag.moved = true;
     const d = drag;
-    // the part becomes the selection (its window file loads with it), then it can move
+    // the part becomes the selection (its window file loads with it), then it can move; one of a Ctrl+click group
+    // moves the group, each the same distance
     (async () => {
-      if (!sameSel(selected, d.hit)) { $('search').value = ''; await select(d.hit); }
-      d.target = moveTarget(selected);
+      const group = [selected, ...also].filter(Boolean), mine = also.length && group.find(s => pickKey(s) === pickKey(d.hit));
+      if (mine) { d.target = moveTarget(mine); d.others = group.filter(s => s !== mine).map(moveTarget).filter(Boolean); }
+      else {
+        if (!sameSel(selected, d.hit)) { $('search').value = ''; await select(d.hit); }
+        d.target = moveTarget(selected);
+      }
       if (!d.target) { status('This one can\'t be moved: the game places it itself.'); if (drag === d) drag = null; }
     })();
   }
@@ -3653,6 +3864,10 @@ window.addEventListener('mousemove', e => {
   if (hb) { hb.hidden = false; hb.classList.add('drag'); place(hb, { ...drag.rect, x: drag.rect.x + at('xpos', 'x', x), y: drag.rect.y + at('ypos', 'y', y) }); }
   if (x !== null) t.put('xpos', x);
   if (y !== null) t.put('ypos', y);
+  for (const o of drag.others) for (const [key, pos, v] of [['xpos', 'x', x], ['ypos', 'y', y]]) {
+    const nv = v === null || (key === 'xpos' && o.lockX) ? null : shifted(o.p[key], Math.round(at(key, pos, v) / o.s));
+    if (nv !== null) o.put(key, nv);
+  }
 });
 window.addEventListener('mouseup', () => {
   if (!drag) return;
@@ -3662,23 +3877,32 @@ window.addEventListener('mouseup', () => {
   $('hoverbox')?.classList.remove('drag');
 });
 $('boxes').onmousemove = e => {
-  const hit = pickAt(...stagePoint(e)), hb = $('hoverbox');
-  $('boxes').style.cursor = hit && movable(hit) ? 'move' : '';
+  const hits = pickAll(...stagePoint(e)), hit = hits[0], hb = $('hoverbox');
+  $('boxes').style.cursor = pan ? 'grabbing' : hit && movable(hit) ? 'move' : zoom.z > 1 ? 'grab' : '';
   if (!hb || drag?.moved) return;
   hb.hidden = !hit;
   if (!hit) return;
   const { W, H } = boxList();
   const r = live ? (hit.control || (hit.node ? clickRects(hit.thing, hit.info, W, H)[0] : hit.r)) : rectOf(layoutProps(F(L), hit.info.id), W, H, hit.info.hud.hit);
   Object.assign(hb.style, { left: `${r.x / W * 100}%`, top: `${r.y / H * 100}%`, width: `${r.w / W * 100}%`, height: `${r.h / H * 100}%` });
-  hb.firstChild.textContent = hit.control ? `${hit.info.name} › ${controlIn(hit.control, hit.thing)[1]}` : hit.info.name;
+  // (an added part in a window is named as in the list: "Colour box 4")
+  const own = hit.node && /^hudeditor_(pic|text|box)\d+$/i.test(hit.node.name) && UI_RES[hit.thing.key] && F(UI_RES[hit.thing.key]);
+  const name = own ? `${hit.info.name} › ${addedName(own, hit.node.name)}` : hit.control ? `${hit.info.name} › ${controlIn(hit.control, hit.thing)[1]}` : hit.info.name;
+  hb.firstChild.textContent = hits.length > 1 ? `${name}  ·  click again: ${hits.length - 1} more under it` : name;
 };
 $('boxes').onmouseleave = () => { if ($('hoverbox') && !drag) $('hoverbox').hidden = true; };
 $('boxes').ondragstart = e => e.preventDefault();
 // a drag ends with a click too: that one mustn't pick something else. Ctrl+click adds a part to the selection (or takes
 // it out), to line them up or move them together.
+let lastClick = null; // where the last click in the preview was (screen pixels)
 $('boxes').onclick = async e => {
   if (Date.now() - dragEnded < 300) return;
-  const hit = pickAt(...stagePoint(e));
+  const hits = pickAll(...stagePoint(e)), again = lastClick && Math.hypot(e.clientX - lastClick[0], e.clientY - lastClick[1]) < 6;
+  lastClick = [e.clientX, e.clientY];
+  let hit = hits[0] || null;
+  // the same spot again: the next one under it, round to the top again after the last
+  const at = again && selected && !e.ctrlKey ? hits.findIndex(h => pickKey(h) === pickKey(selected)) : -1;
+  if (at >= 0) hit = hits[(at + 1) % hits.length];
   if (hit && e.ctrlKey && selected && !sameSel(hit, selected)) {
     if (!movable(hit)) return status('That one can\'t be moved: the game places it itself.');
     const i = also.findIndex(a => sameSel(a, hit));
@@ -3690,6 +3914,42 @@ $('boxes').onclick = async e => {
   if (hit) { $('search').value = ''; select(hit); }
   else if (menuUp()) { $('search').value = ''; select(BG_SEL()); } // the main menu's empty background
 };
+
+// ---------- zoom: the mouse wheel over the preview zooms in and out where the mouse is ----------
+// Zoomed in, dragging the middle button (or the left one where nothing moves) moves the view; the button with the
+// zoom in the toolbar goes back to 100%. The game's frames come at full size then (they're halved over 2000 px wide).
+let zoom = { z: 1, x: 0, y: 0 }, pan = null, fullFrames = false;
+function setZoom(z, x, y) {
+  const s = $('stage'), w = s.offsetWidth, h = s.offsetHeight;
+  z = clamp(z, 1, 8);
+  zoom = { z, x: clamp(x, w - z * w, 0), y: clamp(y, h - z * h, 0) }; // (the zoomed game always fills the space it had)
+  s.style.transform = z === 1 ? '' : `translate(${zoom.x}px, ${zoom.y}px) scale(${z})`;
+  s.style.setProperty('--z', z);
+  s.classList.toggle('sharp', z >= 2.5); // game pixels as squares
+  $('zoom').hidden = z === 1;
+  $('zoom').textContent = `${Math.round(z * 100)}%`;
+  if (host && (z > 1.2) !== fullFrames) { fullFrames = z > 1.2; call('capturefull', fullFrames ? '1' : '0').catch(() => {}); }
+}
+$('preview').addEventListener('wheel', e => {
+  e.preventDefault();
+  const r = $('stage').getBoundingClientRect(), z = clamp(zoom.z * Math.exp(-e.deltaY * 0.002), 1, 8);
+  // the point under the mouse stays under it
+  const px = (e.clientX - r.left) / zoom.z, py = (e.clientY - r.top) / zoom.z;
+  setZoom(z, e.clientX - (r.left - zoom.x) - z * px, e.clientY - (r.top - zoom.y) - z * py);
+}, { passive: false });
+$('preview').addEventListener('mousedown', e => {
+  if (e.button !== 1 || zoom.z === 1) return;
+  e.preventDefault(); // (not the browser's scrolling with the middle button)
+  pan = { x: e.clientX - zoom.x, y: e.clientY - zoom.y, moved: true };
+});
+window.addEventListener('mousemove', e => {
+  if (!pan) return;
+  pan.moved = pan.moved || Math.hypot(e.clientX - zoom.x - pan.x, e.clientY - zoom.y - pan.y) > 4;
+  if (pan.moved) setZoom(zoom.z, e.clientX - pan.x, e.clientY - pan.y);
+});
+window.addEventListener('mouseup', () => { if (pan && pan.moved) dragEnded = Date.now(); pan = null; }); // (a pan ends with a click: not a pick)
+window.addEventListener('resize', () => setZoom(zoom.z, zoom.x, zoom.y));
+$('zoom').onclick = () => setZoom(1, 0, 0);
 
 // ---------- nudging and lining up ----------
 // Parts Ctrl+clicked with the selection. Arrow keys move them all 1 unit (Shift: 10); the Line up buttons move the
@@ -3917,6 +4177,7 @@ async function openHud(path) {
     $('hudbtn').textContent = hudName;
     selected = null;
     undoSteps.length = 0;
+    dropped.clear();
     for (const k in opened) delete opened[k]; // ↶ goes back to this HUD as opened
     chatResOk = false;
     setDirty(false);
@@ -3936,6 +4197,7 @@ async function saveHud() {
   await sleep(300);
   await writing;
   try {
+    await dropUnused();
     const n = +(await call('save'));
     setDirty(false);
     status(n ? `Saved ${n} file${n > 1 ? 's' : ''} in ${hudName}.` : `Nothing to save: ${hudName} is as it was.`);
@@ -4061,7 +4323,7 @@ async function start() {
 
 // ---------- self-check: open index.html#test (parser), or run CSSHudEditor.exe --selftest <empty folder> (exe bridge) ----------
 const check = (ok, what) => { if (!ok) throw new Error('self-check failed: ' + what); };
-function parserCheck() {
+async function parserCheck() {
   const src = '#base "base.res"\nScheme\n{\n\tColors\n\t{\n\t\t"A"\t"1 2 3 4"\n\t}\n\tBaseSettings\n\t{\n\t\tX\t"A"\n\t\t"Y"\t"9 9 9 9" [$X360]\n\t\t"Y"\t"5 5 5 5" [$WIN32]\n\t}\n}\n';
   const f = { name: 't', text: src, parsed: parse(src), bases: [parse('Scheme { BaseSettings { "Z" "7 7 7 255" } }')] };
   const t = tables(f);
@@ -4078,7 +4340,13 @@ function parserCheck() {
   check(gmItems.length === 11 && menuName(gmItems[3]) === '(gap)' && menuText(gmItems) === GAME_MENU, 'game menu buttons read and written back unchanged');
   const cv = el('canvas', { width: 2, height: 1 }), g = cv.getContext('2d');
   g.fillStyle = '#ff0000', g.fillRect(0, 0, 1, 1), g.fillStyle = '#0000ff', g.fillRect(1, 0, 1, 1);
-  const tex = backgroundVtf([cv], 2, 1, 2), dv = new DataView(tex.buffer), anim = backgroundVtf([cv, cv], 2, 1, 2);
+  const tex = await backgroundVtf([cv], 2, 1, 2), dv = new DataView(tex.buffer), anim = await backgroundVtf([cv, cv], 2, 1, 2);
+  const dx = el('canvas', { width: 4, height: 4 }), dg = dx.getContext('2d');
+  dg.fillStyle = '#ff0000', dg.fillRect(0, 0, 2, 4), dg.fillStyle = '#0000ff', dg.fillRect(2, 0, 2, 4);
+  const dt = await backgroundVtf([dx, dx], 4, 4, 1, true), dd = new DataView(dt.buffer), ends = [dd.getUint16(80, true), dd.getUint16(82, true)];
+  const dxPick = i => ends[dt[84 + (i >> 2)] >> (i & 3) * 2 & 3];
+  check(dt.length === 96 && dd.getUint32(52, true) === 13 && ends.includes(0xf800) && ends.includes(0x001f) && dxPick(0) === 0xf800 && dxPick(13) === 0xf800 && dxPick(3) === 0x001f && dxPick(14) === 0x001f
+    && [...dt.slice(88, 96)].join() === [...dt.slice(80, 88)].join(), `animated background as DXT1: two colours and each pixel's pick, 8 bytes a block (${[...dt.slice(80, 88)]})`);
   check(tex.length === 86 && dv.getUint32(52, true) === 3 && dv.getUint16(16, true) === 2 && tex[82] === 255 && tex[83] === 255, 'background texture: header, BGR order');
   check(coord('c+10', 100, 1, true) === 60 && coord('c-10', 100, 1, true) === 40 && shifted('c+166', -22) === 'c144', 'positions written "c+N" read and move');
   check(anim.length === 92 && new DataView(anim.buffer).getUint16(24, true) === 2 && anim[88] === 255, 'animated background: frame count, frames one after another');
@@ -4161,6 +4429,8 @@ function parserCheck() {
   hit = at(600, 1110);
   check(hit && hit.info.name === 'Server message (MOTD)' && hit.control && controlOf(hit.control.cls)[1] === 'Button' && schemeOf(hit.control) === C, 'click the MOTD OK button');
   hit = at(600, 370);
+  const stack = pickAll(600 / 2560, 370 / 1440).map(h => pickKey(h));
+  check(stack.join() === 'info/urban,info/textmessage,info/', `click again: what's under it, each once, the window last (${stack})`);
   const res = { name: 'r', text: '', parsed: parse('"Resource/UI/x.res" { "urban" { "fgcolor_override" "1 2 3 255" "xpos" "10" } }'), bases: [] };
   const own = ownBlock({ ...hit, res });
   check(own && own.block === 'urban' && own.what === 'button' && resRows(res, own.block, own.defaults, C).length === 3, 'the clicked control\'s own .res block (text, x and y position)');
@@ -4214,11 +4484,11 @@ function parserCheck() {
   const vt = pictureVtf([new Uint8ClampedArray([1, 2, 3, 4, 5, 6, 7, 8]), new Uint8ClampedArray(8)], 2, 1), vd = new DataView(vt.buffer);
   check(vt.length === 96 && vd.getUint32(52, true) === 12 && vd.getUint16(24, true) === 2 && [...vt.slice(80, 88)].join() === '3,2,1,4,7,6,5,8', 'pictures are written as BGRA VTFs, one frame after another');
 }
-if (location.hash === '#test') { try { parserCheck(); status('Self-check passed.'); } catch (err) { status(err.message); } }
+if (location.hash === '#test') parserCheck().then(() => status('Self-check passed.'), err => status(err.message));
 else if (host && location.hash !== '#hosttest') start();
 if (host && location.hash === '#hosttest') (async () => {
   try {
-    parserCheck();
+    await parserCheck();
     const path = await call('new', 'myhud');
     await openHud(path);
     check(hudName === 'myhud' && F(C) && F(S) && F(L) && F(L).defaultText && F(L).bases.length === 1 && F(CH).defaultText && F(CH).bases.length === 1, 'new HUD opens, with the game\'s HudLayout and ChatScheme');

@@ -134,6 +134,21 @@ static string Unbase64( const wstring &s )
 	}
 	return out;
 }
+static wstring Base64( const string &s )
+{
+	const char *t = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+	wstring out;
+	for ( size_t i = 0; i < s.size(); i += 3 )
+	{
+		size_t n = std::min< size_t >( 3, s.size() - i );
+		unsigned v = 0;
+		for ( size_t k = 0; k < 3; ++k )
+			v = v << 8 | ( k < n ? (BYTE)s[i + k] : 0 );
+		for ( size_t k = 0; k < 4; ++k )
+			out += k <= n ? (wchar_t)t[v >> ( 18 - 6 * k ) & 63] : L'=';
+	}
+	return out;
+}
 
 // Maps "resource/ClientScheme.res" to a path inside the HUD; refuses anything that could leave it.
 static bool InHud( const wstring &rel, wstring &out )
@@ -590,6 +605,7 @@ static struct
 	BYTE *mem = NULL;
 	UINT w = 0, h = 0, seq = 0, wantW = 0, wantH = 0;
 	ULONGLONG last = 0;
+	bool full = false; // not halved: the page zoomed in
 } g_cap;
 
 static void CopyFrame( wgc::Direct3D11CaptureFrame const &frame )
@@ -605,7 +621,7 @@ static void CopyFrame( wgc::Direct3D11CaptureFrame const &frame )
 	if ( now - g_cap.last < 25 )
 		return;
 	g_cap.last = now;
-	UINT cw = size.Width, ch = size.Height, s = cw > 2000 ? 2 : 1, ow = cw / s, oh = ch / s;
+	UINT cw = size.Width, ch = size.Height, s = cw > 2000 && !g_cap.full ? 2 : 1, ow = cw / s, oh = ch / s;
 	if ( !cw || !ch )
 		return;
 	if ( ow != g_cap.w || oh != g_cap.h || !g_cap.mem )
@@ -897,6 +913,27 @@ static void OnMessage( const wstring &msg )
 		else if ( KeepSaved( path ), !WriteAll( path, Unbase64( body ) ) )
 			fail( L"couldn't write " + path );
 	}
+	else if ( op == L"readbin" ) // arg = path in the HUD, body = how many bytes from its start (empty: all): base64
+	{
+		string data;
+		if ( !InHud( arg, path ) || !ReadAll( path, data ) )
+			fail( L"missing" );
+		else
+			out = Base64( body.empty() ? data : data.substr( 0, (size_t)_wtoi64( body.c_str() ) ) );
+	}
+	else if ( op == L"remove" ) // arg = path in the HUD: to the Recycle Bin (discarding the changes puts it back)
+	{
+		if ( !InHud( arg, path ) )
+			fail( L"bad path" );
+		else if ( IsFile( path ) )
+		{
+			KeepSaved( path );
+			wstring from = path + L'\0'; // (a list, ended by two nulls)
+			SHFILEOPSTRUCTW sh = { NULL, FO_DELETE, from.c_str(), NULL, FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT | FOF_NOERRORUI };
+			if ( SHFileOperationW( &sh ) || IsFile( path ) )
+				fail( L"couldn't remove " + path );
+		}
+	}
 	else if ( op == L"save" ) // keep the changes: answers how many files changed
 	{
 		if ( g_hudPath.empty() )
@@ -982,6 +1019,8 @@ static void OnMessage( const wstring &msg )
 			}
 		} );
 	}
+	else if ( op == L"capturefull" ) // arg "1": frames at the game's full size (zoomed in), "0": halved again when big
+		g_cap.full = arg == L"1";
 	else if ( op == L"capture" ) // start sending the game's window to the page (see StartCapture)
 	{
 		wstring err = StartCapture();
