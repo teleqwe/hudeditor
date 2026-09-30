@@ -47,17 +47,15 @@
   #hudbtn::after { content: '⌄'; margin-left: 8px; }
   #hudbtn:hover { color: var(--text); }
   .app-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
-  #restartmark { color: var(--accent); font-size: 16px; line-height: 1; cursor: help; }
+  #restartmark { padding: 4px 10px; border-color: var(--accent); color: var(--accent); font-size: 15px; line-height: 1.2; }
+  .app-actions .sep { width: 1px; height: 24px; margin: 0 6px; background: var(--line); }
 
-  /* the game: tools over it, messages under it */
+  /* the game: test tools over it (when open), messages under it */
   .preview-area { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
-  .preview-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 15px; background: var(--surface); border-bottom: 1px solid var(--line); }
   .toolsbtn[aria-expanded="true"] { border-color: var(--accent); background: var(--soft); }
   .toolsbtn::after { content: '⌄'; margin-left: 6px; }
-  #restart.needed { border-color: var(--accent); color: var(--accent); }
-  .zoombtn { margin-left: auto; padding: 4px 10px; border-color: var(--accent); color: var(--accent); font-size: 12px; }
-  .zoombtn:not([hidden]) + .gridsel { margin-left: 0; }
-  .gridsel { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+  .zoombtn { padding: 4px 10px; border-color: var(--accent); color: var(--accent); font-size: 12px; }
+  .gridsel { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
   .gridsel select { padding: 4px 6px; }
   #tools { display: grid; gap: 9px; padding: 12px 15px; background: var(--surface); border-bottom: 1px solid var(--line); }
   #tools .tline { display: flex; gap: 7px; flex-wrap: wrap; align-items: center; }
@@ -117,9 +115,9 @@
   .selected-head p { margin: 2px 0 0; color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .selected-head .back { flex: none; width: 28px; height: 28px; padding: 0 0 2px; border-color: transparent; background: none; color: var(--muted); font-size: 18px; line-height: 1; }
   .selected-head .back:hover { color: var(--text); border-color: var(--line); }
-  .settings-layout { flex: 1; min-height: 0; display: grid; grid-template-columns: 83px minmax(0, 1fr); }
+  .settings-layout { flex: 1; min-height: 0; display: grid; grid-template-columns: 96px minmax(0, 1fr); }
   .category-nav { display: flex; flex-direction: column; gap: 7px; padding: 12px 7px; overflow: auto; background: var(--surface); border-right: 1px solid var(--line); }
-  .category-button { padding: 9px 7px; border-color: transparent; border-radius: 6px; background: transparent; color: var(--muted); text-align: left; }
+  .category-button { padding: 9px 7px; white-space: nowrap; border-color: transparent; border-radius: 6px; background: transparent; color: var(--muted); text-align: left; }
   .category-button:hover { background: var(--raised); border-color: transparent; color: var(--text); }
   .category-button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--base); font-weight: 550; }
   .category-button:disabled { opacity: .35; background: transparent; border-color: transparent; }
@@ -146,7 +144,7 @@
   .fold[open] > summary { padding-bottom: 0; }
   :is(.row, .fold, .thing-btn) + :is(.row, .fold) { border-top: 1px solid var(--thin); }
 
-  /* a setting: its name (and a note under it) at the left, the control at the right, then ↺ and ↶ */
+  /* a setting: its name (and a note under it) at the left, the control at the right, then ↺ */
   .row { min-width: 0; padding: 13px 0; }
   :is(.row.num, .row.pick, .row.check, .row.colour, .row.toggle) { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; column-gap: 10px; align-items: center; }
   :is(.row.num, .row.pick, .row.check, .row.colour, .row.toggle) > * { grid-column: 1; grid-row: 1; min-width: 0; }
@@ -159,8 +157,8 @@
   .row select, .fontpick { width: 150px; }
   .row.num > input:not([type]) { width: 150px; }
   .row .reset { margin-left: 8px; padding: 0 6px; font-size: 11px; color: var(--muted); }
-  /* ↺ the game's value, ↶ back to how it was opened */
-  .arrows { display: flex; justify-content: flex-end; width: 20px; } /* (the same room with or without ↶, so rows line up; Default sits by the name) */
+  /* ↺ back to how it was opened */
+  .arrows { display: flex; justify-content: flex-end; width: 20px; } /* (the same room with or without ↺, so rows line up) */
   .undo { width: 19px; height: 24px; padding: 0; display: grid; place-items: center; background: none; border: 0; color: var(--muted); }
   .undo:hover { color: var(--accent); background: none; }
   .undo.off { visibility: hidden; }
@@ -256,10 +254,6 @@
   .eyerow > .eye { width: 30px; height: 26px; justify-self: end; background: none; border-color: transparent; }
   .eyerow > .eye:hover { border-color: var(--line); }
   .eyerow.hidden > div:first-child { color: var(--muted); text-decoration: line-through; }
-  /* the game's value, beside a row's name (↶ stays at the right) */
-  .dflt { display: inline-block; margin-left: 8px; padding: 1px 7px; border: 1px solid var(--line); border-radius: 5px; font-size: 11px; font-weight: 400; color: var(--muted); cursor: pointer; text-decoration: none; vertical-align: 1px; }
-  .dflt:hover, .dflt:focus-visible { border-color: var(--accent); color: var(--text); }
-  .dflt.off, .dflt[hidden] { display: none; }
   /* font drop-down: a filter box over the names, faces drawn in themselves */
   .fontpick { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; padding: 6px 8px; background: var(--field); }
   .fontpick::after { content: ''; float: right; margin: 7px 0 0 6px; border-top: 5px solid var(--muted); border-left: 4px solid transparent; border-right: 4px solid transparent; }
@@ -286,7 +280,7 @@
   #newform input { flex: 1; }
 
   @media (max-width: 860px) { body { grid-template-columns: 1fr; grid-template-rows: auto 50vh minmax(0, 1fr); } aside { border-left: 0; border-top: 1px solid var(--line); } }
-  @media (max-width: 440px) { .settings-layout { grid-template-columns: 71px minmax(0, 1fr); } .section-stack { padding: 6px 10px 15px; } .category-button { padding: 8px 4px; font-size: 12px; } }
+  @media (max-width: 440px) { .settings-layout { grid-template-columns: 80px minmax(0, 1fr); } .section-stack { padding: 6px 10px 15px; } .category-button { padding: 8px 4px; font-size: 12px; } }
 </style>
 </head>
 <body>
@@ -294,22 +288,20 @@
   <span class="app-name">CS:S HUD Editor</span>
   <button id="hudbtn" title="Pick which HUD to edit">No HUD open</button>
   <div class="app-actions">
-    <span id="restartmark" hidden>⟳</span>
-    <button id="explore" title="Open the HUD's folder">Folder</button>
-    <button id="save" class="primary" disabled>Save HUD</button>
-  </div>
-</header>
-<section class="preview-area">
-  <div class="preview-toolbar">
-    <button id="testserver" title="Offline game with a frozen bot and bhop/surf-style timer texts on screen">Test server</button>
-    <button id="toolsbtn" class="toolsbtn" aria-expanded="false" title="Scoreboard and the sample texts on the test server">Test tools</button>
-    <button id="restart" title="Quit the game and start it again, for changes the game only reads when it starts. Unsaved changes stay.">Restart game</button>
     <button id="capture" hidden>Capture game</button>
     <button id="launch" hidden>Launch game</button>
     <button id="zoom" class="zoombtn" hidden title="Zoomed in with the mouse wheel: click for 100%">100%</button>
     <label class="gridsel" title="Dragged parts land on a grid this many units apart (a unit is the screen height / 480)">Grid
       <select id="grid"><option value="0">Off</option><option>2</option><option>4</option><option>5</option><option>8</option><option>10</option><option>16</option><option>20</option></select></label>
+    <button id="testserver" title="Offline game with a frozen bot and bhop/surf-style timer texts on screen">Test server</button>
+    <button id="toolsbtn" class="toolsbtn" aria-expanded="false" title="Scoreboard and the sample texts on the test server">Test tools</button>
+    <span class="sep" aria-hidden="true"></span>
+    <button id="restartmark" hidden>⟳</button>
+    <button id="explore" title="Open the HUD's folder">Folder</button>
+    <button id="save" class="primary" disabled>Save HUD</button>
   </div>
+</header>
+<section class="preview-area">
   <div id="tools" hidden>
     <div class="tline">
       <span class="glabel">Keep open</span>
@@ -872,8 +864,8 @@ function needRestart(what) {
   if (what) restartFor.add(what);
   const on = restartFor.size > 0;
   $('restartmark').hidden = !on;
-  $('restartmark').title = on ? `The game shows these after a restart: ${[...restartFor].join(', ')}. Restart game (below) does it.` : '';
-  $('restart').classList.toggle('needed', on);
+  $('restartmark').title = on ? `The game shows these after a restart: ${[...restartFor].join(', ')}.
+Click to restart it (unsaved changes stay).` : '';
 }
 
 // Every edit goes through here. section = HudLayout block for layout settings; scheme colours are sorted into Colors/BaseSettings.
@@ -1090,20 +1082,32 @@ function setPartHidden(f, block, hide) {
   const [key, off] = hideHow(block);
   moveOff(f, block, key, off, hide);
 }
-// parts hidden and shown again in this session: they stay listed, so the tick can go back
-const partsListed = new Set();
-const showRow = (f, block, label) => eyeRow(label, !partHidden(f, block.split('|')[0]), on => {
-  for (const b of block.split('|')) { partsListed.add(`${f.name}/${b}`); setPartHidden(f, b, !on); }
-  refreshSoon();
-}, `${f.name}/${block}/shown`, gameProps(f.name, block.split('|')[0]).visible !== '0');
-// The window's own bars, plus every part hidden here (they can't be clicked in the preview any more).
-function windowPartRows(sel) {
-  const f = sel.res, parts = (WINDOW_PARTS[sel.info.id] || []).map(([label, block]) => [label.toLowerCase(), block]);
-  if (!f) return [];
-  for (const s of f.parsed.sections)
-    if (s.path.length === 2 && !parts.some(([, b]) => b.toLowerCase().split('|').includes(s.path[1].toLowerCase())) && (partHidden(f, s.path[1]) || partsListed.has(`${f.name}/${s.path[1]}`)))
-      parts.push([prettify(s.path[1]), s.path[1]]);
-  return parts.map(([label, block]) => showRow(f, block, `Show ${label}`));
+// A part's eye. Shown: not moved off by the editor and not "visible" "0" in its file (showing one of those sets it to 1).
+const showRow = (f, block, label) => {
+  const first = block.split('|')[0];
+  return eyeRow(label, !partHidden(f, first) && layoutProps(f, first).visible !== '0', on => {
+    for (const b of block.split('|')) { setPartHidden(f, b, !on); if (on && layoutProps(f, b).visible === '0') save(f, 'visible', '1', b); }
+    refreshSoon();
+  });
+};
+// The Show/hide tab: every part of the selection with its eye. A HUD part: itself; with a file of its own (the chat,
+// the round-end panel) or a window: the parts WINDOW_PARTS names (grouped ones as one), then every other block in the
+// file, in its order (not the window's own block, nor its hidden system menu).
+function showHideRows(sel) {
+  const { info } = sel, f = sel.res, rows = [];
+  if (info.kind === 'hud' && !sel.control && canHide(info.id))
+    rows.push(eyeRow(info.name, !isHidden(info.id), on => { setHidden(info.id, !on); refreshSoon(); writing.then(render); }));
+  if (!f || info.id === 'FreezePanel') return rows; // (the killer panel's parts are nested: its own rows, see freezeRows)
+  const parts = WINDOW_PARTS[info.id] || [], grouped = new Set(parts.flatMap(([, b]) => b.toLowerCase().split('|')));
+  rows.push(...parts.map(([label, block]) => showRow(f, block, label)));
+  for (const s of f.parsed.sections) {
+    const b = s.path[1], k = (b || '').toLowerCase();
+    if (s.path.length !== 2 || grouped.has(k) || k === info.id.toLowerCase() || k === sel.thing.key || k === 'sysmenu') continue;
+    const p = layoutProps(f, b);
+    rows.push(showRow(f, b, /^hudeditor_(pic|text|box)\d+$/i.test(b) ? addedName(f, b) : b === SB_BOX ? 'Colour box behind the scoreboard'
+      : /^hudeditor_cmd/i.test(b) ? `"${p.labeltext || ''}" button` : prettify(b)));
+  }
+  return rows;
 }
 
 // ---------- command buttons ----------
@@ -1383,15 +1387,20 @@ function loadingRows(f) {
     inputRow('VAC notice Y', layoutProps(vac, 'VACInfoLabel').ypos || '100', v => { save(vac, 'ypos', v, 'VACInfoLabel'); save(vac, 'ypos', String(+v + gv), 'VACImage'); },
       { type: 'number', step: 1, dflt: gameProps(LOADING_VAC, 'VACInfoLabel').ypos ?? null, title: 'The VAC shield and its text, from the top of the box' }),
     n('TimeRemainingLabel', 'ypos', 'Time left Y', 'The time left to load, under the bar')] : [];
-  const show = (block, label) => eyeRow(label, !partHidden(f, block), on => { for (const x of both) if (has(x, block)) setPartHidden(x, block, !on); refreshSoon(); }, null, gameProps(f.name, block).visible !== '0');
   const see = el('div', { className: 'row action' });
   see.append(el('button', { textContent: 'See it: start the test game again', onclick: () => testServer() }));
-  return [show('InfoLabel', 'Show the loading text'), show('progress', 'Show the progress bar'), show('CancelButton', 'Show the Cancel button'),
-    n('LoadingDialog', 'wide', 'Box width'), n('LoadingDialog', 'tall', 'Box height', 'On VAC-secured servers the box has its own height (below)', true),
+  return [n('LoadingDialog', 'wide', 'Box width'), n('LoadingDialog', 'tall', 'Box height', 'On VAC-secured servers the box has its own height (below)', true),
     n('InfoLabel', 'xpos', 'Text X', 'From the box\'s left edge'), n('InfoLabel', 'ypos', 'Text Y'),
     n('progress', 'xpos', 'Progress bar X'), n('progress', 'ypos', 'Progress bar Y'), n('progress', 'wide', 'Progress bar width'), n('progress', 'tall', 'Progress bar height'),
     n('CancelButton', 'xpos', 'Cancel X'), n('CancelButton', 'ypos', 'Cancel Y'), ...vacRows, see,
     noteRow('The game centres the box. Changes show the next time a map loads.')];
+}
+// Its parts' eyes (Show/hide tab), in both files: the text, bar and Cancel, then what was added.
+function loadingShowRows(f) {
+  const both = [f, F(LOADING_VAC)].filter(Boolean), has = (x, block) => Object.keys(layoutProps(x, block)).length > 0;
+  const show = (block, label) => eyeRow(label, !partHidden(f, block), on => { for (const x of both) if (has(x, block)) setPartHidden(x, block, !on); refreshSoon(); });
+  const added = f.parsed.sections.filter(s => s.path.length === 2 && /^hudeditor_(pic|text|box)\d+$/i.test(s.path[1])).map(s => show(s.path[1], addedName(f, s.path[1])));
+  return [show('InfoLabel', 'The loading text'), show('progress', 'The progress bar'), show('CancelButton', 'The Cancel button'), ...added];
 }
 
 // ---------- things added to the HUD ----------
@@ -1912,7 +1921,8 @@ function parseColour(s) {
 }
 
 // alpha: false where the game sets the opacity itself (no opacity row)
-function openPicker(anchor, rgba, onPick, owner, title = 'Colour', alpha = true) {
+// dflt: the game's colour (R G B A), for its Default button
+function openPicker(anchor, rgba, onPick, owner, title = 'Colour', alpha = true, dflt = null) {
   closePicker();
   closeFontPop();
   let c = [...rgba];
@@ -1967,7 +1977,13 @@ function openPicker(anchor, rgba, onPick, owner, title = 'Colour', alpha = true)
     flash(paste, 'Pasted');
   };
   const foot = el('footer');
-  foot.append(copy, paste, el('button', { type: 'button', className: 'primary', textContent: 'Done', onclick: closePicker }));
+  foot.append(copy, paste);
+  if (dflt) {
+    const d = el('button', { type: 'button', textContent: 'Default', title: `The game's colour: ${rgbaText(dflt.join(' '))}` });
+    d.onclick = () => { c = alpha ? [...dflt] : [...dflt.slice(0, 3), c[3]]; emit(); };
+    foot.append(d);
+  }
+  foot.append(el('button', { type: 'button', className: 'primary', textContent: 'Done', onclick: closePicker }));
   pop.append(head, prev, ...chans.map(ch => ch.row), foot);
   show();
   document.body.append(pop);
@@ -1978,35 +1994,24 @@ function openPicker(anchor, rgba, onPick, owner, title = 'Colour', alpha = true)
   chans[0].num.focus({ preventScroll: true });
 }
 
-// ↶ beside every setting: puts back its value from when the HUD was opened (for a new HUD, the defaults it started with);
+// ↺ beside every setting: puts back its value from when the HUD was opened (for a new HUD, the defaults it started with);
 // its tooltip says "then → now". Kept by what the row sets (file, block and key where the row knows them, else the
 // selection and the row's name); cleared when a HUD is opened. show() words a value, put() sets the row to it and writes.
 const opened = {};
 let rowScope = ''; // the selection the rows being made belong to (set by renderList)
-const UNDO_SVG = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 3 2 6.5 5.5 10M2.5 6.5h7.5a4 4 0 0 1 0 8H7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-const DEFAULT_SVG = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.2 5.5A5.5 5.5 0 1 1 2.5 8.5M3 1.8v3.9h3.9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const UNDO_SVG = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.2 5.5A5.5 5.5 0 1 1 2.5 8.5M3 1.8v3.9h3.9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 // ↺ beside it: the game's own value (dflt, where it's known), shown while the setting differs from it. Both keep their
 // place when hidden, so rows line up. Returns the pair; its update(v) is called with every new value.
-// ↶ goes back to how it was when the HUD was opened; Default (a word, beside the row's name, only while the value isn't
-// the game's) puts the game's value in. Default is a span, not a button: in a tick box's <label> a button would be the
-// control the label's text clicks.
-function undoArrow(id, now, show, put, dflt = null) {
+// ↺ goes back to how it was when the HUD was opened. (The game's own value: a colour's pop-out has Default; the main
+// menu's list has The game's buttons. Other rows still get the game's value passed in, unused since 2026-10-01.)
+function undoArrow(id, now, show, put) {
   const first = opened[id] ??= now, w = el('span', { className: 'arrows' });
   const b = el('button', { className: 'undo', type: 'button', innerHTML: UNDO_SVG });
-  const d = el('span', { className: 'dflt', role: 'button', tabIndex: 0, textContent: 'Default' });
-  w.update = v => {
-    b.classList.toggle('off', v === first); b.title = `${show(first)} → ${show(v)}\nClick to go back to ${show(first)}`;
-    d.classList.toggle('off', dflt === null || show(v) === show(dflt)); d.title = dflt === null ? '' : `The game's default: ${show(dflt)}\nClick to use it`;
-  };
+  w.update = v => { b.classList.toggle('off', v === first); b.title = `${show(first)} → ${show(v)}\nClick to go back to ${show(first)}`; };
   // (inside a tick box's label: a click here isn't the tick's)
   b.onclick = e => { e?.preventDefault(); e?.stopPropagation(); put(first); w.update(first); };
-  d.onclick = e => { e?.preventDefault(); e?.stopPropagation(); put(dflt); w.update(dflt); };
-  d.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') d.onclick(e); };
-  d.hidden = dflt === null;
-  w.append(d, b);
+  w.append(b);
   w.update(now);
-  // once the row is built: Default goes beside the row's name
-  if (dflt !== null) queueMicrotask(() => { const row = w.parentElement, n = row && row.classList.contains('row') && row.firstElementChild; if (n && n !== w) n.append(d); });
   return w;
 }
 // An eye: open while shown, crossed out while hidden (class off).
@@ -2021,19 +2026,18 @@ function eyeIcon(el_, shown, what = 'it') {
   el_.setAttribute('aria-label', shown ? `Hide ${what}` : `Show ${what}`);
   return el_;
 }
-// Show or hide a part: its name and the eye (the whole row switches it), then ↶. "Show X" labels lose their "Show".
-// No Default: the eye is already one click from either state.
-function eyeRow(label, shown, onChange, id = null) {
-  const row = el('div', { className: 'row check eyerow' }), eye = el('button', { type: 'button' }), word = v => v ? 'shown' : 'hidden';
+// Show or hide a part: its name and the eye (the whole row switches it; clicking again is the undo). "Show X" labels
+// lose their "Show".
+function eyeRow(label, shown, onChange) {
+  const row = el('div', { className: 'row check eyerow' }), eye = el('button', { type: 'button' });
   const text = label.replace(/^Show /, '').replace(/^./, c => c.toUpperCase()), name = el('div');
   name.append(renameable(text));
   const set = v => { shown = v; eyeIcon(eye, v, text.toLowerCase()); row.classList.toggle('hidden', !v); };
-  const undo = undoArrow(id || `${rowScope}|${label}`, word(shown), v => v, v => { set(v === 'shown'); onChange(shown); });
   row.onclick = e => {
-    if (e.target.closest('.arrows, .dflt, [contenteditable="plaintext-only"]')) return;
-    set(!shown); undo.update(word(shown)); onChange(shown);
+    if (e.target.closest('[contenteditable="plaintext-only"]')) return; // (a name being renamed)
+    set(!shown); onChange(shown);
   };
-  row.append(name, eye, undo);
+  row.append(name, eye);
   set(shown);
   row.dataset.q = `${label} show hide`.toLowerCase();
   return row;
@@ -2041,8 +2045,8 @@ function eyeRow(label, shown, onChange, id = null) {
 const rgbaText = v => { const c = toRgba(v); return `${c.slice(0, 3).join(' ')} ${Math.round(c[3] / 2.55)}%`; };
 
 // A colour: its name and what it's for, then its opacity over a swatch (half the colour, half the colour at its
-// opacity over a checkerboard) beside R G B boxes to type in, then ↺ and ↶. The swatch opens the pop-out. where: the
-// file and block it is in, so rows with the same name in different places keep their own ↶.
+// opacity over a checkerboard) beside R G B boxes to type in, then ↺. The swatch opens the pop-out. where: the
+// file and block it is in, so rows with the same name in different places keep their own ↺.
 function colorRow(label, note, value, onChange, keys = [], dflt = null, where = '') {
   let rgba = toRgba(value);
   const row = el('div', { className: 'row colour' }), name = el('div', { className: 'name' }), meta = el('div', { className: 'meta' });
@@ -2065,10 +2069,10 @@ function colorRow(label, note, value, onChange, keys = [], dflt = null, where = 
     if (undo) undo.update(rgba.join(' '));
   };
   const set = (c, from) => { rgba = c; show(from); onChange(rgba.join(' ')); if (cpop && cpop.owner === row && from !== cpop) cpop.sync(rgba); };
-  undo = undoArrow(`${where || rowScope}|${label}|${keys.join('+')}`, rgba.join(' '), rgbaText, v => { closePicker(); set(toRgba(v)); }, dflt ? toRgba(dflt).join(' ') : null);
+  undo = undoArrow(`${where || rowScope}|${label}|${keys.join('+')}`, rgba.join(' '), rgbaText, v => { closePicker(); set(toRgba(v)); }); // (the game's colour: in the pop-out)
   swatch.setAttribute('aria-label', `Choose the ${label} colour`);
   swatch.setAttribute('aria-haspopup', 'dialog');
-  swatch.onclick = () => cpop && cpop.owner === row ? closePicker() : openPicker(rgb, rgba, c => set(c, cpop), row, label, !aText.hidden);
+  swatch.onclick = () => cpop && cpop.owner === row ? closePicker() : openPicker(rgb, rgba, c => set(c, cpop), row, label, !aText.hidden, dflt ? toRgba(dflt) : null);
   rgb.append(aText, ...['R', 'G', 'B'].map(t => el('span', { textContent: t })), swatch, ...chans);
   name.append(renameable(label));
   if (note) meta.append(renameable(note));
@@ -2092,8 +2096,7 @@ function numRow(lay, id, key, label, raw) {
   row.dataset.q = `${label} position size`.toLowerCase();
   Object.assign(row.dataset, { cat: 'layout', head: key.endsWith('pos') ? 'Position' : 'Box size' }); // (see selectionSections)
   const set = r => { show(r); save(lay, key, r, id); undo.update(prefix + num); };
-  const game = gameProps(lay.name, id)[key];
-  undo = undoArrow(`${lay.name}/${id}/${key}`, prefix + num, v => v, set, game === undefined ? null : split(game).join(''));
+  undo = undoArrow(`${lay.name}/${id}/${key}`, prefix + num, v => v, set);
   row.arrow.replaceWith(undo);
   if (key !== 'xpos' && key !== 'ypos') return row;
   // Centre: "c" minus half the size, in the same units
@@ -2130,7 +2133,7 @@ function selectRow(label, options, value, onChange, keys = [], id = null, dflt =
   sel.value = value;
   sel.setAttribute('aria-label', label);
   const word = v => (options.find(([o]) => o === v) || [, v])[1];
-  const undo = undoArrow(id || `${rowScope}|${label}|${keys.join('+')}`, value, word, v => { sel.value = v; onChange(v); }, dflt);
+  const undo = undoArrow(id || `${rowScope}|${label}|${keys.join('+')}`, value, word, v => { sel.value = v; onChange(v); });
   sel.onchange = () => { undo.update(sel.value); onChange(sel.value); };
   row.append(el('div', { textContent: label }), sel, undo, el('div', { className: 'meta' }));
   row.dataset.keys = keys.join(' + '); // shown over the section's title (see card)
@@ -2144,7 +2147,7 @@ function rangeRow(label, value, onChange, id = null, dflt = null) {
   const wrap = el('div', { className: 'range-value' }), pct = el('output', { textContent: `${Math.round(input.value / 2.55)}%` });
   input.setAttribute('aria-label', label);
   const put = () => { pct.textContent = `${Math.round(input.value / 2.55)}%`; undo.update(input.value); onChange(input.value); };
-  const undo = undoArrow(id || `${rowScope}|${label}`, input.value, v => `${Math.round(v / 2.55)}%`, v => { input.value = v; put(); }, dflt === null ? null : String(dflt));
+  const undo = undoArrow(id || `${rowScope}|${label}`, input.value, v => `${Math.round(v / 2.55)}%`, v => { input.value = v; put(); });
   input.oninput = put;
   wrap.append(input, pct);
   row.append(el('div', { textContent: label }), wrap, undo);
@@ -2165,7 +2168,7 @@ function checkRow(label, checked, onChange, id = null, dflt = null) {
   row.innerHTML = `<div></div><input type="checkbox"${checked ? ' checked' : ''}>`;
   row.firstElementChild.textContent = label;
   const box = row.lastElementChild, word = on => on ? 'on' : 'off';
-  const undo = undoArrow(id || `${rowScope}|${label}`, word(checked), v => v, v => { box.checked = v === 'on'; onChange(box.checked); }, dflt === null ? null : word(dflt));
+  const undo = undoArrow(id || `${rowScope}|${label}`, word(checked), v => v, v => { box.checked = v === 'on'; onChange(box.checked); });
   box.onchange = e => { undo.update(word(e.target.checked)); onChange(e.target.checked); };
   row.append(undo);
   row.dataset.q = label.toLowerCase();
@@ -2384,7 +2387,7 @@ function hideButton(sel) {
   return eyeIcon(el('button', { className: 'hidebtn', type: 'button',
     onclick: () => {
       if (hud) setHidden(hud, !hidden);
-      else { partsListed.add(`${sel.res.name}/${own.block}`); setPartHidden(sel.res, own.block, !hidden); }
+      else setPartHidden(sel.res, own.block, !hidden);
       refreshSoon();
     } }), !hidden, 'it (its place is kept)');
 }
@@ -2565,7 +2568,7 @@ function borderRows(file, name) {
     return borderBody(cur, own ? now : { props: now ? now.props : {}, base: readBorder(f, name).base, sides: now ? now.sides : null });
   }, ['Borders']);
   const sides = el('div', { className: 'row sides' }), opts = el('div', { className: 'opts' }), on = () => sidesOf(cur);
-  const boxes = {}, undo = undoArrow(`${file}/${name}/sides`, on(), v => v, v => { for (const s of SIDES) boxes[s].checked = cur.on[s] = v.split(', ').includes(s); write(); }, game && sidesOf(game));
+  const boxes = {}, undo = undoArrow(`${file}/${name}/sides`, on(), v => v, v => { for (const s of SIDES) boxes[s].checked = cur.on[s] = v.split(', ').includes(s); write(); });
   opts.append(...['Top', 'Right', 'Bottom', 'Left'].map(s => {
     const l = el('label'), box = boxes[s] = el('input', { type: 'checkbox', checked: cur.on[s], onchange: () => { cur.on[s] = box.checked; undo.update(on()); write(); } });
     l.append(box, s);
@@ -2844,11 +2847,11 @@ function fontPick(value, names, onPick, faces = false) {
   };
   return b;
 }
-// A row with a font drop-down and its ↶. names() lists the choices.
+// A row with a font drop-down and its ↺. names() lists the choices.
 function pickRow(label, value, names, onChange, { faces = false, id = null, note = '', keys = [], dflt = null } = {}) {
   const row = el('div', { className: 'row pick' }), meta = el('div', { className: 'meta' });
   const pick = fontPick(value, names, v => { undo.update(v); onChange(v); }, faces);
-  const undo = undoArrow(id || `${rowScope}|${label}`, value, v => v || '(none)', v => { pick.set(v); onChange(v); }, dflt);
+  const undo = undoArrow(id || `${rowScope}|${label}`, value, v => v || '(none)', v => { pick.set(v); onChange(v); });
   const name = el('div');
   name.append(renameable(label));
   if (note) meta.append(renameable(note));
@@ -2858,7 +2861,7 @@ function pickRow(label, value, names, onChange, { faces = false, id = null, note
   return row;
 }
 
-// attrs: the input's own attributes, plus undoId (what its ↶ is kept by) or noUndo (the caller makes its own, in row.arrow's
+// attrs: the input's own attributes, plus undoId (what its ↺ is kept by) or noUndo (the caller makes its own, in row.arrow's
 // place), and slider (a slider up to that beside the box, instead of − and +)
 function inputRow(label, value, onChange, attrs = {}) {
   const { undoId, noUndo, dflt = null, slider = 0, ...own } = attrs;
@@ -2867,7 +2870,7 @@ function inputRow(label, value, onChange, attrs = {}) {
   for (const [k, v] of Object.entries(own)) input.setAttribute(k, v);
   input.setAttribute('aria-label', label);
   const range = slider ? el('input', { type: 'range', min: own.min ?? 0, max: slider, step: own.step ?? 1, value: +value || 0 }) : null;
-  const undo = noUndo ? el('span') : undoArrow(undoId || `${rowScope}|${label}`, String(value), v => v, v => { input.value = v; if (range) range.value = +v || 0; onChange(v); }, dflt === null ? null : String(dflt));
+  const undo = noUndo ? el('span') : undoArrow(undoId || `${rowScope}|${label}`, String(value), v => v, v => { input.value = v; if (range) range.value = +v || 0; onChange(v); });
   row.arrow = undo;
   input.oninput = () => { if (input.value === '') return; if (range) range.value = input.value; if (!noUndo) undo.update(input.value); onChange(input.value); };
   let box = input;
@@ -2893,7 +2896,7 @@ function inputRow(label, value, onChange, attrs = {}) {
 // On/off: a tick box at the right (the whole row clicks it). row.set(on) shows a new value.
 function toggleRow(label, on, onChange, note = '', id = null, dflt = null) {
   const row = el('label', { className: 'row toggle' }), box = el('input', { type: 'checkbox' }), word = v => v ? 'on' : 'off';
-  const undo = undoArrow(id || `${rowScope}|${label}`, word(on), v => v, v => { row.set(v === 'on'); onChange(on); }, dflt === null ? null : word(dflt));
+  const undo = undoArrow(id || `${rowScope}|${label}`, word(on), v => v, v => { row.set(v === 'on'); onChange(on); });
   row.set = v => { on = v; box.checked = v; undo.update(word(on)); };
   box.onchange = () => { row.set(box.checked); onChange(on); };
   const name = el('div'), meta = el('div', { className: 'meta' });
@@ -3110,7 +3113,7 @@ const menuText = items => `"GameMenu"\n{\n${items.map((it, i) => `\t"${i + 1}"\n
 function setMenu(items) {
   const f = F(GM);
   commit(f, 'gamemenu', () => menuText(items));
-  writing = writing.then(() => { status('Menu buttons changed: Restart game (top) shows them, Save HUD keeps them.'); render(); });
+  writing = writing.then(() => { status('Menu buttons changed: the ⟳ by Save HUD restarts the game to show them, Save HUD keeps them.'); render(); });
 }
 function menuRows() {
   const f = F(GM);
@@ -3163,12 +3166,13 @@ function menuRows() {
   run.dataset.q = 'menu button command exec config bind run add';
   // an empty button is an empty line (the game's own list has one, in game only)
   const gap = el('div', { className: 'row action' });
-  gap.append(el('button', { className: 'ghost', textContent: '+ Add a gap', title: 'An empty line; move it into place with the arrows', onclick: () => setMenu([...items, [['label', ''], ['command', '']]]) }));
-  gap.dataset.q = 'menu button gap space empty';
-  // ↶ for the whole list: back to the buttons, in their order, as the HUD was opened
+  gap.append(el('button', { className: 'ghost', textContent: '+ Add a gap', title: 'An empty line; move it into place with the arrows', onclick: () => setMenu([...items, [['label', ''], ['command', '']]]) }),
+    el('button', { className: 'ghost', textContent: 'The game\'s buttons', title: 'Back to the game\'s own list and order', onclick: () => setMenu(menuItems({ parsed: parse(GAME_MENU) })) }));
+  gap.dataset.q = 'menu button gap space empty game default';
+  // ↺ for the whole list: back to the buttons, in their order, as the HUD was opened
   const names = text => menuItems({ parsed: parse(text) }).map(menuName).join(', ');
-  const note = noteRow('The game reads these when it starts: Restart game (top) shows changes. ');
-  note.append(undoArrow(`${GM}/buttons`, menuText(items), names, text => setMenu(menuItems({ parsed: parse(text) })), GAME_MENU));
+  const note = noteRow('The game reads these when it starts: the ⟳ by Save HUD restarts it to show them. ');
+  note.append(undoArrow(`${GM}/buttons`, menuText(items), names, text => setMenu(menuItems({ parsed: parse(text) }))));
   note.lastElementChild.style.cssText = 'display: inline-flex; vertical-align: middle';
   return [...rows, add, run, gap, note];
 }
@@ -3340,7 +3344,7 @@ async function addStartupBackground(name, tex) {
 // Everything editable for a selection, as [title, rows, kind]: colours, fonts, borders, layout (places and sizes), then
 // the rest (what's shown, the menu's buttons...). Titles say the kind first, then what it's for.
 function selectionSections(sel) {
-  const groups = { colour: [], font: [], border: [], layout: [], custom: [], other: [] }, add = (kind, title, rows) => groups[kind].push([title, rows]);
+  const groups = { show: [], colour: [], font: [], border: [], layout: [], custom: [], other: [] }, add = (kind, title, rows) => groups[kind].push([title, rows]);
   const { info, control } = sel, fonts = fontsOf(sel), own = sel.res && ownBlock(sel);
   // the main menu's background and logo: their own few settings
   if (info.id === 'menubg') return [['Menu background', backgroundRows(), 'other']];
@@ -3371,12 +3375,12 @@ function selectionSections(sel) {
   if (info.kind === 'hud') {
     if (info.hud.custom) add('colour', `${info.name}: what it shows`, customRows(info.id));
     if (info.id === 'WinPanel_Round' && sel.res) add('colour', 'Round end panel: boxes', winBoxRows(sel.res));
-    if (info.id === 'FreezePanel' && sel.res) { const [c, p] = freezeRows(sel.res); add('colour', 'Killer panel: colours', c); add('other', 'Killer panel: show or hide parts', p); }
+    if (info.id === 'FreezePanel' && sel.res) { const [c, p] = freezeRows(sel.res); add('colour', 'Killer panel: colours', c); add('show', 'Killer panel', p); }
     add('colour', info.name, hudRows(info.id, info.hud));
     add('other', `${info.name}: settings`, hudSettingRows(info.id, info.hud));
     if (info.id === 'HudChat' && sel.res) add('layout', 'Chat: space inside', chatPaddingRows(sel));
     // parts moved off screen (the chat's Filters button) can't be clicked any more
-    add('other', `${info.name}: ${WINDOW_PARTS[info.id] ? 'show or hide parts' : 'hidden parts'}`, windowPartRows(sel));
+    add('show', 'Show or hide', showHideRows(sel));
   } else {
     if (info.id !== 'gamemenu') { // the main menu isn't a window frame
       // menu windows paint their frame's background and edge; in-game ones (team select...) draw their own panels
@@ -3395,7 +3399,7 @@ function selectionSections(sel) {
       return Object.keys(p).length ? POS.map(([k, l]) => numRow(sel.res, b, k, `${what}: ${l.replace(' position', '')}`, p[k])) : [];
     }));
     if (ADD_WINDOWS.has(info.id) && sel.res) add('custom', 'Pictures, texts and boxes', addRows(sel.res));
-    if (info.id !== 'loadingdialog') add('other', `${info.name}: show or hide parts`, windowPartRows(sel)); // its own rows do both files
+    if (info.id !== 'loadingdialog') add('show', 'Show or hide', showHideRows(sel)); // (the loading screen's own rows do both files)
     // the MOTD, team and class select: the game centres one its .res places at 0,0 (as its own files do), its box at the
     // top of the screen; any other place is used as it is (checked in game). Its box is the panels named ...solid.
     if (['info', 'team', 'class_ct', 'class_ter'].includes(info.id) && sel.res) {
@@ -3414,6 +3418,7 @@ function selectionSections(sel) {
     if (info.id === 'scores') for (const [t, r] of scoreboardSections(sel, fonts.map(([, n]) => n))) add(/fonts$/.test(t) ? 'font' : 'colour', t, r);
     if (info.id === 'gamemenu') for (const [t, r] of mainMenuSections()) add(/(position|items)$/.test(t) ? 'layout' : 'other', t, r);
     if (info.id === 'loadingdialog' && sel.res) {
+      add('show', 'Show or hide', loadingShowRows(sel.res));
       add('layout', 'Loading screen: layout', loadingRows(sel.res));
       // what's been added to it, each under its own headings (it can't be clicked in the preview)
       for (const s of sel.res.parsed.sections.filter(s => s.path.length === 2 && /^hudeditor_/i.test(s.path[1]))) {
@@ -3543,7 +3548,7 @@ function keysTip(head, rows) {
 }
 
 // A selection's settings come in six categories, one shown at a time (remembered); Custom holds what was added.
-const CATEGORIES = [['colour', 'Colours'], ['font', 'Fonts'], ['border', 'Borders'], ['layout', 'Layout'], ['custom', 'Custom'], ['other', 'Extras']];
+const CATEGORIES = [['show', 'Show/hide'], ['colour', 'Colours'], ['font', 'Fonts'], ['border', 'Borders'], ['layout', 'Layout'], ['custom', 'Custom'], ['other', 'Extras']];
 let category = 'colour', openParts = false;
 try { category = localStorage.getItem('category') || 'colour'; } catch {}
 // A part of a window picked on its own (an added picture or box, the scoreboard's background box): its name, as the
@@ -3668,10 +3673,10 @@ function renderList() {
     else stack.append(el('p', { className: 'meta', textContent: 'Nothing to edit here yet.' }));
     layout.append(nav, stack);
     list.append(layout);
-    // at the bottom: every ↶ of this selection at once (the ones lit when clicked, in every category), and Done
-    const reset = el('button', { textContent: `↶ Reset ${selected.info.kind === 'hud' && !selected.control ? 'part' : 'all'}`,
+    // at the bottom: every ↺ of this selection at once (the ones lit when clicked, in every category), and Done
+    const reset = el('button', { textContent: `↺ Reset ${selected.info.kind === 'hud' && !selected.control ? 'part' : 'all'}`,
       title: 'Put every setting here back to how it was when the HUD was opened', onclick: () => {
-        const undos = sections.flatMap(s => s[1]).flatMap(r => [...r.querySelectorAll('.undo:not(.dflt):not(.off)')]);
+        const undos = sections.flatMap(s => s[1]).flatMap(r => [...r.querySelectorAll('.undo:not(.off)')]);
         if (!undos.length) return status('Nothing here has changed since the HUD was opened.');
         for (const u of undos) u.onclick();
         refreshSoon();
@@ -4174,7 +4179,7 @@ let restarting = false;
 async function restartGame() {
   if (restarting) return;
   restarting = true;
-  $('restart').disabled = true;
+  $('restartmark').disabled = true;
   try {
     if (live) {
       status('Quitting the game...');
@@ -4191,12 +4196,12 @@ async function restartGame() {
       status('Starting the game again: the preview comes back once it has loaded.');
       for (let i = 0; i < 90 && !live; i++) await sleep(500);
     }
-    if (!live) status('The game didn\'t start yet. If it doesn\'t show up, click Restart game again.');
+    if (!live) status('The game didn\'t start yet. If it doesn\'t show up, click Launch game.');
   } catch (err) {
     status(`Couldn't restart the game: ${err.message}`);
   } finally {
     restarting = false;
-    $('restart').disabled = false;
+    $('restartmark').disabled = false;
   }
 }
 
@@ -4227,7 +4232,7 @@ async function openHud(path) {
     selected = null;
     undoSteps.length = 0;
     dropped.clear();
-    for (const k in opened) delete opened[k]; // ↶ goes back to this HUD as opened
+    for (const k in opened) delete opened[k]; // ↺ goes back to this HUD as opened
     chatResOk = false;
     setDirty(false);
     await loadAll();
@@ -4285,7 +4290,7 @@ if (host) {
     }
   };
   $('save').onclick = saveHud;
-  $('restart').onclick = restartGame;
+  $('restartmark').onclick = restartGame;
   $('grid').value = String(grid);
   $('grid').onchange = () => { grid = +$('grid').value; try { localStorage.setItem('grid', grid); } catch {} };
   document.addEventListener('keydown', e => {
@@ -4514,19 +4519,22 @@ async function parserCheck() {
   const dropped = dropBlock(tm, [], 'CancelButton');
   check(!/CancelButton|vguicancel/.test(dropped) && /terbutton/.test(dropped) && /hudeditor_cmd1/.test(dropped), 'a block is taken out whole');
   let put = null;
-  const uw = undoArrow('selfcheck|x', '400', v => v, v => { put = v; }, '300'), ua = uw.querySelector('.undo:not(.dflt)'), ud = uw.querySelector('.dflt');
-  const offAtFirst = ua.classList.contains('off'), dOn = !ud.classList.contains('off');
+  const uw = undoArrow('selfcheck|x', '400', v => v, v => { put = v; }), ua = uw.querySelector('.undo');
+  const offAtFirst = ua.classList.contains('off');
   uw.update('600');
   const tip = ua.title;
   ua.onclick();
-  check(offAtFirst && tip.startsWith('400 → 600') && put === '400' && ua.classList.contains('off'), `↶ shows once changed, says then → now, and puts the first value back (${tip})`);
-  ud.onclick();
   delete opened['selfcheck|x'];
-  check(dOn && put === '300' && ud.classList.contains('off') && !ua.classList.contains('off'), 'Default shows off the game\'s value and puts it in');
-  const dr = checkRow('X', true, () => {}, 'selfcheck|d', false);
-  await null; // (Default moves beside the name once the row is built)
-  delete opened['selfcheck|d'];
-  check(dr.firstElementChild.querySelector('.dflt') && dr.querySelector('.arrows .undo') && !dr.querySelector('.arrows .dflt'), 'Default sits by the row\'s name, ↶ at the right');
+  check(offAtFirst && tip.startsWith('400 → 600') && put === '400' && ua.classList.contains('off'), `↺ shows once changed, says then → now, and puts the first value back (${tip})`);
+  // the game's colour: Default in the colour's pop-out
+  let got = null;
+  const cr = colorRow('X', '', '1 2 3 255', v => { got = v; }, [], '9 9 9 128', 'selfcheck');
+  document.body.append(cr);
+  cr.querySelector('.swatch').click();
+  const pd = cpop && [...cpop.querySelectorAll('footer button')].find(b => b.textContent === 'Default');
+  pd?.click();
+  closePicker(); cr.remove(); delete opened['selfcheck|X|'];
+  check(pd && got === '9 9 9 128' && !cr.querySelector('.dflt'), `a colour's Default is in its pop-out and puts the game's colour in (${got})`);
   const g0 = grid;
   grid = 8;
   const gv = [gridded('13'), gridded('c-29'), gridded('r3'), gridded('f0')].join();
@@ -4568,16 +4576,18 @@ if (host && location.hash === '#hosttest') (async () => {
     check(!isHidden('HudHealth') && !/"alpha"/.test(undone) && /"xpos"\t\t"20"/.test(undone), 'undo puts the file back as it was');
     save(F(C), 'Panel.FgColor', '9 9 9 255');
     const spec = await uiFile('resource/UI/spectator.res');
-    check(spec && windowPartRows({ res: spec, info: { id: 'specgui' } }).length === WINDOW_PARTS.specgui.length, 'spectator bars start from the game\'s file, with show/hide for each part');
+    const specSel = { res: spec, info: { id: 'specgui', kind: 'window' }, thing: { key: 'specgui' } }, eyeNames = () => showHideRows(specSel).map(r => r.querySelector('.rename').textContent);
+    check(spec && WINDOW_PARTS.specgui.every(([label]) => eyeNames().includes(label)) && eyeNames().length > WINDOW_PARTS.specgui.length,
+      `spectator bars start from the game's file, with an eye for every part (${eyeNames().join(', ')})`);
     setPartHidden(spec, 'topbar', true);
     setPartHidden(spec, 'CTScoreLabel', true);
     await sleep(400);
     await writing;
     const specText = await readHud('resource/UI/spectator.res') || '';
     check(/"topbar"[^}]*"tall"\s+"0"[^}]*"tall_hudeditor"\s+"52"/.test(specText) && /"CTScoreLabel"[^}]*"xpos"\s+"9999"/.test(specText), 'hiding window parts writes a copy of the game\'s file: the top bar 0 high, a label off screen');
-    const specRows = windowPartRows({ res: spec, info: { id: 'specgui' } });
+    const specRows = showHideRows(specSel);
     const scoresRow = specRows.find(r => /team scores/i.test(r.textContent)), scoresEye = scoresRow.querySelector('.eye');
-    check(specRows.length === WINDOW_PARTS.specgui.length && scoresEye.classList.contains('off') && scoresEye.getAttribute('aria-pressed') === 'false' && scoresRow.classList.contains('hidden'),
+    check(scoresEye.classList.contains('off') && scoresEye.getAttribute('aria-pressed') === 'false' && scoresRow.classList.contains('hidden'),
       'a hidden spectator part shows its eye crossed out');
     setPartHidden(spec, 'CTScoreLabel', false);
     await sleep(400);
@@ -4595,7 +4605,7 @@ if (host && location.hash === '#hosttest') (async () => {
       .map(([, n, w]) => `${n}:${w}`).join();
     check(listFonts === 'DefaultSmall:servers, column headers' && hideHow('TextMessage').join() === 'xpos,9999',
       `the server list's font is the one the game's code picks (${listFonts}); MOTD parts hide off screen`);
-    const xRow = numRow(sb, 'MapName', 'xpos', 'X position', layoutProps(sb, 'MapName').xpos), centreBtn = xRow.querySelector('button.mini'), undoBtn = xRow.querySelector('.undo:not(.dflt)');
+    const xRow = numRow(sb, 'MapName', 'xpos', 'X position', layoutProps(sb, 'MapName').xpos), centreBtn = xRow.querySelector('button.mini'), undoBtn = xRow.querySelector('.undo');
     centreBtn.onclick(); await sleep(400); await writing;
     const centred = layoutProps(sb, 'MapName').xpos;
     undoBtn.onclick(); await sleep(400); await writing;
@@ -4621,7 +4631,7 @@ if (host && location.hash === '#hosttest') (async () => {
     rgbBoxes[1].value = '99';
     rgbBoxes[1].oninput();
     const typed = picked;
-    cr.querySelector('.undo:not(.dflt)').onclick();
+    cr.querySelector('.undo').onclick();
     check(crVals === '10 20 30|50%' && refused === '' && typed === '10 99 30 128' && picked === '10 20 30 128' && rgbBoxes[1].value === '20',
       `colour rows: R G B boxes and opacity shown, a value over 255 not taken, a typed one is, the row's Undo goes back to the value at opening (${crVals}, ${typed}, ${picked})`);
     const pasted = ['1 2 3', '1 2 3 4', '#ff8000', '#ff800080', 'rgba(255, 128, 0, 0.5)', '10, 20, 30', 'x'].map(s => String(parseColour(s))).join('|');
@@ -4634,7 +4644,7 @@ if (host && location.hash === '#hosttest') (async () => {
     const tg = toggleRow('Outline', false, on => { flip = on; }), tick = tg.querySelector('input');
     tick.checked = true;
     tick.onchange();
-    check(flip === true && tick.checked && !tg.querySelector('.undo:not(.dflt)').classList.contains('off'), 'on/off rows switch');
+    check(flip === true && tick.checked && !tg.querySelector('.undo').classList.contains('off'), 'on/off rows switch');
     const hs = hudSettingRows('HudVoiceStatus', HUD.HudVoiceStatus).map(r => r.dataset.keys);
     check(hs.length === HUD.HudVoiceStatus.settings.length && hs.includes('avatar_wide + avatar_tall'), `a part's own HudLayout settings are listed (${hs.length})`);
     check(JSON.stringify(left) === '{"xpos":"1"}' && JSON.stringify(corner) === '{"xpos":"r101","ypos":"r61"}',
