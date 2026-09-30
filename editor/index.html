@@ -53,10 +53,13 @@
   /* the game: test tools over it (when open), messages under it */
   .preview-area { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
   .toolsbtn[aria-expanded="true"] { border-color: var(--accent); background: var(--soft); }
-  .toolsbtn::after { content: '⌄'; margin-left: 6px; }
+  :root { --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23e6dfe4' stroke-width='1.3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); } /* the top bar's drop-down arrow (Grid, Test tools) */
+  .toolsbtn::after { content: ''; display: inline-block; width: 9px; height: 6px; margin-left: 8px; vertical-align: 2px; background: var(--chevron) no-repeat center / 9px 6px; }
   .zoombtn { padding: 4px 10px; border-color: var(--accent); color: var(--accent); font-size: 12px; }
-  .gridsel { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
-  .gridsel select { padding: 4px 6px; }
+  /* the grid: a drop-down that looks like the buttons beside it */
+  .gridbtn { appearance: none; padding: 6px 27px 6px 11px; color: var(--text); cursor: pointer;
+    background: var(--field) var(--chevron) no-repeat right 11px center / 9px 6px; }
+  .gridbtn:hover { border-color: var(--accent); background-color: var(--soft); }
   #tools { display: grid; gap: 9px; padding: 12px 15px; background: var(--surface); border-bottom: 1px solid var(--line); }
   #tools .tline { display: flex; gap: 7px; flex-wrap: wrap; align-items: center; }
   .glabel { min-width: 76px; font-size: 12px; color: var(--muted); }
@@ -291,8 +294,8 @@
     <button id="capture" hidden>Capture game</button>
     <button id="launch" hidden>Launch game</button>
     <button id="zoom" class="zoombtn" hidden title="Zoomed in with the mouse wheel: click for 100%">100%</button>
-    <label class="gridsel" title="Dragged parts land on a grid this many units apart (a unit is the screen height / 480)">Grid
-      <select id="grid"><option value="0">Off</option><option>2</option><option>4</option><option>5</option><option>8</option><option>10</option><option>16</option><option>20</option></select></label>
+    <select id="grid" class="gridbtn" aria-label="Grid" title="Dragged parts land on a grid this many units apart (a unit is the screen height / 480)"><option value="0">Grid: off</option><option value="2">Grid: 2</option><option value="4">Grid: 4</option><option value="5">Grid: 5</option><option value="8">Grid: 8</option><option value="10">Grid: 10</option><option value="16">Grid: 16</option><option value="20">Grid: 20</option></select>
+    <span class="sep" aria-hidden="true"></span>
     <button id="testserver" title="Offline game with a frozen bot and bhop/surf-style timer texts on screen">Test server</button>
     <button id="toolsbtn" class="toolsbtn" aria-expanded="false" title="Scoreboard and the sample texts on the test server">Test tools</button>
     <span class="sep" aria-hidden="true"></span>
