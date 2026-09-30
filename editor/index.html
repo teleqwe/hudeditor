@@ -218,7 +218,9 @@
   /* a font's extra options: + opens what it can also have */
   .row.addkey { display: grid; grid-template-columns: minmax(0, 1fr) auto; row-gap: 10px; align-items: center; }
   .addhead { font-size: 12px; font-weight: 500; color: var(--muted); }
-  .row.addkey .plus { width: 28px; height: 28px; padding: 0; font-size: 18px; line-height: 1; }
+  .row.addkey .plus, .row.missing .plus { width: 28px; height: 28px; padding: 0; font-size: 18px; line-height: 1; }
+  .row.missing { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 9px 0; }
+  .row.missing .meta { display: block; overflow-wrap: anywhere; }
   .row.addkey .chips { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 8px; background: var(--field); border: 1px solid var(--line); border-radius: 5px; }
   .row.addkey .chips button { padding: 7px; border: 0; background: transparent; text-align: left; }
   .row.addkey .chips button:hover { background: var(--soft); }
@@ -281,6 +283,12 @@
   #picker .hud .meta { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #newform { display: flex; gap: 8px; margin: 6px 0; }
   #newform input { flex: 1; }
+  /* an archive with several HUDs in it: each with a name to give it */
+  #importlist:not(:empty) { margin: 4px 0 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--base); }
+  #importlist p { margin: 0 0 8px; }
+  #importlist .pick { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 8px; align-items: center; margin: 8px 0; }
+  #importlist .pick .meta { grid-column: 1 / -1; overflow-wrap: anywhere; }
+  #importlist .err { color: var(--accent); }
 
   @media (max-width: 860px) { body { grid-template-columns: 1fr; grid-template-rows: auto 50vh minmax(0, 1fr); } aside { border-left: 0; border-top: 1px solid var(--line); } }
   @media (max-width: 440px) { .settings-layout { grid-template-columns: 80px minmax(0, 1fr); } .section-stack { padding: 6px 10px 15px; } .category-button { padding: 8px 4px; font-size: 12px; } }
@@ -362,6 +370,9 @@
   <h2>Which HUD do you want to edit?</h2>
   <p class="meta">Changes show in game straight away. They are kept when you click Done or Save HUD.</p>
   <div id="hudlist"></div>
+  <button id="importhud" class="hud">Import a downloaded HUD...<span class="meta">The .zip, .rar or .7z as downloaded (or drop it on the editor): it goes in your custom folder</span></button>
+  <input type="file" id="importfile" accept=".zip,.rar,.7z" hidden>
+  <div id="importlist"></div>
   <button id="browse" class="hud">Browse for a HUD folder...<span class="meta">Any folder with resource/ or scripts/ inside</span></button>
   <button id="newhud" class="hud">Start a new HUD<span class="meta">From the default look, in your custom folder</span></button>
   <form id="newform" hidden><input id="newname" placeholder="Name it, e.g. Pink Surf" maxlength="60" aria-label="Name for the new HUD"><button class="primary">Create</button></form>
@@ -375,7 +386,9 @@ const C = 'ClientScheme.res', S = 'SourceScheme.res', L = 'HudLayout.res', CH = 
 const PATHS = { [C]: 'resource/ClientScheme.res', [S]: 'resource/SourceScheme.res', [L]: 'scripts/HudLayout.res', [CH]: 'resource/ChatScheme.res' };
 // A HUD without one of these starts from a stub that #bases the game's file, [base file, root block]; both are
 // written on the first change.
-const STUBS = { [L]: ['hudlayout_default.res', 'Resource/HudLayout.res'], [CH]: ['chatscheme_default.res', 'Scheme'] };
+// (a downloaded HUD can leave any of them out: CS2 New Hud has only ClientScheme, its menus are the game's)
+const STUBS = { [L]: ['hudlayout_default.res', 'Resource/HudLayout.res'], [CH]: ['chatscheme_default.res', 'Scheme'], [C]: ['clientscheme_default.res', 'Scheme'],
+  [S]: ['sourcescheme_default.res', 'Scheme'] };
 const stubText = ([base, root]) => `#base "${base}"\n\n// Your changes go here. Anything not listed comes from ${base}.\n"${root}"\n{\n}\n`;
 
 // ---------- what things are: HUD parts, windows, and the colours each VGUI control reads ----------
@@ -1007,7 +1020,8 @@ function thingOf(p) {
 function thingInfo(t) {
   const hud = HUD[t.name] || Object.entries(HUD).find(([k]) => k.toLowerCase() === t.key)?.[1];
   if (hud) return { kind: 'hud', id: t.name, name: hud.name, hud };
-  if (/^hudeditor_/i.test(t.name)) { const c = customInfo(t.name); if (c) return c; }
+  // a picture, text or box HudLayout adds (the editor's, or the HUD's own)
+  { const c = customInfo(t.name); if (c) return c; }
   // the main menu's logo: two buttons the menu makes (ClientScheme's Main.Title1 and Main.Title2)
   if (/^gamemenubutton2?$/.test(t.key)) return { kind: 'window', id: 'gamelogo', name: t.key.endsWith('2') ? 'Logo, second line' : 'Logo', file: C, title: t.key.endsWith('2') ? 2 : 1 };
   const win = WINDOWS[t.key];
@@ -1093,6 +1107,46 @@ const showRow = (f, block, label) => {
     refreshSoon();
   });
 };
+// ---------- missing parts (the Missing tab) ----------
+// What the game's own copy of a file has that the HUD's leaves out: whole blocks, a HUD part HudLayout doesn't place
+// or a window's control its .res doesn't have. The game still makes them, where its code puts them (for HudLayout it
+// says "doesn't have an entry" in the console), so the editor can't place them either. + copies the game's block in:
+// its place, size and colours as the game has them.
+function missingBlocks(f) {
+  const g = f && gameOf(f.name);
+  if (!g || f.defaultText) return []; // (a HUD without the file: it is the game's)
+  const have = new Set([...f.bases, f.parsed].flatMap(p => p.sections.filter(s => s.path.length === 2).map(s => s.path[1].toLowerCase())));
+  // (the chat's file: the editor's copy leaves the chat's own block out on purpose, see UI_RES)
+  const skip = f.name === UI_RES.hudchat ? ['hudchat'] : [];
+  return [...new Set(g.parsed.sections.filter(s => s.path.length === 2 && !have.has(s.path[1].toLowerCase()) && !skip.includes(s.path[1].toLowerCase())).map(s => s.path[1]))];
+}
+const missingName = (f, n) => (f.name === L && HUD[n]?.name) || prettify(n);
+function addMissing(f, names) {
+  const g = gameOf(f.name), root = g.parsed.sections.find(s => s.path.length === 1).path[0];
+  commit(f, `${f.name}/missing`, () => {
+    let cur = f;
+    for (const n of names) { const text = setBlock(cur, [], n, blockPairs(g.parsed, [root, n])); cur = { ...cur, text, parsed: parse(text) }; }
+    return cur.text;
+  });
+  checkup = null;
+  refreshSoon();
+  writing.then(() => { render(); status(`Added ${names.length > 1 ? `${names.length} parts` : missingName(f, names[0])} as the game has ${names.length > 1 ? 'them' : 'it'}. Click Done or Save HUD to keep it.`); });
+}
+function missingRows(f) {
+  const names = missingBlocks(f);
+  if (!names.length) return [];
+  const g = gameOf(f.name), what = n => { const p = layoutProps(g, n), c = (p.controlname || '').replace(/^C(?=[A-Z])/, ''); return [c, p.visible === '0' ? 'hidden in the game\'s file' : ''].filter(Boolean).join(' · '); };
+  const rows = names.map(n => {
+    const r = el('div', { className: 'row missing' }), text = el('div');
+    text.append(el('div', { className: 'name', textContent: missingName(f, n) }), el('span', { className: 'meta', textContent: [n, what(n)].filter(Boolean).join(' · ') }));
+    r.append(text, el('button', { className: 'plus', textContent: '+', title: 'Add it as the game has it: its place, size and colours', onclick: () => addMissing(f, [n]) }));
+    r.dataset.q = `missing ${n}`.toLowerCase();
+    return r;
+  });
+  const all = el('div', { className: 'row action' });
+  if (names.length > 1) all.append(el('button', { textContent: `+ Add all ${names.length}`, onclick: () => addMissing(f, names) }));
+  return [...(names.length > 1 ? [all] : []), ...rows, noteRow(`The game has these in its own ${f.name.split('/').pop()}, and this HUD's leaves them out: the game still makes them, where its code puts them, and they can't be placed from here until they're added.`)];
+}
 // The Show/hide tab: every part of the selection with its eye. A HUD part: itself; with a file of its own (the chat,
 // the round-end panel) or a window: the parts WINDOW_PARTS names (grouped ones as one), then every other block in the
 // file, in its order (not the window's own block, nor its hidden system menu).
@@ -1246,35 +1300,66 @@ async function runCheckup() {
   status('Checking the HUD...');
   const out = [], add = (text, fix = null) => out.push([text, fix]), list = xs => xs.slice(0, 5).join(', ') + (xs.length > 5 ? ` and ${xs.length - 5} more` : '');
   const known = async op => new Set((await call(op).catch(() => '')).split('\n').map(s => s.trim().toLowerCase()).filter(Boolean));
-  const installed = await known('fontfaces'), brought = await known('hudfonts');
+  const installed = await known('fontfaces');
+  // the HUD's font files, and the ones a scheme lists in CustomFontFiles: only those does the game load (a file any of
+  // the three schemes lists is there for all of them)
+  const hudFonts = (await call('hudfonts').catch(() => '')).split('\n').filter(Boolean).map(l => { const [family, path = ''] = l.split('\t'); return { family, path }; });
+  const listedPaths = new Set(FONT_FILES.flatMap(([file]) => F(file) ? fontFileEntries(F(file)).map(e => e.value.replace(/\\/g, '/').toLowerCase()) : []));
+  const isListed = h => listedPaths.has(h.path.toLowerCase());
   // the game reads custom folders in name order: a HUD there before this one wins for every file both have (the
   // editor puts this one first while it runs, but not for the menus read as the game starts, nor when playing)
   const huds = (await call('huds').catch(() => '')).split('\n').map(l => l.split('\t'));
   const here = (huds.find(l => l[1] === 'current') || [])[2] || '', dir = p => p.toLowerCase().replace(/[\\/][^\\/]+$/, ''), base = p => p.split(/[\\/]/).pop();
   const before = /[\\/]custom[\\/][^\\/]+$/i.test(here) ? [...new Set(huds.filter(l => l[1] && l[1] !== 'current' && dir(l[1]) === dir(here)).map(l => base(l[1])))]
     .filter(n => n.toLowerCase() < base(here).toLowerCase()) : [];
-  if (before.length) add(`${list(before)} ${before.length > 1 ? 'come' : 'comes'} before ${base(here)} in the custom folder, so the game uses ${before.length > 1 ? 'their' : 'its'} files first: its main menu, and everything when you play. Move ${before.length > 1 ? 'them' : 'it'} out of custom to use this HUD.`);
+  const beforePaths = [...new Set(huds.filter(l => l[1] && l[1] !== 'current' && dir(l[1]) === dir(here) && before.includes(base(l[1]))).map(l => l[1]))];
+  if (before.length) add(`${list(before)} ${before.length > 1 ? 'come' : 'comes'} before ${base(here)} in the custom folder, so the game uses ${before.length > 1 ? 'their' : 'its'} files first: its main menu, and everything when you play. Move ${before.length > 1 ? 'them' : 'it'} out of custom to use this HUD.`,
+    [`Move ${before.length > 1 ? 'them' : 'it'} to the Desktop`, () => moveOut(beforePaths)]);
+  // ones after it fill in what it doesn't have (a HUD without a team menu shows theirs)
+  const afterPaths = /[\\/]custom[\\/][^\\/]+$/i.test(here) ? [...new Set(huds.filter(l => l[1] && l[1] !== 'current' && dir(l[1]) === dir(here) && base(l[1]).toLowerCase() > base(here).toLowerCase()).map(l => l[1]))] : [];
+  if (afterPaths.length) add(`${list(afterPaths.map(base))} ${afterPaths.length > 1 ? 'are' : 'is'} in the custom folder too: any file ${base(here)} doesn't have (a window it leaves as the game's, a picture) comes from ${afterPaths.length > 1 ? 'them' : 'it'} instead.`,
+    [`Move ${afterPaths.length > 1 ? 'them' : 'it'} to the Desktop`, () => moveOut(afterPaths)]);
   const games = {};
   for (const [file] of FONT_FILES) games[file] = await call('vanilla', PATHS[file].split('/').pop()).then(parse).catch(() => null);
   for (const [file, where] of FONT_FILES) {
     const f = F(file);
     if (!f) continue;
-    // font faces
+    // font faces, each: fine (the game's, a Windows one, a HUD font file a scheme lists), or what's wrong with it.
     // (a style after the family, "Verdana Bold", is a full font name Windows finds too; the game's own scheme uses it)
     const faces = new Map(), family = k => k.replace(/\s+(bold|italic|oblique|regular|light|medium|semi ?bold|demi ?bold|black|heavy|thin|condensed|narrow)\b.*$/, '');
     for (const font of fontNames(file)) for (const v of fontVariants(f, font).values()) {
-      const face = (v.name || '').trim(), k = face.toLowerCase(), ok = n => installed.has(n) || brought.has(n);
-      if (face && !ok(k) && !ok(family(k)) && !SYMBOL_FACES.has(k)) faces.set(k, [faces.get(k)?.[0] || face, [...new Set([...(faces.get(k)?.[1] || []), font])]]);
+      const face = (v.name || '').trim(), k = face.toLowerCase();
+      if (face && !SYMBOL_FACES.has(k)) faces.set(k, [faces.get(k)?.[0] || face, [...new Set([...(faces.get(k)?.[1] || []), font])]]);
     }
-    for (const [face, fonts] of faces.values()) add(`The font face "${face}" (${where}: ${list(fonts)}) isn't on this PC or in the HUD, so the game shows Tahoma.`, ['Add its font file...', () => addFontFile([file])]);
-    // font files it lists but doesn't have (the game's own, listed in its schemes, come from the game)
+    // (another of a font file's names, "Gravity-Regular" for the family "Gravity" (its PostScript name): Windows only
+    // knows the family, so the game shows Tahoma, checked in game)
+    const flat = s => s.toLowerCase().replace(/[-_ ]*(regular|normal|book|roman)$/, '').replace(/[^a-z0-9]/g, '');
+    for (const [k, [face, fonts]] of faces) {
+      const is = n => n === k || n === family(k), own = hudFonts.find(h => is(h.family.toLowerCase())), alias = !own && hudFonts.find(h => flat(h.family) === flat(face));
+      const which = `The font face "${face}" (${where}: ${list(fonts)})`;
+      if (own && isListed(own)) continue;
+      if (own) add(`${which} is the HUD's font file ${own.path}, but no scheme lists it in CustomFontFiles, so the game never loads it: players who don't have "${own.family}" installed see Tahoma.`,
+        ['List it in CustomFontFiles', () => { listFontFile(f, own.path); checkup = null; refreshSoon(); }]);
+      else if (alias) add(`${which} isn't a name Windows knows, so the game shows Tahoma: the HUD's font file ${alias.path} is called "${alias.family}".`,
+        [`Use "${alias.family}"`, () => { renameFace(file, face, alias.family); if (!isListed(alias)) listFontFile(f, alias.path); }]);
+      else if (installed.has(k) || installed.has(family(k))) {
+        if (!WINDOWS_FONTS.has(k) && !WINDOWS_FONTS.has(family(k)))
+          add(`${which} is installed on this PC but isn't in the HUD, so players who don't have it see Tahoma. Add its font file to bring it with the HUD.`, ['Add its font file...', () => addFontFile([file])]);
+      }
+      else add(`${which} isn't on this PC or in the HUD, so the game shows Tahoma.`, ['Add its font file...', () => addFontFile([file])]);
+    }
+    // font files it lists but doesn't have (the game's own, listed in its schemes, come from the game): one of the HUD's
+    // under another path is pointed at instead
     const game = games[file], ours = new Set((game ? game.entries : []).filter(e => sectionOf(e) === 'customfontfiles').map(e => e.value.replace(/\\/g, '/').toLowerCase()));
     for (const e of f.parsed.entries) {
       if (sectionOf(e) !== 'customfontfiles' || !(e.path.length === 2 || e.key.toLowerCase() === 'font')) continue;
       const p = e.value.replace(/\\/g, '/');
       if (!/\.(ttf|otf|vfont)$/i.test(p) || ours.has(p.toLowerCase()) || (await call('exists', p)) === '1') continue;
-      add(`${PATHS[file]} lists the font file ${p}, which isn't in the HUD.`, ['Take it out of the list', () => {
-        const entry = e.path.length === 2 ? e.key : e.path[2];
+      const entry = e.path.length === 2 ? e.key : e.path[2], there = hudFonts.find(h => h.path.split('/').pop().toLowerCase() === p.split('/').pop().toLowerCase());
+      if (there) add(`${PATHS[file]} lists the font file ${p}, which isn't there: the HUD has it at ${there.path}.`, [`Point it at ${there.path}`, () => {
+        save(f, e.path.length === 2 ? entry : 'font', there.path, e.path.length === 2 ? ['CustomFontFiles'] : ['CustomFontFiles', entry]); checkup = null; refreshSoon();
+      }]);
+      else add(`${PATHS[file]} lists the font file ${p}, which isn't in the HUD.`, ['Take it out of the list', () => {
         commit(f, `${f.name}/customfontfiles/${entry}`, () => e.path.length === 2 ? dropKey(f, ['CustomFontFiles'], entry) : dropBlock(f, ['CustomFontFiles'], entry));
       }]);
     }
@@ -1293,6 +1378,10 @@ async function runCheckup() {
   for (const f of files) for (const e of f.parsed.entries)
     if (e.key.toLowerCase() === 'image' && /^replay\/thumbnails\//i.test(e.value) && (await call('exists', `materials/vgui/${e.value}.vmt`)) !== '1')
       add(`${f.name}: ${e.path[1]} shows the picture ${e.value}, which isn't in the HUD.`);
+  // HUD parts the game has that HudLayout leaves out (the game's console says "doesn't have an entry" for each)
+  const missing = missingBlocks(F(L));
+  if (missing.length) add(`scripts/HudLayout.res leaves out ${missing.length} of the game's HUD parts (${list(missing)}): the game leaves each where its code puts it. A HUD part's Missing tab lists them too.`,
+    ['Add them as the game has them', () => addMissing(F(L), missing)]);
   // a menu background the editor set before 2026-09-30: no picture for the game to show while it starts
   for (const [name] of BACKGROUNDS) {
     const tex = (/"\$basetexture"\s*"console\/([^"]+)"/i.exec(await readHud(`materials/console/${name}.vmt`) || '') || [])[1];
@@ -1330,6 +1419,32 @@ async function runCheckup() {
   }
   checkup = out;
   status(out.length ? `The check-up found ${out.length} thing${out.length > 1 ? 's' : ''}.` : 'The check-up found nothing wrong.');
+  render();
+}
+// Every font entry in `file` with the face `from` gets the face `to` instead.
+function renameFace(file, from, to) {
+  const f = F(file);
+  commit(f, `${file}/face ${from}`, () => {
+    let cur = f;
+    for (const font of fontNames(file)) for (const [v, p] of fontVariants(cur, font))
+      if ((p.name || '').trim().toLowerCase() === from.toLowerCase()) { const text = setAt(cur, ['Fonts', font, v], 'name', to); cur = { ...cur, text, parsed: parse(text) }; }
+    return cur.text;
+  });
+  checkup = null;
+  refreshSoon();
+}
+// Other HUDs out of the custom folder (to the Desktop; still in the HUD list). The game keeps a HUD's font files open, so
+// moving one it has loaded waits for a restart of the game.
+async function moveOut(paths) {
+  const left = [...paths], go = async () => { while (left.length) { await call('moveout', left[0]); left.shift(); } };
+  const done = () => status(`Moved to your Desktop: ${paths.map(p => p.split(/[\\/]/).pop()).join(', ')}. The HUD list still has ${paths.length > 1 ? 'them' : 'it'}.`);
+  try { await go(); done(); }
+  catch (err) {
+    if (!live || !/game has quit/.test(err.message)) return status(`Couldn't move it: ${err.message}`);
+    if (!confirm(`${err.message}\n\nRestart the game to move it now? Unsaved changes stay.`)) return;
+    await restartGame(async () => { try { await go(); done(); } catch (e) { status(`Couldn't move it: ${e.message}`); } });
+  }
+  checkup = null;
   render();
 }
 // Copies the game's definitions of `names` in section `sec` into the HUD's scheme, as the game's file writes them.
@@ -1435,7 +1550,8 @@ const CUSTOM = {
 function customInfo(name) {
   const lay = F(L), c = lay && CUSTOM[(layoutProps(lay, name).controlname || '').toLowerCase()];
   if (!c) return null;
-  const label = `${c.word} ${/\d+$/.exec(name)?.[0] || ''}`.trim();
+  // (the HUD's own ones by their name: "Round Timer BG (picture)")
+  const label = /^hudeditor_/i.test(name) ? `${c.word} ${/\d+$/.exec(name)?.[0] || ''}`.trim() : `${prettify(name)} (${c.word.toLowerCase()})`;
   return { kind: 'hud', id: name, name: label, hud: { ...c, name: label, custom: true, pos: true } };
 }
 // VTF 7.2, BGRA8888 (see-through kept, no compression), one mip level, one frame per picture of an animation.
@@ -2579,7 +2695,13 @@ function borderRows(file, name) {
   }));
   sides.append(el('div', { textContent: 'Border sides' }), undo, opts);
   sides.dataset.q = 'border sides top left right bottom';
-  const rows = [colorRow('Border colour', 'The ticked sides', cur.colour, v => { cur.colour = v; write(); }, [name], game && game.colour, file),
+  // a colour picked while no side is ticked would draw nowhere (found with CS2 New Hud's window edge): all four go on
+  const colour = v => {
+    cur.colour = v;
+    if (!SIDES.some(s => cur.on[s]) && toRgba(v)[3] > 0) { for (const s of SIDES) boxes[s].checked = cur.on[s] = true; undo.update(on()); status('The border had no sides: all four are ticked now, so the colour shows. Untick the ones you don\'t want.'); }
+    write();
+  };
+  const rows = [colorRow('Border colour', 'The ticked sides', cur.colour, colour, [name], game && game.colour, file),
     inputRow('Thickness', String(cur.n), v => { cur.n = v; write(); }, { type: 'number', min: 1, max: 8, step: 1, title: 'pixels', undoId: `${file}/${name}/thickness`, dflt: game ? String(game.n) : null }),
     sides];
   const notes = [cur.mixed && 'The HUD gives this border more than one colour; a change here makes every side this colour.',
@@ -2756,6 +2878,19 @@ function allFonts() {
 }
 
 // Faces that draw icons and symbols, not text: "every text font" leaves them alone.
+// Fonts every Windows 10/11 PC has: a HUD needn't bring them (the check-up says nothing about them).
+const WINDOWS_FONTS = new Set([
+  'arial', 'arial black', 'bahnschrift', 'calibri', 'calibri light', 'cambria', 'cambria math', 'candara',
+  'comic sans ms', 'consolas', 'constantia', 'corbel', 'courier', 'courier new', 'ebrima', 'fixedsys',
+  'franklin gothic medium', 'gabriola', 'gadugi', 'georgia', 'impact', 'ink free', 'javanese text',
+  'leelawadee ui', 'lucida console', 'lucida sans unicode', 'malgun gothic', 'marlett', 'microsoft himalaya',
+  'microsoft jhenghei', 'microsoft new tai lue', 'microsoft phagspa', 'microsoft sans serif', 'microsoft tai le',
+  'microsoft yahei', 'microsoft yi baiti', 'mingliu-extb', 'modern', 'mongolian baiti', 'ms gothic',
+  'ms sans serif', 'ms serif', 'mv boli', 'myanmar text', 'nirmala ui', 'palatino linotype', 'roman', 'script',
+  'segoe mdl2 assets', 'segoe fluent icons', 'segoe print', 'segoe script', 'segoe ui', 'segoe ui black',
+  'segoe ui emoji', 'segoe ui historic', 'segoe ui light', 'segoe ui semibold', 'segoe ui semilight',
+  'segoe ui symbol', 'segoe ui variable', 'simsun', 'sitka', 'small fonts', 'sylfaen', 'symbol', 'system',
+  'tahoma', 'terminal', 'times new roman', 'trebuchet ms', 'verdana', 'webdings', 'wingdings', 'yu gothic']);
 const SYMBOL_FACES = new Set(['marlett', 'counter-strike', 'counter-strike logo', 'cs', 'csd', 'halflife2', 'buttons', 'webdings', 'wingdings']);
 // One face and/or weight for every text font in every scheme, each file written once.
 async function setAllFonts(face, weight) {
@@ -2973,6 +3108,14 @@ function fontRows(file, font) {
 // CustomFontFiles of the given schemes (the game registers it, live); then it can be picked in any Face box, where the
 // editor draws its name in it too.
 let fontSchemes = [];
+// A scheme's CustomFontFiles: its entries ("1" "resource/x.ttf", or a block named 1 with "font" in it) and their paths.
+const fontFileEntries = f => [...f.bases, f.parsed].flatMap(p => p.entries).filter(e => sectionOf(e) === 'customfontfiles' && (e.path.length === 2 || e.key.toLowerCase() === 'font'));
+// Lists a font file there under the next free number (not listed twice).
+function listFontFile(f, rel) {
+  if (fontFileEntries(f).some(e => e.value.replace(/\\/g, '/').toLowerCase() === rel.toLowerCase())) return;
+  const nums = fontFileEntries(f).map(e => parseInt(e.path.length === 2 ? e.key : e.path[2], 10)).filter(n => n > 0);
+  save(f, String(Math.max(0, ...nums) + 1), rel, ['CustomFontFiles']);
+}
 function addFontFile(schemes) {
   fontSchemes = schemes;
   $('fontfile').value = '';
@@ -2986,11 +3129,7 @@ $('fontfile').onchange = async () => {
     // (one already in the HUD under that name is listed as it is: the game keeps a font file it has loaded locked)
     if (await call('exists', rel) !== '1') await call('writebin', rel, await base64(new Uint8Array(data)));
     const family = (await call('fontfamily', rel)) || file.name.replace(/\.\w+$/, '');
-    for (const f of fontSchemes.map(F).filter(Boolean)) {
-      const used = [...f.bases, f.parsed].flatMap(p => p.entries).filter(e => e.path.length === 2 && e.path[1].toLowerCase() === 'customfontfiles');
-      if (used.some(e => e.value.replace(/\\/g, '/').toLowerCase() === rel.toLowerCase())) continue;
-      save(f, String(Math.max(0, ...used.map(e => +e.key).filter(n => n > 0)) + 1), rel, ['CustomFontFiles']);
-    }
+    for (const f of fontSchemes.map(F).filter(Boolean)) listFontFile(f, rel);
     if (!fontFaces.includes(family)) fontFaces.unshift(family);
     try { const face = new FontFace(family, data); await face.load(); document.fonts.add(face); } catch {} // (the list shows it in itself)
     setDirty(true);
@@ -3347,7 +3486,7 @@ async function addStartupBackground(name, tex) {
 // Everything editable for a selection, as [title, rows, kind]: colours, fonts, borders, layout (places and sizes), then
 // the rest (what's shown, the menu's buttons...). Titles say the kind first, then what it's for.
 function selectionSections(sel) {
-  const groups = { show: [], colour: [], font: [], border: [], layout: [], custom: [], other: [] }, add = (kind, title, rows) => groups[kind].push([title, rows]);
+  const groups = { show: [], colour: [], font: [], border: [], layout: [], custom: [], missing: [], other: [] }, add = (kind, title, rows) => groups[kind].push([title, rows]);
   const { info, control } = sel, fonts = fontsOf(sel), own = sel.res && ownBlock(sel);
   // the main menu's background and logo: their own few settings
   if (info.id === 'menubg') return [['Menu background', backgroundRows(), 'other']];
@@ -3384,6 +3523,8 @@ function selectionSections(sel) {
     if (info.id === 'HudChat' && sel.res) add('layout', 'Chat: space inside', chatPaddingRows(sel));
     // parts moved off screen (the chat's Filters button) can't be clicked any more
     add('show', 'Show or hide', showHideRows(sel));
+    add('missing', 'HUD parts HudLayout leaves out', missingRows(F(L)));
+    if (sel.res) add('missing', `${info.name}: parts its file leaves out`, missingRows(sel.res));
   } else {
     if (info.id !== 'gamemenu') { // the main menu isn't a window frame
       // menu windows paint their frame's background and edge; in-game ones (team select...) draw their own panels
@@ -3403,6 +3544,7 @@ function selectionSections(sel) {
     }));
     if (ADD_WINDOWS.has(info.id) && sel.res) add('custom', 'Pictures, texts and boxes', addRows(sel.res));
     if (info.id !== 'loadingdialog') add('show', 'Show or hide', showHideRows(sel)); // (the loading screen's own rows do both files)
+    if (sel.res) add('missing', 'Parts its file leaves out', missingRows(sel.res));
     // the MOTD, team and class select: the game centres one its .res places at 0,0 (as its own files do), its box at the
     // top of the screen; any other place is used as it is (checked in game). Its box is the panels named ...solid.
     if (['info', 'team', 'class_ct', 'class_ter'].includes(info.id) && sel.res) {
@@ -3551,7 +3693,7 @@ function keysTip(head, rows) {
 }
 
 // A selection's settings come in six categories, one shown at a time (remembered); Custom holds what was added.
-const CATEGORIES = [['show', 'Show/hide'], ['colour', 'Colours'], ['font', 'Fonts'], ['border', 'Borders'], ['layout', 'Layout'], ['custom', 'Custom'], ['other', 'Extras']];
+const CATEGORIES = [['show', 'Show/hide'], ['colour', 'Colours'], ['font', 'Fonts'], ['border', 'Borders'], ['layout', 'Layout'], ['custom', 'Custom'], ['missing', 'Missing'], ['other', 'Extras']];
 let category = 'colour', openParts = false;
 try { category = localStorage.getItem('category') || 'colour'; } catch {}
 // A part of a window picked on its own (an added picture or box, the scoreboard's background box): its name, as the
@@ -4179,7 +4321,8 @@ async function testServer() {
 // Quits the game (through the plugin, as typing quit would) and starts it again once it has gone, for what the game only
 // reads as it starts. The HUD's files stay as they are, unsaved changes included.
 let restarting = false;
-async function restartGame() {
+// between: work to do while the game is down (moving a HUD whose font files it had open)
+async function restartGame(between = null) {
   if (restarting) return;
   restarting = true;
   $('restartmark').disabled = true;
@@ -4191,6 +4334,7 @@ async function restartGame() {
       for (let i = 0; i < 120 && live; i++) await sleep(500);
       // Steam ignores a start while it still counts the old game as running, a few seconds after it has gone
       status('The game has quit. Starting it again in a moment...');
+      if (between) await between();
       await sleep(15000);
     }
     // started, then checked: once more if it doesn't come up
@@ -4210,6 +4354,7 @@ async function restartGame() {
 
 // ---------- HUD picker ----------
 async function showPicker(canCancel) {
+  $('importlist').replaceChildren(); // (an import's message from last time)
   const lines = (await call('huds')).split('\n');
   const current = lines.pop().split('\t')[2] || '';
   const huds = lines.filter(Boolean).map(l => l.split('\t'));
@@ -4221,7 +4366,7 @@ async function showPicker(canCancel) {
     b.onclick = () => openHud(path);
     box.append(b);
   }
-  if (!huds.length) box.append(el('p', { className: 'meta', textContent: 'No HUDs found yet. Browse for yours, or start a new one.' }));
+  if (!huds.length) box.append(el('p', { className: 'meta', textContent: 'No HUDs found yet. Import one you downloaded, browse for yours, or start a new one.' }));
   $('pickclose').hidden = !canCancel;
   $('picker').hidden = false;
 }
@@ -4244,11 +4389,62 @@ async function openHud(path) {
     if (F(CVAR_CFG) || cvarStart) { cvarValues = null; await loadCvars(); applyCvars(F(CVAR_CFG) && F(CVAR_CFG).text); }
     status(live ? `Editing ${hudName}. Click anything in the preview to edit it.` : `Editing ${hudName}.`);
     // the HUD's own font faces first in the font name suggestions
-    call('hudfonts').then(list => { fontFaces = [...list.split('\n').filter(Boolean), ...fontFaces]; }).catch(() => {});
+    call('hudfonts').then(list => { fontFaces = [...new Set([...list.split('\n').filter(Boolean).map(l => l.split('\t')[0]), ...fontFaces])]; }).catch(() => {});
   } catch (err) {
     alert(err.message);
   }
 }
+
+// ---------- importing a downloaded HUD ----------
+// The archive goes to the exe, which unpacks it and finds the HUD folders in it (see "unpack"). One is put in the custom
+// folder and opened; several (a HUD's variants) are listed, each with a name to give it. Folder names that say nothing
+// (cstrike, custom, my_custom_stuff...) give way to the archive's name, without the tag GameBanana adds to it.
+const DULL_NAMES = /^(cstrike|custom|hud|huds|default|my_custom_stuff|mycustomstuff|resource|scripts|files|upload)$/i;
+async function importHud(file) {
+  const box = $('importlist'), msg = (text, err = false) => box.replaceChildren(el('p', { className: `meta${err ? ' err' : ''}`, textContent: text }));
+  if (!/\.(zip|rar|7z)$/i.test(file.name)) return msg(`${file.name} isn't a .zip, .rar or .7z. An installer (.exe) isn't a HUD folder: run it yourself, then Browse for the folder it made.`, true);
+  msg(`Unpacking ${file.name}...`);
+  let found;
+  try { found = (await call('unpack', file.name, await base64(new Uint8Array(await file.arrayBuffer())))).split('\n').filter(Boolean).map(l => l.split('\t')); }
+  catch (err) { return msg(err.message, true); }
+  const huds = found.filter(([k]) => k === 'hud').map(([, rel]) => rel), other = found.filter(([k]) => k === 'other').map(([, rel]) => rel.replace(/\\/g, '/'));
+  const stem = file.name.replace(/\.[^.]+$/, '').replace(/_[0-9a-f]{5}$/i, '').replace(/[_]+/g, ' ').trim() || 'Imported HUD';
+  const taken = new Set((await call('huds')).split('\n').map(l => (l.split('\t')[0] || '').toLowerCase()));
+  const unique = n => { let m = n, i = 2; while (taken.has(m.toLowerCase())) m = `${n} ${i++}`; return m; };
+  const nameFor = rel => { const last = rel.split('\\').pop(); return unique(!last || DULL_NAMES.test(last) ? (huds.length > 1 && last ? `${stem} ${last}` : stem) : last); };
+  // files beside the HUD that a player is told to copy elsewhere (a cfg for cstrike/cfg)
+  const cfgs = other.filter(p => /\.cfg$/i.test(p));
+  const cfgNote = cfgs.length ? ` The archive also has ${cfgs.join(', ')}, which isn't part of the HUD folder: if its instructions say so, copy it into cstrike/cfg yourself.` : '';
+  const put = async (rel, name) => {
+    try {
+      const path = await call('importhud', rel, name.trim());
+      box.replaceChildren();
+      await openHud(path);
+      if (hudName !== name.trim()) return;
+      needRestart('the imported HUD\'s main menu buttons');
+      status(`Imported ${hudName} into your custom folder.${cfgNote} Its main menu buttons show once the game restarts (the ⟳ by Save HUD).`);
+    } catch (err) { msg(err.message, true); }
+  };
+  if (huds.length === 1) return put(huds[0], nameFor(huds[0]));
+  box.replaceChildren(el('p', { className: 'meta', textContent: `${file.name} has ${huds.length} HUDs in it (versions of it, most likely). Import the one you want, or each under its own name:` }));
+  for (const rel of huds) {
+    const row = el('div', { className: 'pick' }), name = el('input', { value: nameFor(rel), maxLength: 60 });
+    name.setAttribute('aria-label', 'Name for this HUD');
+    row.append(name, el('button', { className: 'primary', textContent: 'Import', onclick: () => put(rel, name.value) }), el('span', { className: 'meta', textContent: `In the archive: ${rel.slice(1).replace(/\\/g, '/')}` }));
+    box.append(row);
+  }
+  if (cfgNote) box.append(el('p', { className: 'meta', textContent: cfgNote.trim() }));
+}
+// An archive dropped anywhere on the editor is imported (anything else dropped is left alone, not opened as a page).
+document.addEventListener('dragover', e => { if (e.dataTransfer && [...e.dataTransfer.items].some(i => i.kind === 'file')) e.preventDefault(); });
+document.addEventListener('drop', e => {
+  const f = e.dataTransfer && e.dataTransfer.files[0];
+  if (!f) return;
+  e.preventDefault();
+  if (!/\.(zip|rar|7z)$/i.test(f.name)) return status('Drop a HUD\'s .zip, .rar or .7z here to import it.');
+  showPicker(true);
+  importHud(f);
+});
 
 async function saveHud() {
   await sleep(300);
@@ -4279,6 +4475,8 @@ if (host) {
   $('hudbtn').onclick = () => showPicker(true);
   $('pickclose').onclick = () => { $('picker').hidden = true; };
   $('browse').onclick = async () => { try { await openHud(await call('browse')); } catch {} };
+  $('importhud').onclick = () => { $('importfile').value = ''; $('importfile').click(); };
+  $('importfile').onchange = () => { const f = $('importfile').files[0]; if (f) importHud(f); };
   $('newhud').onclick = () => { $('newform').hidden = false; $('newerr').textContent = ''; $('newname').focus(); };
   $('newform').onsubmit = async e => {
     e.preventDefault();

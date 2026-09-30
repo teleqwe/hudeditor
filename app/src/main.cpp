@@ -510,6 +510,52 @@ static void MountHud()
 }
 
 // Stub scheme files that #base the game's defaults, for a brand-new HUD.
+// ---------- importing a downloaded HUD ----------
+// The page sends the archive (zip, rar or 7z); Windows' own tar (bsdtar, in System32 since Windows 10 1803) unpacks it
+// into a folder of the editor's, refusing paths that would leave it. The HUDs in it are the folders with resource/ or
+// scripts/ inside, not inside another one (variants side by side are one each).
+static wstring ImportDir()
+{
+	return g_unsaved.substr( 0, g_unsaved.rfind( L'\\' ) ) + L"\\import";
+}
+static bool Untar( const wstring &archive, const wstring &dir )
+{
+	wchar_t sys[MAX_PATH];
+	GetSystemDirectoryW( sys, MAX_PATH );
+	wstring cmd = L"\"" + wstring( sys ) + L"\\tar.exe\" -xf \"" + archive + L"\" -C \"" + dir + L"\"";
+	STARTUPINFOW si = { sizeof si };
+	PROCESS_INFORMATION pi = {};
+	if ( !CreateProcessW( NULL, &cmd[0], NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, dir.c_str(), &si, &pi ) )
+		return false;
+	DWORD code = 1;
+	if ( WaitForSingleObject( pi.hProcess, 120000 ) == WAIT_OBJECT_0 )
+		GetExitCodeProcess( pi.hProcess, &code );
+	else
+		TerminateProcess( pi.hProcess, 1 );
+	CloseHandle( pi.hThread ), CloseHandle( pi.hProcess );
+	return code == 0;
+}
+// A name that is one folder: nothing Windows refuses, no way out of the custom folder.
+static bool PlainName( const wstring &n )
+{
+	return !n.empty() && n.find_first_of( L"\\/:*?\"<>|" ) == wstring::npos && n.find( L".." ) == wstring::npos && n.back() != L'.' && n.back() != L' ';
+}
+static void FindHuds( const wstring &dir, const wstring &rel, std::vector< wstring > &out, int depth = 0 )
+{
+	if ( IsHud( dir + rel ) )
+	{
+		out.push_back( rel );
+		return;
+	}
+	WIN32_FIND_DATAW fd;
+	HANDLE h = depth > 6 ? INVALID_HANDLE_VALUE : FindFirstFileW( ( dir + rel + L"\\*" ).c_str(), &fd );
+	for ( BOOL more = h != INVALID_HANDLE_VALUE; more; more = FindNextFileW( h, &fd ) )
+		if ( ( fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY ) && !( fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT ) && fd.cFileName[0] != L'.' )
+			FindHuds( dir, rel + L"\\" + fd.cFileName, out, depth + 1 );
+	if ( h != INVALID_HANDLE_VALUE )
+		FindClose( h );
+}
+
 static bool CreateHud( const wstring &dir )
 {
 	auto stub = []( const string &base ) {
@@ -856,12 +902,84 @@ static void OnMessage( const wstring &msg )
 		if ( ( out = PickFolder() ).empty() )
 			fail( L"cancelled" );
 	}
+	else if ( op == L"unpack" ) // arg = an archive's name, body = the archive in base64: "hud\t<folder in it>" per HUD in
+	{                           // it ("" for its top), then up to 20 "other\t<file>" for what's beside them
+		wstring dir = ImportDir(), x = dir + L"\\x", file = dir + L"\\" + NameOf( arg );
+		std::error_code ec;
+		std::filesystem::remove_all( dir, ec );
+		std::vector< wstring > huds;
+		if ( g_custom.empty() )
+			fail( noGame );
+		else if ( !WriteAll( file, Unbase64( body ) ) || SHCreateDirectoryExW( NULL, x.c_str(), NULL ) != ERROR_SUCCESS )
+			fail( L"Couldn't unpack it in " + dir );
+		else if ( !Untar( file, x ) )
+			fail( L"Windows couldn't unpack " + NameOf( arg ) + L". Use a .zip, .rar or .7z (an installer isn't a HUD folder: run it yourself)." );
+		else if ( FindHuds( x, L"", huds ), huds.empty() )
+			fail( NameOf( arg ) + L" has no HUD in it: no folder with resource or scripts inside." );
+		else
+		{
+			for ( auto &h : huds )
+				out += L"hud\t" + h + L"\n";
+			int n = 0;
+			EachFile( x, L"", [&]( const wstring &rel ) {
+				for ( auto &h : huds )
+					if ( h.empty() || !_wcsnicmp( ( L"\\" + rel ).c_str(), ( h + L"\\" ).c_str(), h.size() + 1 ) )
+						return;
+				if ( n++ < 20 )
+					out += L"other\t" + rel + L"\n";
+			} );
+		}
+	}
+	else if ( op == L"importhud" ) // arg = a folder "unpack" found, body = its name: moved into the custom folder, answers its path
+	{
+		wstring from = ImportDir() + L"\\x" + arg;
+		path = g_custom + L"\\" + body;
+		if ( g_custom.empty() )
+			fail( noGame );
+		else if ( !PlainName( body ) )
+			fail( L"Use a plain folder name (no \\ / : * ? \" < > |)." );
+		else if ( arg.find( L".." ) != wstring::npos || !IsHud( from ) )
+			fail( L"Unpack the archive again." );
+		else if ( IsDir( path ) )
+			fail( body + L" is already in your custom folder: give it another name." );
+		else
+		{
+			std::error_code ec;
+			std::filesystem::rename( from, path, ec );
+			if ( ec ) // (another drive: copied)
+				ec.clear(), std::filesystem::copy( from, path, std::filesystem::copy_options::recursive, ec );
+			if ( ec || !IsHud( path ) )
+				fail( L"Couldn't put it in " + path );
+			else
+				out = path;
+		}
+	}
+	else if ( op == L"moveout" ) // arg = a HUD in the custom folder: moved to the Desktop (the game only reads custom), still
+	{                            // listed as a recent HUD; answers where. Fails while the game has its font files open.
+		wchar_t *desk = NULL;
+		wstring to;
+		if ( SUCCEEDED( SHGetKnownFolderPath( FOLDERID_Desktop, 0, NULL, &desk ) ) )
+			to = wstring( desk ) + L"\\" + NameOf( arg );
+		CoTaskMemFree( desk );
+		for ( int i = 2; !to.empty() && IsDir( to ); ++i )
+			to = to.substr( 0, to.rfind( L'\\' ) + 1 ) + NameOf( arg ) + L" (" + std::to_wstring( i ) + L")";
+		std::error_code ec;
+		if ( g_custom.empty() || _wcsicmp( arg.substr( 0, arg.rfind( L'\\' ) ).c_str(), g_custom.c_str() ) || !IsHud( arg ) || to.empty() )
+			fail( L"That HUD isn't in the custom folder." );
+		else if ( std::filesystem::rename( arg, to, ec ), ec )
+			fail( GameRunning() ? L"The game has files of it open (its fonts): it can move once the game has quit." : L"Couldn't move it to " + to );
+		else
+		{
+			RememberHud( to );
+			out = to;
+		}
+	}
 	else if ( op == L"new" ) // arg = name: a new HUD in the custom folder
 	{
 		path = g_custom + L"\\" + arg;
 		if ( g_custom.empty() )
 			fail( noGame );
-		else if ( arg.empty() || arg.find_first_of( L"\\/:*?\"<>|" ) != wstring::npos || arg.find( L".." ) != wstring::npos )
+		else if ( !PlainName( arg ) )
 			fail( L"Use a plain folder name (no \\ / : * ? \" < > |)." );
 		else if ( IsDir( path ) )
 			fail( arg + L" is already in your custom folder." );
@@ -1006,16 +1124,17 @@ static void OnMessage( const wstring &msg )
 		else
 			out = FontFamily( data );
 	}
-	else if ( op == L"hudfonts" ) // family names of the font files in the HUD
+	else if ( op == L"hudfonts" ) // the font files in the HUD: "family\tpath" per line (path as a scheme names it, with /)
 	{
 		EachFile( g_hudPath, L"", [&]( const wstring &rel ) {
 			wstring ext = rel.size() > 4 ? rel.substr( rel.size() - 4 ) : L"";
 			string data;
 			if ( ( !_wcsicmp( ext.c_str(), L".ttf" ) || !_wcsicmp( ext.c_str(), L".otf" ) ) && ReadAll( g_hudPath + L"\\" + rel, data ) )
 			{
-				wstring family = FontFamily( data );
+				wstring family = FontFamily( data ), path = rel;
+				std::replace( path.begin(), path.end(), L'\\', L'/' );
 				if ( !family.empty() )
-					out += ( out.empty() ? L"" : L"\n" ) + family;
+					out += ( out.empty() ? L"" : L"\n" ) + family + L"\t" + path;
 			}
 		} );
 	}
