@@ -934,14 +934,12 @@ let renderAfterSave = false;
 let burst = null;
 function burstGroup() { if (!burst) { burst = Symbol(); setTimeout(() => { burst = null; }, 0); } return burst; }
 const pendingGroup = {}; // a setting written later (a drag, quick typing): the group its first change started
+let mirroring = false; // (a loading screen file's save copied into the other one: not copied back)
 function save(f, key, value, section = null, inGroup = null) { // (inGroup: an action's own, kept across an await)
   const id = `${f.name}/${section}/${key}`, group = pendingGroup[id] ??= inGroup || burstGroup();
   if (f.name === L && section === 'HudChat' && /^(xpos|ypos|wide|tall)$/i.test(key)) chatResFirst(/^wide$/i.test(key) ? value : null);
   // the game copies these into its one tooltip box when it makes it, so a reload doesn't reach them
   if (/^tooltip\./i.test(key)) needRestart('tooltip colours');
-  // the loading screen's two files (see loadingRows): what's added to one goes into the other (VAC servers') too
-  const added = typeof section === 'string' ? /^hudeditor_/i.test(section) : Array.isArray(section) && !section.length && /^hudeditor_/i.test(key);
-  if (f.name === UI_RES.loadingdialog && added && F(LOADING_VAC)) save(F(LOADING_VAC), key, value, section, group);
   clearTimeout(timers[id]);
   waiting.add(id);
   timers[id] = setTimeout(() => {
@@ -955,6 +953,15 @@ function save(f, key, value, section = null, inGroup = null) { // (inGroup: an a
     }, group);
     if (!waiting.size && renderAfterSave) writing.then(() => { renderAfterSave = false; render(); });
   }, 250);
+  // the loading screen's two files (see loadingRows): a change to a block both have, or a part added, goes into the
+  // other too, in the same undo step; not the box's own height (the VAC servers' box is taller, for its notice). Queued
+  // after this file's write, so a value worked out when written is what this file ended with.
+  const twin = !mirroring && loadingTwin(f), whole = Array.isArray(section) && !section.length;
+  const block = whole ? key : typeof section === 'string' ? section : Array.isArray(section) && section.length === 1 ? section[0] : null;
+  if (twin && block && !(/^loadingdialog$/i.test(block) && /^tall$/i.test(key)) && (Object.keys(layoutProps(twin, block)).length || whole && /^hudeditor_/i.test(key))) {
+    mirroring = true;
+    try { save(twin, key, typeof value === 'function' && !whole ? () => layoutProps(f, block)[key.toLowerCase()] ?? null : value, section, group); } finally { mirroring = false; }
+  }
 }
 
 // The chat reads resource/UI/BaseChat.res on every reload, after HudLayout. The game's (Half-Life 2's) places the chat
@@ -1076,7 +1083,9 @@ function parsePanels(raw) {
     panels.push(p);
   }
   for (const p of panels) p.thing = thingOf(p);
-  return { W: +W, H: +H, local: local === '1', panels };
+  // the loading box held open (see holdLoading): the main menu under it isn't drawn (a load hides it), but stays listed
+  const loading = panels.some(p => p.thing === p && p.key === 'loadingdialog');
+  return { W: +W, H: +H, local: local === '1', panels: loading ? panels.filter(p => !(p.thing && /^gamemenu(button2?)?$/.test(p.thing.key))) : panels };
 }
 
 // The HUD part or window a panel belongs to: the nearest ancestor-or-self sitting directly in a container.
@@ -1127,7 +1136,7 @@ const windowFiles = sel => [UI_RES[sel.info.id], sel.info.id === 'loadingdialog'
   ...(CLASS_PAGES[sel.info.id] || []).map(classPage)].filter(Boolean).map(p => F(p)).filter(Boolean);
 function resPath(sel) {
   for (let p = sel.node || sel.control; p; p = p.parent) if (BUY_PAGES[p.key]) return BUY_PAGES[p.key];
-  return UI_RES[sel.thing.key];
+  return sel.thing.key === 'loadingdialog' && loadingVac ? LOADING_VAC : UI_RES[sel.thing.key];
 }
 // A HUD without the file starts from the game's own copy (written into the HUD on the first change).
 async function uiFile(path) {
@@ -1391,6 +1400,7 @@ function commandRows(sel) {
 // ---------- the bomb's screen ----------
 // The C4's little screen (on the planted bomb and on the C4 in your hands) has a scheme of its own,
 // resource/C4Panel.res: the code/timer colour while armed and after defusing, and its font (Default there).
+// (Not offered in the list for now, 2026-10-02: the user asked for the loading screen's card to be about that alone.)
 const C4 = 'resource/C4Panel.res';
 const C4_SEL = () => ({ thing: { name: 'C4Screen', key: 'c4screen' }, control: null, info: { kind: 'hud', id: 'C4Screen', name: 'Bomb screen', hud: { name: 'Bomb screen', scheme: C4,
   colours: [['Armed', 'C4Panel_Armed', 'The code and timer while the bomb ticks'], ['Defused', 'C4Panel_Defused', 'Once it is defused']],
@@ -1643,14 +1653,32 @@ function checkupRows() {
 // ---------- loading screen ----------
 // GameUI's loading box, made each time a map loads from resource/LoadingDialogNoBanner.res (LoadingDialogVAC.res on
 // VAC-secured servers: the same box, taller, with the VAC notice; the plain LoadingDialog.res isn't used). The game
-// centres it; its size and the parts inside can change, and show on the next load (with vgui_cache_res_files 0, set
-// by the test server, the file is read each time). Edits go to both files. Its colours are the menus' (SourceScheme).
+// centres it; its size and the parts inside can change. Edits go to both files (see save). Its colours are the menus'
+// (SourceScheme). While it's selected the plugin holds it open (schemereload_loading), as a map load opens it, and gives
+// it its file again on every change, so it can be clicked and changes show at once.
 const LOADING_VAC = 'resource/LoadingDialogVAC.res';
 const LOADING_SEL = () => ({ thing: { name: 'LoadingDialog', key: 'loadingdialog', module: 'GameUI', scheme: 'SourceScheme' },
   info: { kind: 'window', id: 'loadingdialog', name: 'Loading screen', file: S }, control: null });
+// the other of its two files, when f is one of them
+const LOADING_TWIN = { [UI_RES.loadingdialog]: LOADING_VAC, [LOADING_VAC]: UI_RES.loadingdialog };
+const loadingTwin = f => (f && LOADING_TWIN[f.name] && F(LOADING_TWIN[f.name])) || null;
+let loadingVac = false; // the box as VAC-secured servers show it (its file is the one clicked parts write first)
+let loadingHeld = null, loadingAsked = 0; // what the plugin was last asked for ('show', 'vac' or null: closed), and when
+const loadingUp = () => !!live && live.panels.some(p => p === p.thing && p.key === 'loadingdialog');
+// Only to a running game (a command written while it's down would run when it next starts). again: asked for even if it
+// was already (the box went: a map load took it over, or its Cancel was clicked).
+function holdLoading(on, again = false) {
+  const want = on && live ? (loadingVac ? 'vac' : 'show') : null;
+  if (want === loadingHeld && !again) return;
+  loadingHeld = want;
+  loadingAsked = want ? Date.now() : 0;
+  // ("Opening it" becomes Show it again if it never came; not while a number is being typed, as poll)
+  if (want) setTimeout(() => { if (selected && selected.thing.key === 'loadingdialog' && !loadingUp()) $('list').contains(document.activeElement) && document.activeElement.tagName === 'INPUT' ? pendingRender = true : render(); }, 2600);
+  return live && call('cmd', '', `schemereload_loading ${want || 'hide'}`).catch(() => {});
+}
 function loadingRows(f) {
   const both = [f, F(LOADING_VAC)].filter(Boolean), has = (x, block) => Object.keys(layoutProps(x, block)).length > 0;
-  const set = (block, key, v) => { for (const x of both) if (has(x, block)) save(x, key, v, block); };
+  const set = (block, key, v) => { const x = both.find(x => has(x, block)); if (x) save(x, key, v, block); }; // (save copies it into the other)
   // (at: the file the row shows and, with only, the one it writes: the VAC box has its own height and notice)
   const n = (block, key, label, note = '', only = false, at = f) => {
     const r = inputRow(label, layoutProps(at, block)[key.toLowerCase()] || '0', v => only ? save(at, key, v, block) : set(block, key, v), { type: 'number', step: 1, dflt: gameProps(at.name, block)[key.toLowerCase()] ?? null, ...(note ? { title: note } : {}) });
@@ -1663,24 +1691,41 @@ function loadingRows(f) {
     inputRow('VAC notice Y', layoutProps(vac, 'VACInfoLabel').ypos || '100', v => { save(vac, 'ypos', v, 'VACInfoLabel'); save(vac, 'ypos', String(+v + gv), 'VACImage'); },
       { type: 'number', step: 1, dflt: gameProps(LOADING_VAC, 'VACInfoLabel').ypos ?? null, title: 'The VAC shield and its text, from the top of the box' }),
     n('TimeRemainingLabel', 'ypos', 'Time left Y', 'The time left to load, under the bar')] : [];
-  const see = el('div', { className: 'row action' });
-  see.append(el('button', { textContent: 'See it: start the test game again', onclick: () => testServer() }));
   return [n('LoadingDialog', 'wide', 'Box width'), n('LoadingDialog', 'tall', 'Box height', 'On VAC-secured servers the box has its own height (below)', true),
     n('InfoLabel', 'xpos', 'Text X', 'From the box\'s left edge'), n('InfoLabel', 'ypos', 'Text Y'),
     n('progress', 'xpos', 'Progress bar X'), n('progress', 'ypos', 'Progress bar Y'), n('progress', 'wide', 'Progress bar width'), n('progress', 'tall', 'Progress bar height'),
-    n('CancelButton', 'xpos', 'Cancel X'), n('CancelButton', 'ypos', 'Cancel Y'), ...vacRows, see,
-    noteRow('The game centres the box. Changes show the next time a map loads.')];
+    n('CancelButton', 'xpos', 'Cancel X'), n('CancelButton', 'ypos', 'Cancel Y'), ...vacRows, noteRow('The game centres the box.')];
+}
+// The box in the game: which of the two (the clicked parts' settings are that file's), and opening it again once it has
+// gone. (A map load that starts takes it over and closes it; its Cancel button closes it.)
+function loadingHoldRows() {
+  const which = el('div', { className: 'row action' });
+  for (const [vac, text, title] of [[false, 'Normal servers', 'The box most servers show (LoadingDialogNoBanner.res)'], [true, 'VAC servers', 'The taller box VAC-secured servers show, with the VAC notice (LoadingDialogVAC.res)']]) {
+    const b = el('button', { textContent: text, title, onclick: () => { loadingVac = vac; select({ ...selected, control: null, node: null }); } });
+    b.setAttribute('aria-pressed', String(loadingVac === vac));
+    which.append(b);
+  }
+  const rows = [which];
+  if (!live) rows.push(noteRow('Start the game to see it: while the loading screen is selected here, the game holds it open.'));
+  else if (!loadingUp() && Date.now() - loadingAsked < 2500) rows.push(noteRow('Opening it in the game...'));
+  else if (!loadingUp()) {
+    // (never asked in this game: it started after the loading screen was picked)
+    const again = el('div', { className: 'row action' });
+    again.append(el('button', { textContent: loadingHeld ? 'Show it again' : 'Show it', onclick: () => { holdLoading(true, true); render(); } }));
+    rows.push(noteRow(loadingHeld ? 'It has closed (a map loaded, or its Cancel was clicked).' : 'It isn\'t open in the game.'), again);
+  } else rows.push(noteRow('The game holds it open while it\'s selected here: click its parts in the preview, and changes show at once. Both boxes get every change but the height.'));
+  return rows;
 }
 // Its parts' eyes (Show/hide tab), in both files: the text, bar and Cancel, then what was added.
 function loadingShowRows(f) {
   const both = [f, F(LOADING_VAC)].filter(Boolean), has = (x, block) => Object.keys(layoutProps(x, block)).length > 0;
-  const show = (block, label) => eyeRow(label, !partHidden(f, block), on => { for (const x of both) if (has(x, block)) setPartHidden(x, block, !on); refreshSoon(); });
+  const show = (block, label) => eyeRow(label, !partHidden(f, block), on => { const x = both.find(x => has(x, block)); if (x) setPartHidden(x, block, !on); refreshSoon(); });
   const added = f.parsed.sections.filter(s => s.path.length === 2 && /^hudeditor_(pic|text|box)\d+$/i.test(s.path[1])).map(s => show(s.path[1], addedName(f, s.path[1])));
   // the window's own background (the menus' window colour) can go, so a colour box of yours is the box you see, with
   // room round it in the window for a picture outside it (hanging under it, say): what's in the window is cut at its edge
   const back = eyeRow('The window\'s own background', layoutProps(f, 'LoadingDialog').paintbackground !== '0', on => {
-    for (const x of both) save(x, 'paintbackground', on ? '1' : '0', 'LoadingDialog');
-    status(on ? 'The window draws its background again.' : 'The window\'s background is off: add a colour box (Custom) as the box. It shows the next time a map loads.');
+    save(f, 'paintbackground', on ? '1' : '0', 'LoadingDialog');
+    status(on ? 'The window draws its background again.' : 'The window\'s background is off: add a colour box (Custom) as the box.');
   });
   return [show('InfoLabel', 'The loading text'), show('progress', 'The progress bar'), show('CancelButton', 'The Cancel button'), back, ...added];
 }
@@ -1816,12 +1861,12 @@ const pictureName = () => `${(hudName || 'hud').toLowerCase().replace(/[^a-z0-9]
 async function addToHud(kind, file, lay = F(L)) {
   if (!lay) return;
   const inWindow = lay !== F(L), win = inWindow && selected;
-  let n = 1;
-  while (Object.keys(layoutProps(lay, `hudeditor_${kind}${n}`)).length) n++;
+  let n = 1; // (a number free in both loading screen files: the one added goes into both)
+  while ([lay, loadingTwin(lay)].some(f => f && Object.keys(layoutProps(f, `hudeditor_${kind}${n}`)).length)) n++;
   // (the loading screen's box is placed by the game, so its parts count from its corner: "c" would be the screen's middle)
   // a window narrower than the screen (team select, the MOTD) takes "c" as half the screen from its own left edge, so
   // on a wide screen a part there goes in the middle of what shows of it in plain numbers (see windowShows)
-  const box = lay.name === UI_RES.loadingdialog, span = k => inWindow && !box ? windowShows(lay, 'hudeditor_new', k) : null;
+  const box = !!LOADING_TWIN[lay.name], span = k => inWindow && !box ? windowShows(lay, 'hudeditor_new', k) : null;
   const place = (k, n) => box ? '8' : span(k) !== null ? `${Math.round((span(k) - n) / 2)}` : `c${-Math.round(n / 2)}`;
   const name = `hudeditor_${kind}${n}`, at = (w, h) => [['xpos', place('xpos', w)], ['ypos', place('ypos', h)], ['wide', `${w}`], ['tall', `${h}`]];
   let body;
@@ -1841,7 +1886,7 @@ async function addToHud(kind, file, lay = F(L)) {
   await sleep(400);
   await writing;
   if (!inWindow) return select({ thing: { name, key: name.toLowerCase() }, info: customInfo(name), control: null });
-  if (box) { status('Added: its settings are under Custom and Layout here. It shows the next time a map loads.'); return refreshSoon(); }
+  if (box && !loadingUp()) { status('Added: its settings are under Custom and Layout here. Show the box (top of this page) to see it.'); return refreshSoon(); }
   if (STARTUP_RES.has(win.info.id)) { status('Added: the buy menu shows it after a game restart (⟳). Then click it in the preview to change it.'); return select({ ...win, control: null, node: null }); }
   // in a window: selected as if clicked (clicked again until it's the one, if something is over its middle), once the
   // game has made it
@@ -1888,7 +1933,7 @@ function customRows(id, lay = F(L)) {
 // saved. The selection goes back to the window (or the list) if it was the thing.
 function removeAdded(lay, id) {
   const p = layoutProps(lay, id), inWindow = lay !== F(L), group = Symbol();
-  for (const f of lay.name === UI_RES.loadingdialog ? [lay, F(LOADING_VAC)] : [lay])
+  for (const f of [lay, loadingTwin(lay)])
     if (f && Object.keys(layoutProps(f, id)).length) commit(f, `${f.name}/${id}/remove`, () => dropBlock(f, [], id), group);
   if (/^HudEditorEdge_/i.test(p.border || '') && F(C)) commit(F(C), `${C}/${p.border}/remove`, () => dropBlock(F(C), ['Borders'], p.border), group);
   dropPicture(p.image);
@@ -2141,6 +2186,7 @@ async function select(sel) {
   // loaded before it becomes the selection: the panel poll copies the selection, and a copy made while this waited
   // would never get the file
   if (sel) sel.res = await uiFile(resPath(sel));
+  if (sel && sel.thing.key === 'loadingdialog') await Promise.all([uiFile(UI_RES.loadingdialog), uiFile(LOADING_VAC)]); // (both written together)
   if (sel && STARTUP_RES.has(sel.thing.key)) await uiFile(UI_RES[sel.thing.key]); // (its Custom tab: the buy menu's own file, whatever page's control is clicked)
   if (sel && sel.thing.key === 'scores') await loadCvars();
   if (sel && CLASS_PAGES[sel.thing.key]) await Promise.all(CLASS_PAGES[sel.thing.key].map(async n => { // (Class picture)
@@ -2148,6 +2194,7 @@ async function select(sel) {
     if (!classGame[n] && host) try { const t = await call('vanilla', `${n}.res`); classGame[n] = { text: t, parsed: parse(t), bases: [] }; } catch {}
   }));
   selected = sel;
+  holdLoading(!!sel && sel.thing.key === 'loadingdialog');
   render();
   drawBoxes();
   scroller().scrollTop = 0;
@@ -2172,7 +2219,7 @@ function clickRects(p, info, W, H) {
 
 // Click in the preview: the smallest panel under the mouse, skipping containers and fullscreen overlays.
 // A window that covers the HUD (scoreboard, team and class select, MOTD, buy menu) is open: only it has boxes and clicks.
-const COVERING = new Set(['scores', 'team', 'class_ct', 'class_ter', 'info', 'buy_ct', 'buy_ter']);
+const COVERING = new Set(['scores', 'team', 'class_ct', 'class_ter', 'info', 'buy_ct', 'buy_ter', 'loadingdialog']); // (the loading box: over its background)
 const covered = () => !!live && live.panels.some(p => p.thing === p && COVERING.has(p.key));
 // Everything under the mouse, the one a click picks first: a click on the same spot again picks the next (a box behind
 // the scoreboard's lists, the window itself last).
@@ -4014,10 +4061,11 @@ function selectionSections(sel) {
     if (CLASS_PAGES[info.id]) add('layout', 'Class picture', classPictureRows(info.id));
     if (info.id === 'scores') for (const [t, r] of scoreboardSections(sel, fonts.map(([, n]) => n))) add(/fonts$/.test(t) ? 'font' : 'colour', t, r);
     if (info.id === 'gamemenu') for (const [t, r] of mainMenuSections()) add(/(position|items)$/.test(t) ? 'layout' : 'other', t, r);
-    if (info.id === 'loadingdialog' && sel.res) {
-      add('show', 'Show or hide', loadingShowRows(sel.res));
-      add('layout', 'Loading screen: layout', loadingRows(sel.res));
-      addedSections(sel.res, S, add, () => true); // (it can't be clicked in the preview)
+    if (info.id === 'loadingdialog' && F(UI_RES.loadingdialog)) {
+      add('show', 'Show or hide', loadingShowRows(F(UI_RES.loadingdialog)));
+      add('layout', 'Loading screen: layout', loadingRows(F(UI_RES.loadingdialog)));
+      // what's added that isn't on screen to be clicked (the box is closed, or it's hidden: moved off)
+      if (sel.res && !control && !sel.node) addedSections(sel.res, S, add, b => partHidden(sel.res, b) || !(live && live.panels.some(q => q.thing && q.thing.key === 'loadingdialog' && q.key === b.toLowerCase())));
     }
     // the buy menu makes what's added only when the game makes the menu: until a restart it can't be clicked
     if (STARTUP_RES.has(info.id) && addLay && !control && !sel.node)
@@ -4272,6 +4320,7 @@ function renderList() {
       nav.append(b);
     }
     if (also.length) stack.append(card(`Line up ${also.length + 1} parts`, lineUpRows(), false));
+    if (selected.thing.key === 'loadingdialog') stack.append(card('', loadingHoldRows(), false)); // (on every tab: which box)
     const mine = sections.filter(s => s[2] === shown).map(([t, r]) => [sectionTitle(t), r]);
     // every font in one card, each part's set under a line with its name
     if (mine.length) stack.append(...(shown === 'font' ? [fontsCard(mine)] : mine.map(([t, r]) => card(t, r, false))));
@@ -4348,10 +4397,9 @@ function renderList() {
   const added = F(L) ? addedList() : [];
   if (F(L) && live && live.panels.some(p => p.module === 'ClientDLL' && HUD[p.name])) list.append(card('Add to the HUD', addRows()));
   else if (added.length) list.append(card('Added to the HUD', [...added, noteRow('In a map (Test server) they show, and more can be added.')]));
-  const screens = el('div', { className: 'row action' });
-  screens.append(el('button', { textContent: 'Loading screen', title: 'The box that shows while a map loads', onclick: async () => { await uiFile(LOADING_VAC); select(LOADING_SEL()); } }),
-    el('button', { textContent: 'Bomb screen', title: 'The C4\'s little screen', onclick: async () => { await uiFile(C4); select(C4_SEL()); } }));
-  list.append(card('Other screens', [screens]));
+  const loading = el('div', { className: 'row action' });
+  loading.append(el('button', { textContent: 'Edit the loading screen', title: 'The box that shows while a map loads: the game holds it open while you edit it', onclick: () => select(LOADING_SEL()) }));
+  list.append(card('Loading screen', [loading, noteRow('The box that shows while a map loads. The game holds it open while it\'s picked here.')]));
   list.append(card('HUD check-up', checkupRows()));
   // parts that only show now and then (kill feed, pickup history, weapon selection...), so they can be hidden too
   if (live && F(L)) {
@@ -4747,7 +4795,8 @@ async function poll() {
   const size = live ? `${live.W}x${live.H}` : '';
   if (size !== shownSize) { const h = shownSize.split('x')[1]; shownSize = size; resOptions(); if (selected && live && h && h !== String(live.H)) render(); }
   $('launch').hidden = !!live;
-  $('gamestate').textContent = !live ? 'Waiting for the game' : `${menuUp() ? 'Main menu' : live.local ? 'Test game' : 'In a game'} · ${live.W}×${live.H}`;
+  $('gamestate').textContent = !live ? 'Waiting for the game' : `${loadingUp() ? 'Loading screen' : menuUp() ? 'Main menu' : live.local ? 'Test game' : 'In a game'} · ${live.W}×${live.H}`;
+  if (!live) loadingHeld = null; // (a game that has gone holds nothing open)
   testTools();
   // the game quit without the capture noticing (a quick quit): the next game gets a new capture
   if (!live && captured) captureEnded();
@@ -4917,6 +4966,7 @@ async function openHud(path) {
     $('picker').hidden = true;
     $('hudbtn').textContent = hudName;
     selected = null;
+    holdLoading(false);
     undoSteps.length = 0;
     dropped.clear();
     for (const k in opened) delete opened[k]; // ↺ goes back to this HUD as opened
@@ -5008,6 +5058,7 @@ async function onHostEvent(ev) {
     else if (!confirm('Close without saving? Your changes will be lost.')) return;
   }
   await homeResolution();
+  await holdLoading(false); // (the game stays: not left with the box open and its menu hidden)
   call('quit');
 }
 
@@ -5279,6 +5330,15 @@ async function parserCheck() {
   check(at(40, 30)?.info.id === 'HudMessage' && at(1150, 560)?.info.id === 'HudMessage' && schemeOf(at(40, 30).thing) === C, 'click the top-left or large speed server text');
   check(onScreen().map(t => t.info.name).join() === 'Server message (MOTD),Main menu,Console,Health,Timer / hint text,Small speed,Large speed', 'on screen list: windows first, no always-on overlays');
   COVERING.add('info');
+  // the loading box held open (a real dump's shape): its parts take clicks, the main menu under it (not drawn) none
+  live = parsePanels(['screen\t2560\t1440', '1\tBaseUI\tstaticPanel\t0\t0\t2560\t1440\tPanel', '2\tBaseUI\tGameUI Panel\t0\t0\t2560\t1440\tEditablePanel',
+    '3\tGameUI\tBaseGameUIPanel\t0\t0\t2560\t1440\tCBasePanel', '4\tGameUI\tGameMenuButton\t96\t540\t1572\t190\tButton',
+    '4\tGameUI\tLoadingDialog\t1027\t645\t506\t149\tCLoadingDialog', '5\tGameUI\tframe_caption\t1027\t645\t493\t30\tPanel',
+    '5\tGameUI\tProgress\t1053\t730\t346\t32\tProgressBar', '5\tGameUI\tInfoLabel\t1053\t690\t453\t32\tLabel',
+    '4\tGameUI\tGameMenu\t96\t744\t354\t435\tCGameMenu', '5\tGameUI\t#GameUI_GameMenu_Quit\t96\t918\t354\t87\tCGameMenuItem'].join('\n'));
+  hit = at(1100, 700);
+  check(loadingUp() && !menuUp() && !at(150, 950) && !at(300, 600) && hit?.info.id === 'loadingdialog' && hit.control?.key === 'infolabel',
+    'the loading box held open: its parts take clicks, the main menu under it none');
   live = null;
   const tmText = '"r"\n{\n\t"terbutton"\n\t{\n\t\t"ControlName" "Button"\n\t\t"xpos" "76"\n\t\t"ypos" "116"\n\t\t"wide" "148"\n\t\t"tall" "20"\n\t\t"defaultBgColor_override" "1 2 3 255"\n\t}\n'
     + '\t"CancelButton"\n\t{\n\t\t"ControlName" "Button"\n\t\t"xpos" "76"\n\t\t"ypos" "148"\n\t\t"command" "vguicancel"\n\t}\n\t"hudeditor_cmd1"\n\t{\n\t}\n}\n';
@@ -5460,6 +5520,23 @@ if (host && location.hash === '#hosttest') (async () => {
       check(both && ld.text === l0 && vac.text === v0 && ld.opened === l0 && windowFiles({ info: { id: 'loadingdialog' } }).length === 2,
         'a loading screen setting writes both its files, one Ctrl+Z puts both back, and Reset window knows them as opened');
       delete opened['|Box width'];
+    }
+    {
+      // a block both loading screen files have is kept the same in both, from either (a part clicked in the VAC box), but
+      // the box's height; a block only the VAC box has stays out of the other; one Ctrl+Z
+      const ld = F(UI_RES.loadingdialog), vac = F(LOADING_VAC), l0 = ld.text, v0 = vac.text, x = String(+(layoutProps(ld, 'InfoLabel').xpos || 0) + 3);
+      save(vac, 'xpos', x, 'InfoLabel'); save(ld, 'tall', '201', 'LoadingDialog'); save(vac, 'ypos', '123', 'VACInfoLabel');
+      await sleep(400); await writing;
+      const ok = layoutProps(ld, 'InfoLabel').xpos === x && layoutProps(vac, 'InfoLabel').xpos === x && layoutProps(vac, 'LoadingDialog').tall !== '201'
+        && layoutProps(vac, 'VACInfoLabel').ypos === '123' && !Object.keys(layoutProps(ld, 'VACInfoLabel')).length;
+      await undo();
+      // a value worked out when written (an eye: the place kept in xpos_hudeditor) and a whole added part, from the VAC file
+      setPartHidden(vac, 'CancelButton', true); save(vac, 'hudeditor_box9', [['ControlName', 'EditablePanel'], ['xpos', '8']], []);
+      await sleep(400); await writing;
+      const same = ['xpos', 'xpos_hudeditor'].every(k => layoutProps(ld, 'CancelButton')[k] === layoutProps(vac, 'CancelButton')[k] && layoutProps(ld, 'CancelButton')[k] !== undefined)
+        && layoutProps(ld, 'hudeditor_box9').xpos === '8';
+      await undo();
+      check(ok && same && ld.text === l0 && vac.text === v0, 'a loading screen block is the same in both its files (not the height, not the VAC notice; an eye and an added part too), one Ctrl+Z puts both back');
     }
     {
       // square corner images: named while a box is square, let go (to go on Save) once none is

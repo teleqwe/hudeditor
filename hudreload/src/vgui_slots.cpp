@@ -34,3 +34,4 @@ int SlotApplySettings() { return SlotOf( Thunk( &vgui::Panel::ApplySettings ) );
 int SlotCreateControlByName() { return SlotOf( Thunk( &vgui::EditablePanel::CreateControlByName ) ); }
 int SlotSetParent() { return SlotOf( Thunk( static_cast< void ( vgui::Panel::* )( vgui::VPANEL ) >( &vgui::Panel::SetParent ) ) ); }
 int SlotAddActionSignalTarget() { return SlotOf( Thunk( static_cast< void ( vgui::Panel::* )( vgui::VPANEL ) >( &vgui::Panel::AddActionSignalTarget ) ) ); }
+int SlotLoadControlSettings() { return SlotOf( Thunk( &vgui::EditablePanel::LoadControlSettings ) ); }

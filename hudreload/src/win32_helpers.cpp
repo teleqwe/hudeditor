@@ -89,6 +89,31 @@ extern "C" bool SR_WriteFileAtomic( const char *path, const char *data, int len 
 	return ok && MoveFileExA( tmp, path, MOVEFILE_REPLACE_EXISTING );
 }
 
+static bool SameText( const char *s, const char *text )
+{
+	__try
+	{
+		return !strcmp( s, text );
+	}
+	__except ( EXCEPTION_EXECUTE_HANDLER )
+	{
+		return false;
+	}
+}
+
+// Does the code at fn (its first len bytes) take the address of this text (lea reg, [rip+x])? Tells a vtable slot is the
+// function expected before it's called, by a string only that function names. (Run inside SR_SafeCall: it reads code.)
+extern "C" bool SR_CodeNames( const void *fn, int len, const char *text )
+{
+	const unsigned char *p = (const unsigned char *)fn;
+	if ( p[0] == 0xE9 ) // a jump to the real function
+		p += 5 + *(const int *)( p + 1 );
+	for ( int i = 0; i + 7 <= len; ++i )
+		if ( ( p[i] & 0xFB ) == 0x48 && p[i + 1] == 0x8D && ( p[i + 2] & 0xC7 ) == 0x05 && SameText( (const char *)( p + i + 7 + *(const int *)( p + i + 3 ) ), text ) )
+			return true;
+	return false;
+}
+
 // Runs fn and swallows a crash (access violation etc.) instead of taking the game down.
 extern "C" int SR_SafeCall( void ( *fn )() )
 {

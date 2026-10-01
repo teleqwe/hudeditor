@@ -1202,6 +1202,7 @@ static void StepHud()
 		g_pEngineServer->ServerCommand( "hud_reloadscheme\n" );
 }
 
+static void LoadingReload();
 static bool RunStep( int step, void ( *fn )() )
 {
 	if ( g_bStepBroken[step] )
@@ -1226,6 +1227,7 @@ static void DoReload()
 		RunStep( STEP_BORDERS, StepBorders );
 		if ( !RunStep( STEP_PANELS, StepPanels ) ) // runs StepHud too, unless it's broken
 			RunStep( STEP_HUD, StepHud );
+		LoadingReload();
 	}
 	for ( int i = 0; i < NUM_FILES; ++i )
 	{
@@ -1267,8 +1269,9 @@ static void Tick()
 		}
 	}
 
-	// HUD layout/animation edits only need hud_reloadscheme, which the reload's last step runs
-	static const char *s_HudFiles[] = { "scripts/HudLayout.res", "scripts/hudanimations.txt" };
+	// HUD layout/animation edits only need hud_reloadscheme, which the reload's last step runs; the loading screen's files
+	// for the box held open (see LoadingReload), in case resource/ above is the game's own
+	static const char *s_HudFiles[] = { "scripts/HudLayout.res", "scripts/hudanimations.txt", "resource/LoadingDialogNoBanner.res", "resource/LoadingDialogVAC.res" };
 	static unsigned long long s_HudTimes[ARRAYSIZE( s_HudFiles )];
 	for ( int i = 0; i < ARRAYSIZE( s_HudFiles ); ++i )
 	{
@@ -1319,6 +1322,163 @@ static void Tick()
 		g_nPendingTicks = -1;
 		DoReload();
 	}
+}
+
+//-----------------------------------------------------------------------------
+// The loading screen held open for the editor (a map load shows it for a moment, too quick to click). GameUI opens its
+// loading box itself, as a map load does, through IGameUI ("GameUI011"): OnLevelLoadingStarted(true) makes and opens it
+// (the main menu goes, as in a load), UpdateProgressBar sets the bar and text, OnLevelLoadingFinished closes it. The box
+// reads its .res only when made and when a VAC server is joined, so while it's held a reload gives it its file again
+// through EditablePanel::LoadControlSettings, as the game does. Checked in GameUI.dll x64 (2026-10-02): those are the
+// SDK header's slots 10, 11 and 12, and slot 10's and 11's code name "LoadingStarted" / "LoadingFinished" (checked here
+// before they're used); the box loads its file through slot 0x6a8 / 8, with no preloaded keys (they'd go into its cache).
+//-----------------------------------------------------------------------------
+extern "C" bool SR_CodeNames( const void *fn, int len, const char *text );
+int SlotLoadControlSettings();
+enum { GAMEUI_LOADING_STARTED = 10, GAMEUI_LOADING_FINISHED = 11, GAMEUI_UPDATE_PROGRESS = 12 };
+typedef void ( *LoadingStartedFn )( void *, bool );
+typedef void ( *LoadingFinishedFn )( void *, bool, const char *, const char * );
+typedef bool ( *UpdateProgressFn )( void *, float, const char * );
+typedef void ( *LoadControlSettingsFn )( void *, const char *, const char *, KeyValues *, KeyValues * );
+static void *g_pGameUI;
+static int g_nLoading; // held open: 1 with the normal servers' file, 2 with the VAC-secured servers' (taller, VAC notice)
+static int g_nLoadingWant; // what schemereload_loading asked for (0 = closed), done by LoadingStep
+static bool g_bLoadingBroken;
+static const char *LOADING_TEXT = "#LoadingProgress_LoadResources";
+
+static bool LoadingSlotsOk()
+{
+	static int s_ok = -1;
+	if ( s_ok < 0 )
+	{
+		CreateInterfaceFn f = Sys_GetFactory( "GameUI.dll" );
+		g_pGameUI = f ? f( "GameUI011", NULL ) : NULL;
+		if ( !g_pGameUI )
+			return false; // (not loaded yet: asked again next time)
+		void **vt = g_pGameUI ? *(void ***)g_pGameUI : NULL;
+		s_ok = vt && SR_CodeNames( vt[GAMEUI_LOADING_STARTED], 0x60, "LoadingStarted" ) && SR_CodeNames( vt[GAMEUI_LOADING_FINISHED], 0x60, "LoadingFinished" );
+		if ( !s_ok )
+			Warning( "[schemereload] this game's GameUI doesn't match; the loading screen can't be held open\n" );
+		else if ( SlotLoadControlSettings() != 0x6a8 / 8 )
+			Warning( "[schemereload] this game's windows don't match; the loading screen held open shows changes once opened again\n" );
+	}
+	return s_ok > 0;
+}
+
+// The box on screen: one a map load closed stays in the tree, hidden (checked 2026-10-02), and one still fading out is
+// older, so earlier among its parent's children. (Its own visibility only: Esc in a map hides GameUI's layer over it,
+// and that's still the box held.)
+static VPANEL ShownBox( VPANEL p, int depth )
+{
+	if ( !p || depth > 64 )
+		return 0;
+	if ( !Q_stricmp( g_pVPanel->GetName( p ), "LoadingDialog" ) && g_pVPanel->IsVisible( p ) )
+		return p;
+	for ( int i = g_pVPanel->GetChildCount( p ) - 1; i >= 0; --i )
+		if ( VPANEL f = ShownBox( g_pVPanel->GetChild( p, i ), depth + 1 ) )
+			return f;
+	return 0;
+}
+static VPANEL LoadingBox()
+{
+	return ShownBox( TopPanel(), 0 );
+}
+
+// The box's file again, then its text and bar, which that resets.
+static void LoadingApply()
+{
+	VPANEL box = LoadingBox();
+	void *panel = box ? g_pVPanel->GetPanel( box, "GameUI" ) : NULL;
+	if ( !panel || !g_pVGui )
+		return;
+	if ( SlotLoadControlSettings() == 0x6a8 / 8 )
+		( (LoadControlSettingsFn)( *(void ***)panel )[SlotLoadControlSettings()] )( panel,
+			g_nLoading == 2 ? "Resource/LoadingDialogVAC.res" : "Resource/LoadingDialogNoBanner.res", NULL, NULL, NULL );
+	if ( VPANEL text = FindNamed( box, "InfoLabel", 0 ) )
+		g_pVGui->PostMessage( text, new KeyValues( "SetText", "text", LOADING_TEXT ), 0 );
+	if ( VPANEL bar = FindNamed( box, "Progress", 0 ) )
+	{
+		KeyValues *kv = new KeyValues( "SetProgress" );
+		kv->SetFloat( "progress", 0.5f );
+		g_pVGui->PostMessage( bar, kv, 0 );
+	}
+}
+
+static void LoadingStep()
+{
+	if ( !LoadingSlotsOk() )
+		return;
+	void **vt = *(void ***)g_pGameUI;
+	bool mapLoading = g_pEngineClient && g_pEngineClient->IsDrawingLoadingImage(); // (the box is a map load's own then: left to it)
+	if ( !g_nLoadingWant )
+	{
+		if ( g_nLoading && !mapLoading )
+			( (LoadingFinishedFn)vt[GAMEUI_LOADING_FINISHED] )( g_pGameUI, false, "", "" );
+		g_nLoading = 0;
+		return;
+	}
+	if ( !g_nLoading && mapLoading )
+		return;
+	// the file read afresh each time (the game keeps .res files it has read, unchanged, unless this is off), as the editor's
+	// test game has it: so the next real load shows it as it is too
+	if ( ConVar *cache = g_pCVar->FindVar( "vgui_cache_res_files" ) )
+		cache->SetValue( 0 );
+	// in a map the box is on GameUI's layer, which shows only with the menu (and Esc hides, box and all)
+	if ( g_pEngineClient && g_pEngineClient->IsInGame() )
+		g_pEngineClient->ExecuteClientCmd( "gameui_activate" );
+	if ( !g_nLoading || !LoadingBox() )
+	{
+		( (LoadingStartedFn)vt[GAMEUI_LOADING_STARTED] )( g_pGameUI, true );
+		( (UpdateProgressFn)vt[GAMEUI_UPDATE_PROGRESS] )( g_pGameUI, 0.5f, LOADING_TEXT );
+	}
+	g_nLoading = g_nLoadingWant;
+	LoadingApply();
+}
+
+static void LoadingBroke()
+{
+	g_bLoadingBroken = true;
+	g_nLoading = 0;
+	Warning( "[schemereload] holding the loading screen open crashed; switched off until restart\n" );
+}
+
+// Every tick while held: a map load that started takes the box over (and closes it when done); a box closed by its own
+// Cancel or close button leaves the menu hidden as in a load, so the load is finished here.
+static void LoadingWatch()
+{
+	if ( g_pEngineClient && g_pEngineClient->IsDrawingLoadingImage() )
+		g_nLoading = 0;
+	else if ( !LoadingBox() )
+		g_nLoadingWant = 0, LoadingStep();
+}
+
+// After a reload (a change to its files among them, see Tick). Its parts keep their panels through LoadControlSettings,
+// so the reload's re-show (see Reshow) would show again one its file now hides: they're left to the file.
+static void DropReshow( VPANEL p, int depth )
+{
+	g_Reshow.FindAndRemove( p );
+	for ( int i = 0; depth < 64 && i < g_pVPanel->GetChildCount( p ); ++i )
+		DropReshow( g_pVPanel->GetChild( p, i ), depth + 1 );
+}
+static void LoadingReapply()
+{
+	LoadingApply();
+	if ( VPANEL box = LoadingBox() )
+		DropReshow( box, 0 );
+}
+static void LoadingReload()
+{
+	if ( g_nLoading && !g_bLoadingBroken && !SR_SafeCall( LoadingReapply ) )
+		LoadingBroke();
+}
+
+CON_COMMAND( schemereload_loading, "schemereload_loading show|vac|hide: holds the loading screen open (vac: as on VAC-secured servers), or closes it" )
+{
+	if ( args.ArgC() < 2 || g_bLoadingBroken )
+		return;
+	g_nLoadingWant = !Q_stricmp( args.Arg( 1 ), "vac" ) ? 2 : !Q_stricmp( args.Arg( 1 ), "show" ) ? 1 : 0;
+	if ( !SR_SafeCall( LoadingStep ) )
+		LoadingBroke();
 }
 
 //-----------------------------------------------------------------------------
@@ -1555,6 +1715,8 @@ static void TimerTick()
 		s_reloadAllowed = true;
 	}
 	SR_SafeCall( RunCommandFile );
+	if ( g_nLoading && !g_bLoadingBroken && !SR_SafeCall( LoadingWatch ) )
+		LoadingBroke();
 	Centre();
 	if ( !g_bDumpBroken && g_pEngineServer && !SR_SafeCall( DumpPanels ) )
 	{
