@@ -1401,7 +1401,7 @@ int WINAPI wWinMain( HINSTANCE inst, HINSTANCE, LPWSTR, int show )
 	if ( g_selftestOut.empty() )
 		ShowWindow( g_hwnd, show );
 	else
-		SetTimer( g_hwnd, 1, 30000, NULL );
+		SetTimer( g_hwnd, 1, 60000, NULL ); // (the page's checks take about half that)
 
 	HRESULT hr = CreateCoreWebView2EnvironmentWithOptions( NULL, data.c_str(), NULL, Callback< ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler >( OnEnvironment ).Get() );
 	if ( FAILED( hr ) )

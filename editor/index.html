@@ -219,6 +219,7 @@
   /* tick boxes in two columns: a border's sides, a font's effects */
   :is(.row.sides, .row.flags) { display: grid; grid-template-columns: minmax(0, 1fr) auto; row-gap: 10px; align-items: center; }
   .opts { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .opts.one { grid-template-columns: 1fr; }
   .opts label { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 12px; cursor: pointer; }
   .opts > .row.toggle { display: flex; align-items: center; gap: 8px; padding: 0; border: 0; font-size: 12px; }
   .opts > .row.toggle > input { order: -1; }
@@ -242,8 +243,6 @@
   .row.cmdbtn { display: grid; grid-template-columns: 1fr auto 1.3fr auto 30px; gap: 4px; align-items: center; }
   .row.lineup { display: grid; grid-template-columns: 54px repeat(4, 1fr); gap: 4px; align-items: center; }
   .row.lineup button { padding: 4px 2px; font-size: 11px; }
-  .row.swatches { display: flex; flex-wrap: wrap; gap: 4px; }
-  .row.swatches .swatch { width: 26px; height: 22px; background: var(--c); box-shadow: none; }
   .row.menuadd { display: grid; grid-template-columns: 1fr auto; gap: 6px 8px; }
   .row.menuadd > .meta, .row.menuadd > .wide { grid-column: 1 / -1; }
   .row.menuadd > .meta { color: var(--text); font-size: 12px; font-weight: 550; }
@@ -446,7 +445,7 @@ const HUD = {
     ['Slot background', 'SelectionBoxBg|SelectionEmptyBoxBg', ''], ['Highlighted slot', 'SelectionSelectedBoxBg', ''] ],
     // its own colour settings take the scheme colour once, at startup; named in HudLayout they're looked up again on a reload
     // ("SelectedBoxClor" is spelt that way in the game)
-    links: { NumberColor: 'SelectionNumberFg', BoxColor: 'SelectionBoxBg', EmptyBoxColor: 'SelectionEmptyBoxBg', SelectedBoxClor: 'SelectionSelectedBoxBg' }, rounded: true },
+    links: { NumberColor: 'SelectionNumberFg', TextColor: 'SelectionTextFg', BoxColor: 'SelectionBoxBg', EmptyBoxColor: 'SelectionEmptyBoxBg', SelectedBoxClor: 'SelectionSelectedBoxBg' }, rounded: true },
   HudDeathNotice: { name: 'Kill feed', hit: ['r260', '12', '248', '100'], layoutColours: [['CT names', 'CTTextColor', 'CT_Blue'], ['T names', 'TerroristTextColor', 'T_Red']],
     settings: [['Lines', 'MaxDeathNotices', 'num', '4', 'How many kills show at once'], ['Line height', 'LineHeight', 'num', '22'],
       ['Lines line up on the', 'RightJustify', [['1', 'Right'], ['0', 'Left']], '1', 'Side of the kill feed\'s area (move the area to move the feed)']], fontKeys: [['Names font', 'TextFont', 'Default']] },
@@ -835,6 +834,7 @@ async function loadAll() {
   const gm = (await readHud(GM)) ?? GAME_MENU; // written into the HUD on the first change
   files.push({ name: GM, path: GM, text: gm, parsed: parse(gm), bases: [] });
   await Promise.all(SB_PAGES.map(uiFile));
+  await Promise.all(KIND_RES().map(([p]) => uiFile(p))); // (colours by kind reads every window's own colours: the HUD's copies)
   for (const path of [CVAR_CFG, VALVE_RC, CS_LOGO, SB_SELECT]) { // the scoreboard's name colours and highlight, the logo, when the HUD has them
     const text = await readHud(path);
     if (text != null) files.push({ name: path, path, text, parsed: parse(''), bases: [] });
@@ -2715,6 +2715,211 @@ function sharedWith(file, key) {
   return parts.slice(0, 4).join(', ') + (parts.length > 4 ? ` and ${parts.length - 4} more` : '');
 }
 
+// ---------- colours by kind (a first step to a simple mode) ----------
+// One swatch per kind of thing sets every colour in it, each place keeping its own opacity (0% ones stay as they are).
+// A colour is in one kind at most. A kind changes only its own places: one that took its colour by name from a colour
+// outside the kind gets the new colour written in (the named colour stays for whatever else uses it); a name the game
+// asks for itself (OrangeDim for the numbers' animations, the chat's DullWhite) changes, and what else followed it gets
+// its colour now written in first. A kind never holds a fill and the text drawn on it. c: s: h: = only in ClientScheme,
+// SourceScheme, ChatScheme. LEFT_OUT: team colours, greyed-out text, tooltips (startup only), the main menu logo.
+const BORDER_ITEMS = [['Edges you added', /^hudeditor/i], ['Window edges', /^frameborder$/i], ['Button edges', /button|^raisedborder$/i],
+  ['Other edges: text fields, lists, menus, tabs', /./]]; // (a border's lines go under the first its name fits)
+const KINDS = [
+  ['bg', 'Backgrounds', 'What everything sits on: windows, lists, text fields, HUD boxes, the chat', [
+    ['Windows and their title strip', 'Frame.BgColor Frame.OutOfFocusBgColor FrameTitleBar.BgColor FrameTitleBar.DisabledBgColor Panel.BgColor Label.BgColor'],
+    ['In-game windows\' box (team select, MOTD, buy menu)', 'c:BgColor c:ViewportBG'],
+    ['Lists and text boxes', 'ListPanel.BgColor ListPanel.TextBgColor SectionedListPanel.BgColor SectionedListPanel.HeaderBgColor RichText.BgColor'],
+    ['Text fields (the chat\'s typing box too)', 'TextEntry.BgColor TextEntry.DisabledBgColor'], ['Right-click and drop-down menus', 'Menu.BgColor'],
+    ['Tick boxes', 'CheckButton.BgColor CheckButton.ArmedBgColor CheckButton.DepressedBgColor CheckButton.DisabledBgColor'],
+    ['The empty part of bars, sliders and scroll bars', 'ProgressBar.BgColor Slider.TrackColor ScrollBarSlider.BgColor'],
+    ['Main menu: the dimming behind it', 's:MainMenu.Backdrop'], ['Web page MOTD', 'c:HTML.BgColor'],
+    ['Buy menu favourites', 'c:BuyPreset.BgColor c:BuyPresetListBox.BgColor'], ['Timer box (surf and bhop timers)', 'c:HintMessageBg'], ['Radio and server menus', 'c:MenuBoxBg'],
+    ['Weapon selection slots', 'c:SelectionBoxBg c:SelectionEmptyBoxBg'], ['The chat while typing', 'h:DullWhite']]],
+  ['text', 'Text', 'Every word, arrow and tick: windows, menus, buttons, lists, the timer, radio menus, the chat', [
+    ['Text in windows and menus', 'Label.TextColor Label.TextDullColor Label.TextBrightColor Label.SelectedTextColor'],
+    ['Window titles and ✕', 'FrameTitleBar.TextColor FrameTitleBar.DisabledTextColor FrameTitleButton.FgColor FrameTitleButton.DisabledFgColor FrameSystemButton.FgColor'],
+    ['Buttons (every state)', 'Button.TextColor Button.ArmedTextColor Button.DepressedTextColor ToggleButton.SelectedTextColor'],
+    ['Tick boxes and options', 'CheckButton.TextColor CheckButton.SelectedTextColor CheckButton.HighlightFgColor CheckButton.Check RadioButton.TextColor RadioButton.SelectedTextColor'],
+    ['Lists', 'ListPanel.TextColor ListPanel.SelectedTextColor ListPanel.EmptyListInfoTextColor SectionedListPanel.TextColor SectionedListPanel.BrightTextColor SectionedListPanel.HeaderTextColor SectionedListPanel.SelectedTextColor SectionedListPanel.OutOfFocusSelectedTextColor'],
+    ['Text boxes and fields (MOTD, console, typing)', 'RichText.TextColor RichText.SelectedTextColor TextEntry.TextColor TextEntry.CursorColor TextEntry.SelectedTextColor TextEntry.DisabledTextColor'],
+    ['Right-click and drop-down menus', 'Menu.TextColor Menu.ArmedTextColor'], ['Tabs and sliders', 'PropertySheet.TextColor PropertySheet.SelectedTextColor Slider.TextColor'],
+    ['Arrows (drop-downs, scroll bars)', 'ComboBoxButton.ArrowColor ComboBoxButton.ArmedArrowColor ScrollBarButton.FgColor ScrollBarButton.ArmedFgColor ScrollBarButton.DepressedFgColor'],
+    ['Main menu items', 's:MainMenu.TextColor'], ['Console', 's:Console.TextColor s:Console.DevTextColor'], ['Team select: map description', 'c:MapDescriptionText'],
+    ['Timer box text (surf and bhop timers) and right-side text', 'c:HintMessageFg'], ['Radio and server menus', 'c:MenuColor c:ItemColor'],
+    ['Weapon selection: names and slot numbers', 'c:SelectionTextFg c:SelectionNumberFg'], ['The chat while typing', 'h:Chat.TypingText']]],
+  ['border', 'Borders', 'Edge lines: windows, buttons, lists, the edges you added. Raised and sunken sides go flat', [
+    ['Edge colours (raised and sunken sides)', 'Border.Bright Border.Dark Border.Selection CheckButton.Border1 CheckButton.Border2'],
+    ...BORDER_ITEMS.map(([label]) => [label, '']), ['Lines you added', ''], ['Focus lines', 'Button.FocusBorderColor TextEntry.FocusEdgeColor'],
+    ['Lines between list groups', 'SectionedListPanel.DividerColor'], ['Window resize grip', 'FrameGrip.Color1 FrameGrip.Color2'], ['Buy menu favourites\' edge', 'c:Border.BuyPreset']]],
+  ['button', 'Buttons', 'Button fills, scroll bar handles and slider knobs at rest (under the mouse: Highlights)', [
+    ['Buttons', 'Button.BgColor'], ['Scroll bars: handle and arrow buttons', 'ScrollBarSlider.FgColor ScrollBarButton.BgColor'], ['Slider knobs', 'Slider.NobColor'],
+    ['Drop-down arrow boxes', 'ComboBoxButton.BgColor ComboBoxButton.DisabledBgColor'], ['Window ✕ buttons', 'FrameTitleButton.BgColor FrameTitleButton.DisabledBgColor FrameSystemButton.BgColor']]],
+  ['hilite', 'Highlights', 'What\'s picked or under the mouse, progress bars, and the HUD\'s green', [
+    ['Selected rows and text', 'ListPanel.SelectedBgColor ListPanel.SelectedOutOfFocusBgColor SectionedListPanel.SelectedBgColor SectionedListPanel.OutOfFocusSelectedBgColor RichText.SelectedBgColor TextEntry.SelectedBgColor TextEntry.OutOfFocusSelectedBgColor'],
+    ['Under the mouse and clicked', 'Button.ArmedBgColor Button.DepressedBgColor ScrollBarButton.ArmedBgColor ScrollBarButton.DepressedBgColor Menu.ArmedBgColor'],
+    ['Main menu item under the mouse and clicked', 's:MainMenu.ArmedTextColor s:MainMenu.DepressedTextColor'],
+    ['Progress bars (loading, planting and defusing)', 'ProgressBar.FgColor c:ProgressBarFg'], ['Weapon selection: the picked slot', 'c:SelectionSelectedBoxBg'],
+    ['The HUD\'s green: money gained, buy zone, bomb and defuse kit icons', 'c:HudIcon_Green']]],
+  ['numbers', 'HUD numbers and icons', 'Health, armour, ammo, money, the round timer, weapon icons, the objective icon, pickup history', [
+    ['Numbers and icons (health, armour, ammo, money, round timer, weapon icons)', 'c:Panel.FgColor c:OrangeDim c:FgColor'],
+    ['Objective icon (bomb site, hostages)', 'c:Hostage_Yellow'], ['Pickup history', 'c:Yellowish']]],
+  ['warn', 'Warnings', 'The HUD\'s red: getting hurt, spending money, low time, the bomb flashing', [
+    ['Getting hurt, spending money, low time, the bomb', 'c:HudIcon_Red'], ['Pickup history: slot full', 'c:Caution']]],
+];
+const LEFT_OUT = new Set('ct_blue t_red team0 team1 team2 label.disabledfgcolor1 label.disabledfgcolor2 slider.disabledtextcolor1 slider.disabledtextcolor2 tooltip.textcolor tooltip.bgcolor main.title1.color main.title2.color main.title3.color'.split(' '));
+const SCOPE = { c: C, s: S, h: CH };
+const KIND_OF = new Map(KINDS.flatMap(([kind, , , items]) => items.flatMap(([item, keys]) => keys.split(' ').filter(Boolean).map(k => {
+  const m = /^([csh]):(.+)$/.exec(k); return [`${m ? SCOPE[m[1]] : '*'}:${m ? m[2] : k}`.toLowerCase(), [kind, item]]; }))));
+const kindOf = (s, k) => KIND_OF.get(`${s}:${k}`.toLowerCase()) || KIND_OF.get(`*:${k}`.toLowerCase()) || null;
+// HudLayout's and the windows' own colour settings, by key: HUD parts' boxes, what the editor added, each window file's own
+const RES_KIND = { fgcolor_override: 'text', defaultfgcolor_override: 'text', armedfgcolor_override: 'text', depressedfgcolor_override: 'text',
+  selectedfgcolor_override: 'text', bgcolor_override: 'bg', fillcolor: 'bg', defaultbgcolor_override: 'button', armedbgcolor_override: 'hilite',
+  depressedbgcolor_override: 'hilite', selectedbgcolor_override: 'hilite' };
+const COLOUR_KEY = /colou?r|clor|_override$/i; // ("SelectedBoxClor": the game's spelling)
+// window controls whose colour setting draws a line, not a text or a fill: block|key
+const RES_LINES = { 'freezepanelbg|fgcolor_override': "The killer panel's edge", 'dividerbar|fillcolor': "The spectator bars' divider line" };
+// (team colours: the scoreboard's team names, team select's two team buttons, which a HUD may give each its team's colour)
+const TEAM_BLOCKS = new Set([...SCOREBOARD_TEXT.filter(([l]) => /^(CT|T) /.test(l)).flatMap(([, b]) => b.map(x => x.toLowerCase())), 'terbutton', 'ctbutton']);
+const ROW_SET = new Set(ROW_PARTS.map(b => b.toLowerCase())); // (row templates: their colours do nothing)
+const KIND_RES = () => [...shareRes(), [BUY_PAGES.buysubmenu_ter, 'Buy menu', C], [LOADING_VAC, 'Loading screen', S]];
+
+// A file's settings whose key fits re, below its top block, own over #base: [sub, key, raw]
+const colourKeys = (f, re) => { const m = new Map(); for (const p of [...f.bases, f.parsed]) for (const e of p.entries) if (e.path.length > 1 && re.test(e.key))
+  m.set(`${e.path.slice(1).join('/')}|${e.key}`.toLowerCase(), [e.path.slice(1), e.key, e.value]); return [...m.values()]; };
+// The names a value goes through to its colour, as resolve() follows them (lowercase; a Colors entry ends it)
+const chainOf = (t, v, out = []) => !v || isColor(v) || out.length > 16 ? out
+  : (out.push(v.toLowerCase()), t.colors.has(v.toLowerCase()) || !t.base.has(v.toLowerCase()) ? out : chainOf(t, t.base.get(v.toLowerCase()).value, out));
+// Every colour the editor knows, { path, scheme, sub, key, raw, value, kind, item, id }: the schemes' keys (sub null) and
+// borders' lines, HudLayout's colour settings, the windows' own. kind null: in none, but held on to when a kind's change
+// would reach it by name (kindWrites).
+function colourValues() {
+  const out = [], t = {}, add = (path, scheme, sub, key, raw, value, ki) => value && out.push({ path, scheme, sub, key, raw, value,
+    kind: ki ? ki[0] : null, item: ki ? ki[1] : null, id: `${path}|${sub ? sub.join('/') : ''}|${key}`.toLowerCase() });
+  // (a colour box of yours 4 units thick or less is a line, an underline or a divider: it goes with the edges, or it would
+  // take the background's colour and vanish)
+  const thin = (f, block) => { const b = layoutProps(f, block); return [b.wide, b.tall].some(v => /^\s*[0-4]\s*$/.test(v || '')); };
+  const own = (item, key, f, block) => /^hudeditor/i.test(block) && /^bgcolor_override$/i.test(key) && thin(f, block) ? ['border', 'Lines you added']
+    : RES_KIND[key.toLowerCase()] ? [RES_KIND[key.toLowerCase()], item] : null;
+  for (const s of [C, S, CH]) if (F(s)) {
+    const tt = t[s] = tables(F(s));
+    for (const [k, v] of new Map([...tt.base, ...tt.colors])) add(s, s, null, v.name, v.value, resolve(tt, k), kindOf(s, k));
+    for (const [sub, key, raw] of colourKeys(F(s), /^color$/i)) if (sub.length === 4 && /^borders$/i.test(sub[0]))
+      add(s, s, sub, key, raw, resolve(tt, raw), ['border', BORDER_ITEMS.find(([, re]) => re.test(sub[1]))[0]]);
+  }
+  if (F(L) && t[C]) for (const [sub, key, raw] of colourKeys(F(L), COLOUR_KEY)) if (sub.length === 1) {
+    // a part's own colours named after a scheme colour (LowHealthColor "HudIcon_Red", NumberColor...) are in that one's kind
+    const hud = HUD[Object.keys(HUD).find(id => id.toLowerCase() === sub[0].toLowerCase())] || {};
+    const to = [...(hud.layoutColours || []).map(([, k, d]) => [k, d]), ...Object.entries(hud.links || {})].find(([k]) => k.toLowerCase() === key.toLowerCase());
+    add(L, C, sub, key, raw, resolve(t[C], raw), to ? kindOf(C, to[1]) : /^hudeditor/i.test(sub[0]) ? own('Parts you added', key, F(L), sub[0])
+      : /^bgcolor_override$/i.test(key) ? ['bg', 'HUD boxes (health, armour, timer, ammo...)'] : null);
+  }
+  for (const [path, win, s] of KIND_RES()) { const f = F(path) || gameOf(path); if (f && t[s]) for (const [sub, key, raw] of colourKeys(f, COLOUR_KEY)) {
+    const b = sub[sub.length - 1].toLowerCase();
+    if (!ROW_SET.has(b) && !CODE_MADE.has(b) && !TEAM_BLOCKS.has(b)) add(path, s, sub, key, raw, resolve(t[s], raw),
+      RES_LINES[`${b}|${key}`.toLowerCase()] ? ['border', RES_LINES[`${b}|${key}`.toLowerCase()]] : own(/^hudeditor/i.test(b) ? 'Parts you added' : `${win}'s own colours`, key, f, sub[sub.length - 1]));
+  } }
+  return out;
+}
+
+const kindOff = new Set(), openKinds = new Set(), kindTimers = {}; // ticks taken off ("kind|item", "kind|@scheme"), folds open: this session
+const kindOn = p => !kindOff.has(`${p.kind}|${p.item}`) && !kindOff.has(`${p.kind}|@${p.scheme}`), shows = p => toRgba(p.value)[3] > 0;
+// The writes giving a kind's places (the ticked ones; every: all) the colour target(p): [{ p, value }]. One whose colour comes by
+// name from another of them getting the same colour keeps its name; anything else a changed name would reach gets its colour now
+// written in. Weapon selection's and the radio menu's own colours get named in HudLayout too (read at startup only, see hudRows).
+function kindWrites(kind, target, every = false, all = colourValues()) {
+  const mine = all.filter(p => p.kind === kind && shows(p) && (every || kindOn(p))), want = new Map(mine.map(p => [p.id, target(p)]));
+  const named = new Map(mine.filter(p => !p.sub).map(p => [`${p.scheme}:${p.key}`.toLowerCase(), p])), out = [], t = {};
+  for (const s of [C, S, CH]) if (F(s)) t[s] = tables(F(s));
+  for (const p of all) {
+    // the names it goes through (a Colors entry is read as it is: it never follows one), and the first of the kind's that changes
+    const chain = p.sub || !t[p.scheme].colors.has(p.key.toLowerCase()) ? chainOf(t[p.scheme], p.raw).map(n => named.get(`${p.scheme}:${n}`.toLowerCase()) || n) : [];
+    const changing = chain.find(m => m.id && want.get(m.id) !== m.value), to = want.get(p.id);
+    if (to === undefined) { if (changing) out.push({ p, value: p.value }); continue; } // (held on to: not the kind's)
+    // (it names one of the kind's itself, which ends at its colour: the name stays)
+    if (chain[0]?.id && want.get(chain[0].id) === to) continue;
+    if (to !== p.value || changing) out.push({ p, value: to });
+  }
+  for (const [id, hud] of Object.entries(HUD)) for (const [v, k] of Object.entries(hud.links || {})) {
+    const lp = layoutProps(F(L), id);
+    if (named.has(`${C}:${k}`.toLowerCase()) && Object.keys(lp).length && !(v.toLowerCase() in lp)) out.push({ p: { path: L, sub: [id], key: v }, value: k });
+  }
+  return out;
+}
+// Written once the picker rests (a drag is one Ctrl+Z, see commit), the window files it reaches read in first; each file
+// once, all of them one Ctrl+Z.
+function setKind(kind, target, every = false, then = null) {
+  clearTimeout(kindTimers[kind]);
+  waiting.add(`kind ${kind}`); // (the list isn't redrawn from the old colours meanwhile)
+  kindTimers[kind] = setTimeout(async () => {
+    try {
+      await Promise.all([...new Set(kindWrites(kind, target, every).map(w => w.p.path))].map(uiFile));
+      await writing;
+      const byFile = new Map(), group = burstGroup();
+      for (const w of kindWrites(kind, target, every)) byFile.set(w.p.path, [...(byFile.get(w.p.path) || []), w]);
+      for (const [path, list] of byFile) {
+        const f = F(path);
+        commit(f, `${f.name}/kind/${kind}`, () => list.reduce((text, { p, value }) => {
+          const x = { ...f, text, parsed: parse(text) };
+          return p.sub ? setAt(x, p.sub, p.key, value) : withValue(x, p.key, value);
+        }, f.text), group);
+      }
+    } catch (err) { status(`Couldn't apply: ${err.message}`); }
+    waiting.delete(`kind ${kind}`);
+    (then ? sleep(400).then(() => writing).then(then) : writing).then(() => { if (!waiting.size && renderAfterSave) { renderAfterSave = false; render(); } });
+  }, 300);
+}
+const topColour = vals => [...vals.reduce((m, v) => { const k = toRgba(v).slice(0, 3).join(' '); return m.set(k, (m.get(k) || 0) + 1); }, new Map())].sort((a, b) => b[1] - a[1]);
+// How readable one colour is on another: the WCAG contrast ratio (1 to 21) of the colours as picked, see-through ignored
+const luminance = c => { const [r, g, b] = toRgba(c).slice(0, 3).map(v => (v /= 255) <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+const contrast = (a, b) => { const [x, y] = [luminance(a), luminance(b)].sort((m, n) => n - m); return (x + 0.05) / (y + 0.05); };
+// Text drawn on a kind's fills that would be hard to read (under 3:1): the fills buttons under the mouse, selected rows
+// and the team menu's buttons use are Highlights, so a bright highlight under pale text is the usual one
+function readability(all) {
+  const top = k => topColour(all.filter(p => p.kind === k && shows(p) && kindOn(p)).map(p => p.value))[0]?.[0];
+  const text = top('text');
+  return !text ? [] : [['bg', 'the backgrounds'], ['button', 'buttons'], ['hilite', 'highlighted buttons and selected rows']]
+    .map(([k, what]) => [what, top(k) && contrast(text, top(k))]).filter(([, r]) => r && r < 3);
+}
+const WHERE = [[C, 'In game'], [S, 'Menus'], [CH, 'Chat']];
+const placeWords = p => !p.sub ? `${p.key} (${WHERE.find(([s]) => s === p.scheme)[1].toLowerCase()})`
+  : /^borders$/i.test(p.sub[0]) ? `${p.sub[1]}: ${p.sub[2]} line ${p.sub[3]}` : `${p.path.split('/').pop()}: ${p.sub.join(' / ')} ${p.key}`;
+function kindRows() {
+  const all = colourValues(), rows = [], warn = el('div', { className: 'row note meta' });
+  const showHard = (l = colourValues()) => { const hard = readability(l); warn.hidden = !hard.length;
+    warn.textContent = `⚠ Hard to read: text on ${hard.map(([w, r]) => `${w} (${r.toFixed(1)} to 1)`).join(', ')}. Make one of the two lighter or darker so they differ more: 3 to 1 or more reads well.`; };
+  showHard(all);
+  for (const [kind, name, note, items] of KINDS) {
+    const mine = all.filter(p => p.kind === kind && shows(p)), on = mine.filter(kindOn);
+    if (!mine.length) continue;
+    for (const p of mine) opened[`kind|${p.id}`] ??= p.value; // (↺: each as the HUD was opened)
+    const sig = l => l.map(p => p.value).join(), word = s => { const c = topColour(s ? s.split(',') : []); return c.length ? `${c[0][0]}${c.length > 1 ? ` and ${c.length - 1} more` : ''}` : 'none'; };
+    const row = colorRow(name, note, `${topColour((on.length ? on : mine).map(p => p.value))[0][0]} 255`,
+      v => setKind(kind, p => `${toRgba(v).slice(0, 3).join(' ')} ${toRgba(p.value)[3]}`, false, after), [], null, 'kinds');
+    row.querySelector('.alpha').hidden = true; // (each place keeps its own opacity)
+    const now = el('div', { className: 'shares' }), say = l => { l = l.filter(kindOn); const n = topColour(l.map(p => p.value)).length; now.textContent = `${l.length} colours here, ${n > 1 ? `now ${n} different` : 'all one colour'}`; };
+    row.querySelector('.meta').append(now);
+    // ↺: a step of its own, like ↺ Reset (see renderList)
+    const arrow = undoArrow(`kinds|${kind}`, sig(mine), word, () => { closePicker(); const g = resetGroup = burstGroup();
+      setTimeout(() => writing.then(() => { if (resetGroup === g) resetGroup = null; }), 1500); setKind(kind, p => opened[`kind|${p.id}`] ?? p.value, true, render); });
+    row.querySelector('.arrows').replaceWith(arrow);
+    const after = () => { const v = colourValues(), l = v.filter(p => p.kind === kind && shows(p)); arrow.update(sig(l)); say(l); showHard(v); };
+    say(mine);
+    const fold = el('details', { className: 'fold', open: openKinds.has(kind) }), order = items.map(([l]) => l);
+    fold.ontoggle = () => { fold.open ? openKinds.add(kind) : openKinds.delete(kind); };
+    const tick = (id, text, l) => { const lb = el('label', { title: [...new Set(l.map(placeWords))].join('\n') }), b = el('input', { type: 'checkbox', checked: !kindOff.has(id),
+      onchange: () => { b.checked ? kindOff.delete(id) : kindOff.add(id); render(); } }); lb.append(b, `${text} (${l.length})`); return lb; };
+    const ticks = (label, boxes, one) => { const r = el('div', { className: 'row sides' }), o = el('div', { className: one ? 'opts one' : 'opts' }); o.append(...boxes); r.append(el('div', { textContent: label }), o); return r; };
+    const where = WHERE.map(([s, w]) => [s, w, mine.filter(p => p.scheme === s)]).filter(([, , l]) => l.length);
+    const what = [...new Set(mine.map(p => p.item))].sort((a, b) => (order.indexOf(a) + 1 || 99) - (order.indexOf(b) + 1 || 99));
+    fold.append(el('summary', { textContent: `What it changes: ${on.length} of ${mine.length}` }),
+      ...(where.length > 1 ? [ticks('Where', where.map(([s, w, l]) => tick(`${kind}|@${s}`, w, l)))] : []),
+      ticks('What', what.map(item => tick(`${kind}|${item}`, item, mine.filter(p => p.item === item))), true));
+    rows.push(row, fold);
+  }
+  return [warn, ...rows, noteRow('Each colour keeps its own see-through amount, so see-through things stay see-through. A kind changes only what\'s listed under it: things of other kinds that shared a colour with it keep theirs.'),
+    noteRow('In no kind (change them where they are): team colours, greyed-out text, tooltips, the main menu logo, the bomb screen, your own row on the scoreboard, pictures, and colours nothing in CS:S draws (All other colours).')];
+}
+
 // Rows for a HUD part: its colours, HudLayout colours, box and position/size.
 function hudRows(id, hud) {
   // colours the part's own settings only take from the scheme at startup: name them in HudLayout so a reload looks again
@@ -4397,6 +4602,7 @@ function renderList() {
   const added = F(L) ? addedList() : [];
   if (F(L) && live && live.panels.some(p => p.module === 'ClientDLL' && HUD[p.name])) list.append(card('Add to the HUD', addRows()));
   else if (added.length) list.append(card('Added to the HUD', [...added, noteRow('In a map (Test server) they show, and more can be added.')]));
+  list.append(card('Colours by kind', kindRows())); // (one colour for a whole kind of thing: near the top, the quick way)
   const loading = el('div', { className: 'row action' });
   loading.append(el('button', { textContent: 'Edit the loading screen', title: 'The box that shows while a map loads: the game holds it open while you edit it', onclick: () => select(LOADING_SEL()) }));
   list.append(card('Loading screen', [loading, noteRow('The box that shows while a map loads. The game holds it open while it\'s picked here.')]));
@@ -5035,9 +5241,10 @@ document.addEventListener('drop', e => {
   importHud(f);
 });
 
+// (a change still being typed, or a colour by kind waiting for the picker to rest)
+const settled = async () => { await sleep(300); for (let i = 0; waiting.size && i < 100; i++) await sleep(50); await writing; };
 async function saveHud() {
-  await sleep(300);
-  await writing;
+  await settled();
   try {
     await dropUnused();
     const n = +(await call('save'));
@@ -5053,6 +5260,7 @@ async function saveHud() {
 async function onHostEvent(ev) {
   if (ev === 'captureended') return captureEnded();
   if (ev !== 'close') return;
+  await settled();
   if (dirty) {
     if (confirm(`Save your changes to ${hudName} before closing?`)) { if (!(await saveHud())) return; }
     else if (!confirm('Close without saving? Your changes will be lost.')) return;
@@ -5268,6 +5476,58 @@ async function parserCheck() {
     check(isHidden('HudHealth') && !isHidden('HudArmor') && isHidden('HudHintDisplay') && !isHidden('HudAmmo'), 'hidden: alpha 0, or moved off screen for self-fading parts');
   } finally {
     files = keepFiles;
+  }
+  // colours by kind: no colour in two kinds, every colour the editor lists in one or left out, no text with the fill it's drawn on
+  {
+    const toks = KINDS.flatMap(([, , , i]) => i.flatMap(([, ks]) => ks.split(' ').filter(Boolean))), bare = k => k.replace(/^[csh]:/, '').toLowerCase();
+    check(toks.length === KIND_OF.size && !toks.some(k => /^[csh]:/.test(k) && KIND_OF.has(`*:${bare(k)}`)) && !toks.some(k => LEFT_OUT.has(bare(k))), 'colours by kind: none in two kinds');
+    const loose = [...LISTED].map(x => x.slice(x.indexOf(':') + 1)).filter(k => ![C, S, CH].some(s => kindOf(s, k)) && !LEFT_OUT.has(k));
+    check(!loose.length, `colours by kind: every colour the editor lists is in one, or left out on purpose (${loose.slice(0, 5)})`);
+    const OVER = { Text: ['Background'], 'Text (mouse over)': ['Background (mouse over)'], 'Text (clicked)': ['Background (clicked)'], 'Selected text': ['Selected row', 'Selection'],
+      Arrow: ['Background'], 'Arrow (mouse over)': ['Background'], Arrows: ['Arrow buttons'], Tick: ['Box'], Bar: ['Background'], Knob: ['Track'], Slider: ['Track'] };
+    const k1 = k => ([S, C, CH].map(s => kindOf(s, k)).find(Boolean) || [])[0];
+    const same = [...CONTROLS.flatMap(([, , l]) => l.flatMap(([a, ka]) => l.filter(([b]) => (OVER[a] || []).includes(b)).map(([, kb]) => [ka, kb]))),
+      ['HintMessageFg', 'HintMessageBg'], ['MenuColor', 'MenuBoxBg'], ['ItemColor', 'MenuBoxBg'], ['SelectionTextFg', 'SelectionSelectedBoxBg'], ['FgColor', 'SelectionSelectedBoxBg'],
+      ['Chat.TypingText', 'TextEntry.BgColor']].filter(([a, b]) => k1(a) && k1(a) === k1(b));
+    check(!same.length, `colours by kind: no text shares a kind with its fill (${same.map(p => p.join(' on '))})`);
+  }
+  // ...and what a change writes (see kindWrites)
+  {
+    const keep = files, cs = 'Scheme { Colors { "Orange" "255 176 0 255" "OrangeDim" "255 176 0 120" } BaseSettings { "Panel.FgColor" "OrangeDim" "Hostage_Yellow" "Panel.FgColor" '
+      + '"Label.TextColor" "Orange" "Border.Bright" "Orange" "HudIcon_Red" "160 0 0 255" "Their.Own" "OrangeDim" "Button.BgColor" "0 0 0 0" } '
+      + 'Borders { B { Left { "1" { "color" "Border.Bright" } "2" { "color" "Orange" } "3" { "color" "1 1 1 0" } } } } }';
+    files = [{ name: C, text: cs, parsed: parse(cs), bases: [] }, { name: L, text: '', parsed: parse('L { HudHealth { "LowHealthColor" "HudIcon_Red" "bgcolor_override" "0 0 0 96" } }'), bases: [] }];
+    const w = kind => JSON.stringify(Object.fromEntries(kindWrites(kind, p => `1 2 3 ${toRgba(p.value)[3]}`).map(({ p, value }) => [[...(p.sub || []), p.key].join('/'), value]).sort()));
+    try {
+      const got = ['numbers', 'text', 'border', 'warn', 'bg', 'button'].map(w);
+      kindOff.add(`border|${KINDS.find(([k]) => k === 'border')[3][0][0]}`); got.push(w('border')); kindOff.clear();
+      check(got.join('\n') === ['{"OrangeDim":"1 2 3 120","Their.Own":"255 176 0 120"}', '{"Label.TextColor":"1 2 3 255"}', '{"Border.Bright":"1 2 3 255","Borders/B/Left/2/color":"1 2 3 255"}',
+        '{"HudIcon_Red":"1 2 3 255"}', '{"HudHealth/bgcolor_override":"1 2 3 96"}', '{}', '{"Borders/B/Left/1/color":"1 2 3 255","Borders/B/Left/2/color":"1 2 3 255"}'].join('\n'),
+        `colours by kind: the game's named colour changes and what else used it holds on, its own followers keep their names, a shared name stays, see-through stays, unticked isn't followed (${got.join(' ')})`);
+    } finally { files = keep; }
+  }
+  {
+    // a colour box of yours as thin as a line goes with the edges, a bigger one with the backgrounds
+    const keep = files, cs = 'Scheme { Colors { } BaseSettings { } }';
+    files = [{ name: C, text: cs, parsed: parse(cs), bases: [] }, { name: L, text: '', parsed: parse('L { hudeditor_box1 { "wide" "40" "tall" "2" "bgcolor_override" "235 150 175 255" } hudeditor_box2 { "wide" "260" "tall" "248" "bgcolor_override" "17 20 29 250" } }'), bases: [] }];
+    try {
+      const k = Object.fromEntries(colourValues().map(p => [p.sub[0], `${p.kind}/${p.item}`]));
+      check(k.hudeditor_box1 === 'border/Lines you added' && k.hudeditor_box2 === 'bg/Parts you added', `colours by kind: a thin box of yours is a line (${JSON.stringify(k)})`);
+    } finally { files = keep; }
+  }
+  check(Math.round(contrast('255 255 255 255', '0 0 0 255')) === 21 && contrast('200 240 245', '64 200 210') < 3 && contrast('200 240 245', '8 24 32') > 3,
+    'colours by kind: readability is the contrast of the two colours (white on black 21 to 1, pale text on bright cyan under 3)');
+  // ...through a name of no kind (held on to, so the kind's colour past it is written in), and one whose own colour stays
+  // while the one it names changes (↺)
+  {
+    const keep = files, cs = 'Scheme { Colors { "OrangeDim" "255 176 0 120" } BaseSettings { "Panel.FgColor" "Mid" "Mid" "OrangeDim" "Button.TextColor" "9 9 9 255" "Label.TextColor" "Button.TextColor" } }';
+    files = [{ name: C, text: cs, parsed: parse(cs), bases: [] }];
+    const w = (kind, target) => JSON.stringify(Object.fromEntries(kindWrites(kind, target).map(({ p, value }) => [p.key, value]).sort()));
+    try {
+      const a = w('numbers', p => `1 2 3 ${toRgba(p.value)[3]}`), b = w('text', p => p.key === 'Label.TextColor' ? '9 9 9 255' : '5 5 5 255');
+      check(a === '{"Mid":"255 176 0 120","OrangeDim":"1 2 3 120","Panel.FgColor":"1 2 3 120"}' && b === '{"Button.TextColor":"5 5 5 255","Label.TextColor":"9 9 9 255"}',
+        `colours by kind: a name between two of the kind's is held on to, and a colour that stays while what it names changes is written in (${a} ${b})`);
+    } finally { files = keep; }
   }
   const ft = setAt(ff, ['Fonts', 'HudHintText', '2'], 'tall', '30');
   const fp = parse(ft);
@@ -5563,6 +5823,32 @@ if (host && location.hash === '#hosttest') (async () => {
       check(rb && back && ld.text === changed[0] && vac.text === changed[1], 'Reset window puts the window\'s files back as they were opened, and one Ctrl+Z brings the changes back');
       for (let i = 0; i < 3 && ld.text !== l0; i++) await undo();
       await select(null);
+    }
+    {
+      // colours by kind on a new HUD (the game's files): each kind's colours take the new one, keeping their opacity, nothing else
+      // changes in any file; one Ctrl+Z puts every file back; the scoreboard's own texts are in Text, its team names in none
+      await Promise.all(KIND_RES().map(([p]) => uiFile(p)));
+      const texts = () => files.map(f => f.text).join('\0'), now = () => new Map(colourValues().map(p => [p.id, p.value]));
+      const done = async () => { await sleep(350); for (let i = 0; waiting.size && i < 200; i++) await sleep(50); await writing; }; // (a kind's writes go out once the picker rests)
+      const cv = colourValues();
+      check(cv.some(p => p.kind === 'text' && /scoreboard/i.test(p.path) && /^mapname$/i.test(p.sub[0])) && !cv.some(p => p.kind && /^ct_label$/i.test((p.sub || [])[0] || '')), 'the scoreboard\'s texts are in Text, its team names in no kind');
+      for (const [kind] of KINDS) {
+        const t0 = texts(), v0 = colourValues(), mine = new Set(v0.filter(p => p.kind === kind && shows(p)).map(p => p.id));
+        setKind(kind, p => `7 8 9 ${toRgba(p.value)[3]}`); await done();
+        const v1 = now(), off = v0.filter(p => v1.get(p.id) !== (mine.has(p.id) ? `7 8 9 ${toRgba(p.value)[3]}` : p.value));
+        await undo();
+        check(mine.size && !off.length && texts() === t0, `${kind}: its ${mine.size} colours change, nothing else, one Ctrl+Z puts every file back (${off.slice(0, 3).map(p => `${p.path} ${p.sub || ''} ${p.key} "${p.raw}" ${p.value} -> ${v1.get(p.id)}${mine.has(p.id) ? ' (its own)' : ''}`)})`);
+      }
+      // its ↺: back as the HUD was opened, a step of its own (two Ctrl+Z: the ↺, then the change)
+      for (const k in opened) if (/^kinds?\|/.test(k)) delete opened[k];
+      render();
+      const v0 = now(), t0 = texts(), arrow = () => [...$('list').querySelectorAll('.row.colour')].find(r => r.querySelector('.name .rename').textContent === 'Borders')?.querySelector('.undo');
+      setKind('border', p => `7 8 9 ${toRgba(p.value)[3]}`); await done(); render();
+      const lit = arrow() && !arrow().classList.contains('off');
+      arrow()?.onclick(); await done();
+      const back = [...v0].every(([id, v]) => now().get(id) === v);
+      await undo(); await undo();
+      check(lit && back && texts() === t0, 'a kind\'s ↺ puts its colours back as opened, as a step of its own');
     }
     {
       // a file bigger than one message goes in pieces (a 1080p animated background is about 620 MB)
