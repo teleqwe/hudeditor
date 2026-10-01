@@ -3055,10 +3055,11 @@ const FONT_EXTRA = [['italic', 'Italic', 'flag', '1'], ['underline', 'Underline'
   ['symbol', 'Symbol font', 'flag', '1', 'For icon fonts like Marlett'], ['rotary', 'Rotary', 'flag', '1', 'Drawn turned (game effect)'], ['custom', 'Custom', 'flag', '1', 'Game-specific drawing']];
 
 // Fonts as they are at this screen height, copied to every other height's entry (the footer's All resolutions): the
-// same face, weight and effects, the size scaled by height. An entry for a range of heights is sized for its lowest
-// (one starting under 480, for 480). From the game's proportional entry (no yres, tall in 480-line units) 768-1023
-// gets tall × 768 / 480; from an entry in pixels, tall × 768 / this height. list: [file, font] pairs; one undo step a
-// file that changes.
+// same face, weight and effects, the size scaled by height. An entry for a range of heights is sized for the screen
+// height it is made for: its end when that is a real one (HUDs like telehud end each range at a resolution: "901 1080"),
+// else its start (the game's own begin there: "768 1023"; never under 480). From the game's proportional entry (no
+// yres, tall in 480-line units) one for 1080 gets tall × 1080 / 480; from an entry in pixels, tall × 1080 / this
+// height. list: [file, font] pairs; one undo step a file that changes.
 function fontsToAllHeights(list) {
   const H = live ? live.H : 1080, fonts = new Set(), heights = new Set();
   const flagKeys = [...FONT_FLAGS.map(([k]) => k), ...FONT_EXTRA.filter(x => (x[2] || 'flag') === 'flag').map(([k]) => k)];
@@ -3071,9 +3072,11 @@ function fontsToAllHeights(list) {
       for (const [, font] of list.filter(([x]) => x === file)) {
         const vars = fontVariants(cur, font), v = activeVariant(vars, H), p = { ...vars.get(v) };
         for (const [w, q] of [...vars]) {
-          const low = +((q.yres || '').trim().split(/\s+/)[0]);
-          if (w === v || !low) continue; // (this height's own entry, one for every height)
-          const at = Math.max(480, low);
+          const [low, high] = (q.yres || '').trim().split(/\s+/).map(Number);
+          if (w === v || !Number.isFinite(low)) continue; // (this height's own entry, one for every height)
+          // the screen height the entry is for: its end when that is one (a HUD's "901 1080" is 1080's), else its start
+          // (the game's "768 1023" is 768's), never under 480
+          const at = SCREEN_HEIGHTS.has(high) ? high : Math.max(480, low);
           // (an entry without "yres" is proportional, the game's own say so: its tall is in 480-line units, 10 is 30 px
           // at 1440; one with "yres" is in pixels at this height)
           const from = p.yres ? H : 480;
@@ -4171,18 +4174,24 @@ $('boxes').onclick = async e => {
 // Common sizes of each shape: 4:3 is what players on stretched 4:3 see.
 const RESOLUTIONS = [['16:9', [[1280, 720], [1600, 900], [1920, 1080], [2560, 1440], [3840, 2160]]], ['16:10', [[1280, 800], [1680, 1050], [1920, 1200]]],
   ['4:3', [[1024, 768], [1280, 960], [1440, 1080]]], ['21:9', [[2560, 1080], [3440, 1440]]]];
+// screen heights people play at (the picker's, and older ones), for which end of a font's yres range it is made for
+const SCREEN_HEIGHTS = new Set([480, 600, 864, 1024, ...RESOLUTIONS.flatMap(([, l]) => l.map(([, h]) => h))]);
 let homeRes = null;
 try { homeRes = localStorage.getItem('homeRes'); } catch {}
 function resOptions() {
   const s = $('res'), now = live ? `${live.W}x${live.H}` : '';
   if (live && !homeRes && live.W >= 640 && live.H >= 480) homeRes = now; // (not the tiny window of a game still starting)
   const opt = (w, h) => el('option', { value: `${w}x${h}`, textContent: `Game: ${w}×${h}${`${w}x${h}` === homeRes ? ' (yours)' : ''}` });
-  // (a window bigger than your own size wouldn't fit the screen: those aren't offered)
-  const [mw, mh] = (homeRes || '99999x99999').split('x').map(Number), fits = ([w, h]) => w <= mw && h <= mh;
-  const known = RESOLUTIONS.flatMap(([, l]) => l.filter(fits).map(([w, h]) => `${w}x${h}`)), extra = [...new Set([homeRes, now].filter(r => r && !known.includes(r)))];
+  const known = RESOLUTIONS.flatMap(([, l]) => l.map(([w, h]) => `${w}x${h}`)), extra = [...new Set([homeRes, now].filter(r => r && !known.includes(r)))];
   s.replaceChildren();
   if (extra.length) { const g = el('optgroup', { label: 'Yours' }); g.append(...extra.map(r => opt(...r.split('x')))); s.append(g); }
-  for (const [label, list] of RESOLUTIONS) { if (!list.some(fits)) continue; const g = el('optgroup', { label }); g.append(...list.filter(fits).map(([w, h]) => opt(w, h))); s.append(g); }
+  // (bigger than your own size: kept, said so; the window then goes past the screen's edges)
+  const [mw, mh] = (homeRes || '99999x99999').split('x').map(Number);
+  for (const [label, list] of RESOLUTIONS) {
+    const g = el('optgroup', { label });
+    g.append(...list.map(([w, h]) => { const o = opt(w, h); if (w > mw || h > mh) o.textContent += ' (bigger than your screen)'; return o; }));
+    s.append(g);
+  }
   s.value = now;
   s.disabled = !live;
 }
@@ -4828,7 +4837,9 @@ async function parserCheck() {
   // All resolutions: from the game's proportional entry (480-line units) to each height range, in pixels for its lowest
   // height; run again with nothing left to change, no write and no undo step (one took the place of a real edit)
   {
-    const src = 'Scheme { Fonts { T { "1" { "tall" "8" "yres" "480 767" } "2" { "tall" "20" "yres" "768 1023" } "3" { "tall" "10" "weight" "700" } } } }';
+    // ("901 1080" ends at a screen height, telehud's way: sized for 1080; "1441 2160" for 4K, by the same formula)
+    const src = 'Scheme { Fonts { T { "1" { "tall" "8" "yres" "480 767" } "2" { "tall" "20" "yres" "768 1023" } "3" { "tall" "10" "weight" "700" } '
+      + '"4" { "tall" "8" "yres" "901 1080" } "5" { "tall" "8" "yres" "1441 2160" } } } }';
     const tf = { name: C, path: 'x', text: src, parsed: parse(src), bases: [] }, keep = [files, live, commit, render];
     let commits = 0;
     files = [tf]; live = { W: 2560, H: 1440, panels: [] }; render = () => {};
@@ -4837,7 +4848,8 @@ async function parserCheck() {
       fontsToAllHeights([[C, 'T']]);
       const once = commits, tv = fontVariants(tf, 'T');
       fontsToAllHeights([[C, 'T']]);
-      check(tv.get('1').tall === '10' && tv.get('2').tall === '16' && tv.get('2').weight === '700' && tv.get('3').tall === '10' && once === 1 && commits === 1,
+      check(tv.get('1').tall === '10' && tv.get('2').tall === '16' && tv.get('2').weight === '700' && tv.get('3').tall === '10' && tv.get('4').tall === '23'
+        && tv.get('5').tall === '45' && once === 1 && commits === 1,
         `All resolutions: sizes scaled from the proportional entry, and nothing to do makes no undo step (${[...tv].map(([k, p]) => `${k}:${p.tall}`)}, ${commits} writes)`);
     } finally { [files, live, commit, render] = keep; }
   }
