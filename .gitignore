@@ -10,5 +10,8 @@ app/build/
 # Working notes
 PLAN.md
 
+# The HUDs Claude built, kept out of builds (HUD_CREATION_GUIDE.md, section 0)
+claude huds/
+
 # Each HUD build's own folder under dev/ (art, screenshots, one-off scripts); the shared test scripts in dev/ are kept
 dev/*/
