@@ -3675,10 +3675,17 @@ const base64 = bytes => new Promise(res => {
   r.onload = () => res(r.result.slice(r.result.indexOf(',') + 1));
   r.readAsDataURL(new Blob([bytes]));
 });
-// An animated picture (GIF, WebP...) plays too, at half the size (every frame is a full picture in the file).
-// While the game starts it draws the texture with the material's own name (console/background01_widescreen), not the
-// material: without one in the HUD, the game's own picture shows for a moment first. That one is the first frame, at
-// half the size.
+// Backgrounds are 1080 lines high, never less (the user's rule, 2026-10-01: 1920x1080, 1440x1080 for 4:3 screens),
+// a still picture uncompressed, an animated one (GIF, WebP...) DXT1 (every frame is a full picture in the file: 100
+// frames are about 100 MB). While the game starts it draws the texture with the material's own name
+// (console/background01_widescreen), not the material: without one in the HUD, the game's own picture shows for a
+// moment first. That one is the first frame, as big.
+const BG_H = 1080, bgSize = aspect => [aspect > 1.5 ? 1920 : 1440, BG_H];
+// A file too big for one message to the host goes in pieces (the first replaces it, the rest are added to its end).
+async function writeBig(path, bytes, chunk = 16 << 20) {
+  for (let at = 0; at === 0 || at < bytes.length; at += chunk)
+    await call(at ? 'appendbin' : 'writebin', path, await base64(bytes.subarray(at, at + chunk)));
+}
 const BACKGROUNDS = [['background01', 4 / 3], ['background01_widescreen', 16 / 9]];
 const bgVmt = (tex, proxies = '') => `"UnlitGeneric"\n{\n\t"$basetexture"\t"console/${tex}"\n\t"$vertexcolor"\t"1"\n\t"$vertexalpha"\t"1"\n`
   + `\t"$ignorez"\t"1"\n\t"$no_fullbright"\t"1"\n\t"$nolod"\t"1"\n${proxies}}\n`;
@@ -3704,16 +3711,16 @@ async function setBackground(file) {
     const proxies = anim ? `\t"Proxies"\n\t{\n\t\t"AnimatedTexture"\n\t\t{\n\t\t\t"animatedtexturevar"\t"$basetexture"\n\t\t\t"animatedtextureframenumvar"\t"$frame"\n\t\t\t"animatedtextureframerate"\t"${fps}"\n\t\t}\n\t}\n` : '';
     status('Making the background...');
     for (const [i, [name, aspect]] of BACKGROUNDS.entries()) {
-      const h = anim ? 512 : 1024, w = aspect > 1.5 ? 2 * h : h;
+      const [w, h] = bgSize(aspect);
       // the picture goes under a name the running game hasn't loaded (it keeps a texture once loaded), taking turns
       // between two (the other goes when the HUD is saved); the material the game asks for points at it
       const vmt = `materials/console/${name}.vmt`, [tex, old] = new RegExp(`${name}_a"`).test(await readHud(vmt) || '') ? [`${name}_b`, `${name}_a`] : [`${name}_a`, `${name}_b`];
       const vtf = await backgroundVtf(imgs, w, h, aspect, anim, n => status(`Making the background: frame ${n} of ${imgs.length}${i ? ', 4:3 screens' : ''}...`));
-      await call('writebin', `materials/console/${tex}.vtf`, await base64(vtf));
+      await writeBig(`materials/console/${tex}.vtf`, vtf);
       await call('write', vmt, bgVmt(tex, proxies));
       dropped.set(`materials/console/${old}.vtf`, bgUses(name, old));
       // what the game shows while it starts
-      await call('writebin', `materials/console/${name}.vtf`, await base64(await backgroundVtf(imgs.slice(0, 1), anim ? w : w / 2, anim ? h : h / 2, aspect)));
+      await writeBig(`materials/console/${name}.vtf`, await backgroundVtf(imgs.slice(0, 1), w, h, aspect));
       dropped.delete(`materials/console/${name}.vtf`);
     }
     imgs.forEach(i => i.close?.());
@@ -3725,7 +3732,7 @@ async function setBackground(file) {
   }
 }
 // A background set before the editor wrote the startup picture (2026-09-30): its first frame, from its own file
-// (BGR888, as the editor wrote them then), at most 1024 wide.
+// (BGR888, as the editor wrote them then), as big as it is.
 async function addStartupBackground(name, tex) {
   const head = Uint8Array.from(atob(await call('readbin', `materials/console/${tex}.vtf`, '80')), c => c.charCodeAt(0)), v = new DataView(head.buffer);
   const w = v.getUint16(16, true), h = v.getUint16(18, true), at = v.getUint32(12, true);
@@ -3734,8 +3741,7 @@ async function addStartupBackground(name, tex) {
   const cv = el('canvas', { width: w, height: h }), px = new ImageData(w, h);
   for (let i = 0, o = 0; i < w * h * 3; i += 3, o += 4) px.data[o] = b[i + 2], px.data[o + 1] = b[i + 1], px.data[o + 2] = b[i], px.data[o + 3] = 255;
   cv.getContext('2d').putImageData(px, 0, 0);
-  const s = w > 1024 ? 2 : 1;
-  await call('writebin', `materials/console/${name}.vtf`, await base64(await backgroundVtf([cv], w / s, h / s, w / h)));
+  await writeBig(`materials/console/${name}.vtf`, await backgroundVtf([cv], w, h, w / h));
 }
 
 // Everything editable for a selection, as [title, rows, kind]: colours, fonts, borders, layout (places and sizes), then
@@ -5149,6 +5155,14 @@ if (host && location.hash === '#hosttest') (async () => {
       await writing;
       await undo();
       check(F(C).text === c0 && F(L).text === l0 && (await readHud(F(C).path)) === c0, 'one action over two files (a split) is one undo step');
+    }
+    {
+      // a file bigger than one message goes in pieces (a 1080p animated background is about 100 MB)
+      const bytes = Uint8Array.from({ length: 40 }, (_, i) => i * 3);
+      await writeBig('materials/console/hudeditor_piece_test.vtf', bytes, 16);
+      const back = Uint8Array.from(atob(await call('readbin', 'materials/console/hudeditor_piece_test.vtf', '')), c => c.charCodeAt(0));
+      check(back.length === 40 && back.every((b, i) => b === i * 3) && bgSize(16 / 9).join() === '1920,1080' && bgSize(4 / 3).join() === '1440,1080',
+        `a big file goes to the host in pieces (${back.length} bytes back), backgrounds 1080 high`);
     }
     save(F(C), 'Panel.FgColor', '9 9 9 255');
     const spec = await uiFile('resource/UI/spectator.res');

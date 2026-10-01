@@ -1031,6 +1031,17 @@ static void OnMessage( const wstring &msg )
 		else if ( KeepSaved( path ), !WriteAll( path, Unbase64( body ) ) )
 			fail( L"couldn't write " + path );
 	}
+	else if ( op == L"appendbin" ) // arg = path in the HUD, body = more of the file in base64, added to its end (a
+	{                               // background too big for one message: writebin starts it)
+		string data = Unbase64( body );
+		HANDLE h = InHud( arg, path ) ? CreateFileW( path.c_str(), FILE_APPEND_DATA, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL ) : INVALID_HANDLE_VALUE;
+		DWORD n = 0;
+		bool ok = h != INVALID_HANDLE_VALUE && ( data.empty() || ( WriteFile( h, data.data(), (DWORD)data.size(), &n, NULL ) && n == data.size() ) );
+		if ( h != INVALID_HANDLE_VALUE )
+			CloseHandle( h );
+		if ( !ok )
+			fail( L"couldn't add to " + path );
+	}
 	else if ( op == L"readbin" ) // arg = path in the HUD, body = how many bytes from its start (empty: all): base64
 	{
 		string data;

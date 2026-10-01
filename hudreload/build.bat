@@ -19,14 +19,14 @@ set DEFS=/D VPC /D WIN32 /D _WIN32 /D WIN64 /D _WIN64 /D PLATFORM_64BITS /D COMP
  /D NDEBUG /D _WINDOWS /D _USRDLL /D _MBCS /D _CRT_SECURE_NO_DEPRECATE /D _CRT_NONSTDC_NO_DEPRECATE ^
  /D _ALLOW_RUNTIME_LIBRARY_MISMATCH /D _ALLOW_ITERATOR_DEBUG_LEVEL_MISMATCH /D _ALLOW_MSC_VER_MISMATCH ^
  /D _DLL_EXT=.dll /D DLLNAME=schemereload
-set INC=/I "%SDK%\public" /I "%SDK%\public\tier0" /I "%SDK%\public\tier1" /I "%SDK%\common"
+set INC=/I "%SDK%\public" /I "%SDK%\public\tier0" /I "%SDK%\public\tier1" /I "%SDK%\common" /I "%SDK%"
 set CFLAGS=/nologo /c /O2 /MT /fp:fast /GS- /W3 /Gw /Zc:inline /Zc:threadSafeInit- /Zc:__cplusplus /MP ^
  /wd4316 /wd5033 /wd5054 /wd5055 /wd4577 /wd4091 /wd4355 /wd4101 /wd4005 /wd4244 /wd4267 /wd4996
 
 set T1=%SDK%\tier1
 cl %CFLAGS% %DEFS% %INC% /Fo"%OUT%\\" ^
  "%~dp0src\schemereload.cpp" "%~dp0src\win32_helpers.cpp" "%~dp0src\vgui_slots.cpp" "%~dp0src\cvar_bounds.cpp" "%SDK%\public\tier0\memoverride.cpp" ^
- "%T1%\KeyValues.cpp" "%T1%\convar.cpp" "%T1%\interface.cpp" "%T1%\tier1.cpp" "%T1%\strtools.cpp" ^
+ "%~dp0src\keyvalues_game.cpp" "%T1%\convar.cpp" "%T1%\interface.cpp" "%T1%\tier1.cpp" "%T1%\strtools.cpp" ^
  "%T1%\strtools_unicode.cpp" "%T1%\utlbuffer.cpp" "%T1%\utlsymbol.cpp" "%T1%\utlstring.cpp" ^
  "%T1%\characterset.cpp" "%T1%\generichash.cpp" "%T1%\mempool.cpp" "%T1%\memstack.cpp" ^
  "%T1%\stringpool.cpp" "%T1%\splitstring.cpp" "%T1%\exprevaluator.cpp" "%T1%\commandbuffer.cpp" ^
