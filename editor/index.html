@@ -3576,7 +3576,9 @@ function menuRows() {
 // The main menu background: the game stretches materials/console/background01 (4:3 screens) or
 // background01_widescreen over the screen. The picture is cropped to that shape (w x h, its middle) and written as
 // VTF 7.2, one mip level: BGR888 (no compression, so dark gradients don't band), or DXT1 (a sixth of the size) for an
-// animation too big for that. progress(i) after each frame.
+// animation, over a faint grain (+-2 levels, the same every frame so nothing shimmers): DXT1 makes a smooth block
+// one colour a level or so off its own, and whole blocks off show as rings in a dark sky's glow; the grain spreads
+// each block's picks so its average comes out right. progress(i) after each frame.
 const picSize = img => [img.displayWidth || img.naturalWidth || img.width, img.displayHeight || img.naturalHeight || img.height];
 async function backgroundVtf(imgs, w, h, dxt = false, progress = () => {}) {
   const cv = el('canvas', { width: w, height: h }), g = cv.getContext('2d', { willReadFrequently: true }), size = dxt ? w * h / 2 : w * h * 3;
@@ -3594,7 +3596,14 @@ async function backgroundVtf(imgs, w, h, dxt = false, progress = () => {}) {
     g.fillRect(0, 0, w, h); // black behind see-through pictures
     g.drawImage(img, Math.floor((iw - w * k) / 2), Math.floor((ih - h * k) / 2), w * k, h * k, 0, 0, w, h);
     const px = g.getImageData(0, 0, w, h).data;
-    if (dxt) dxt1(px, w, h, out, o), o += size;
+    if (dxt) {
+      for (let i = 0; i < px.length; i += 4) {
+        let r = Math.imul(i >> 2 ^ 0x9e3779b9, 0x85ebca6b); r = Math.imul(r ^ r >>> 13, 0xc2b2ae35);
+        const d = (((r ^ r >>> 16) >>> 0) / 2 ** 32 - 0.5) * 4;
+        px[i] += d, px[i + 1] += d, px[i + 2] += d;
+      }
+      dxt1(px, w, h, out, o), o += size;
+    }
     else for (let i = 0; i < px.length; i += 4, o += 3) out[o] = px[i + 2], out[o + 1] = px[i + 1], out[o + 2] = px[i];
     if (imgs.length > 1) { progress(n + 1); await sleep(0); }
   }
@@ -3676,13 +3685,14 @@ const base64 = bytes => new Promise(res => {
   r.onload = () => res(r.result.slice(r.result.indexOf(',') + 1));
   r.readAsDataURL(new Blob([bytes]));
 });
-// Backgrounds are the picture pixel for pixel, the best the game can show (the user's rule, 2026-10-01): cropped to
-// the screen's shape in steps of 4 (DXT1's blocks), shrunk only past 4096 wide (the most every card takes), and
-// uncompressed, an animated one (GIF, WebP...) too while its file stays under 1 GB (every frame is a full picture in
-// it: 100 frames at 1920x1080 are 620 MB; the game reads it whole), DXT1 past that. While the game starts it draws
-// the texture with the material's own name (console/background01_widescreen), not the material: without one in the
-// HUD, the game's own picture shows for a moment first. That one is the first frame, as big.
-const BG_MAX_W = 4096, BG_RAW_MAX = 1 << 30;
+// Backgrounds are the picture pixel for pixel (the user's rule, 2026-10-01): cropped to the screen's shape in steps of
+// 4 (DXT1's blocks), shrunk only past 4096 wide (the most every card takes). A still one is uncompressed (6 MB at
+// 1080p). An animated one (GIF, WebP...) is DXT1, the best the game has short of uncompressed: every frame is a full
+// picture in the file, 1 MB at 1080p against 6 (uncompressed, 100 frames came to 1.1 GB, too big: the user's call),
+// and 4:3 screens show the middle of the widescreen one rather than a copy of their own. While the game starts it
+// draws the texture with the material's own name (console/background01_widescreen), not the material: without one
+// in the HUD, the game's own picture shows for a moment first. That one is the first frame, as big, uncompressed.
+const BG_MAX_W = 4096;
 const bgSize = (iw, ih, aspect) => {
   const w = Math.min(iw, Math.round(ih * aspect), BG_MAX_W), four = x => Math.max(4, x - x % 4);
   return [four(w), four(Math.min(ih, Math.round(w / aspect)))];
@@ -3692,8 +3702,10 @@ async function writeBig(path, bytes, chunk = 16 << 20) {
   for (let at = 0; at === 0 || at < bytes.length; at += chunk)
     await call(at ? 'appendbin' : 'writebin', path, await base64(bytes.subarray(at, at + chunk)));
 }
-const BACKGROUNDS = [['background01', 4 / 3], ['background01_widescreen', 16 / 9]];
-const bgVmt = (tex, proxies = '') => `"UnlitGeneric"\n{\n\t"$basetexture"\t"console/${tex}"\n\t"$vertexcolor"\t"1"\n\t"$vertexalpha"\t"1"\n`
+const BACKGROUNDS = [['background01_widescreen', 16 / 9], ['background01', 4 / 3]]; // (widescreen first: see above)
+// scale: how much of the texture's width shows (an animation's on 4:3 screens: its middle)
+const bgVmt = (tex, proxies = '', scale = 1) => `"UnlitGeneric"\n{\n\t"$basetexture"\t"console/${tex}"\n`
+  + (scale < 1 ? `\t"$basetexturetransform"\t"center .5 .5 scale ${scale} 1 rotate 0 translate 0 0"\n` : '') + `\t"$vertexcolor"\t"1"\n\t"$vertexalpha"\t"1"\n`
   + `\t"$ignorez"\t"1"\n\t"$no_fullbright"\t"1"\n\t"$nolod"\t"1"\n${proxies}}\n`;
 const bgUses = (name, tex) => async () => new RegExp(`console/${tex}"`, 'i').test(await readHud(`materials/console/${name}.vmt`) || '');
 async function setBackground(file) {
@@ -3716,26 +3728,32 @@ async function setBackground(file) {
     const fps = Math.max(1, Math.min(60, Math.round(1000 / ms)));
     const proxies = anim ? `\t"Proxies"\n\t{\n\t\t"AnimatedTexture"\n\t\t{\n\t\t\t"animatedtexturevar"\t"$basetexture"\n\t\t\t"animatedtextureframenumvar"\t"$frame"\n\t\t\t"animatedtextureframerate"\t"${fps}"\n\t\t}\n\t}\n` : '';
     status('Making the background...');
-    let made = '', mb = 0, dxt = false;
+    let made = '', mb = 0, wide = null;
     for (const [name, aspect] of BACKGROUNDS) {
-      const [w, h] = bgSize(...picSize(imgs[0]), aspect);
-      dxt = anim && imgs.length * w * h * 3 > BG_RAW_MAX;
-      // the picture goes under a name the running game hasn't loaded (it keeps a texture once loaded), taking turns
-      // between two (the other goes when the HUD is saved); the material the game asks for points at it
-      const vmt = `materials/console/${name}.vmt`, [tex, old] = new RegExp(`${name}_a"`).test(await readHud(vmt) || '') ? [`${name}_b`, `${name}_a`] : [`${name}_a`, `${name}_b`];
-      const vtf = await backgroundVtf(imgs, w, h, dxt, n => status(`Making the background: frame ${n} of ${imgs.length}${aspect < 1.5 ? ', 4:3 screens' : ''}...`));
-      await writeBig(`materials/console/${tex}.vtf`, vtf);
-      made = `${w}x${h}`, mb += vtf.length + 80 + w * h * 3;
-      await call('write', vmt, bgVmt(tex, proxies));
-      dropped.set(`materials/console/${old}.vtf`, bgUses(name, old));
-      // what the game shows while it starts
+      const [w, h] = bgSize(...picSize(imgs[0]), aspect), vmt = `materials/console/${name}.vmt`;
+      if (anim && wide) { // 4:3 screens: the widescreen animation's middle (their own textures go when the HUD is saved)
+        await call('write', vmt, bgVmt(wide.tex, proxies, +(aspect * wide.h / wide.w).toFixed(4)));
+        for (const t of [`${name}_a`, `${name}_b`]) dropped.set(`materials/console/${t}.vtf`, bgUses(name, t));
+      } else {
+        // the picture goes under a name the running game hasn't loaded (it keeps a texture once loaded), taking turns
+        // between two (the other goes when the HUD is saved); the material the game asks for points at it
+        const [tex, old] = new RegExp(`${name}_a"`).test(await readHud(vmt) || '') ? [`${name}_b`, `${name}_a`] : [`${name}_a`, `${name}_b`];
+        const vtf = await backgroundVtf(imgs, w, h, anim, n => status(`Making the background: frame ${n} of ${imgs.length}${aspect < 1.5 ? ', 4:3 screens' : ''}...`));
+        await writeBig(`materials/console/${tex}.vtf`, vtf);
+        await call('write', vmt, bgVmt(tex, proxies));
+        dropped.set(`materials/console/${old}.vtf`, bgUses(name, old));
+        made = made || `${w}x${h}`, mb += vtf.length, wide = { tex, w, h };
+      }
+      // what the game shows while it starts (ponytail: on 4:3 screens it's the picture's own 4:3 middle, the same as
+      // the animation's middle only for a 16:9 picture; crop it from the widescreen one if a taller picture jumps)
       await writeBig(`materials/console/${name}.vtf`, await backgroundVtf(imgs.slice(0, 1), w, h));
+      mb += 80 + w * h * 3;
       dropped.delete(`materials/console/${name}.vtf`);
     }
     imgs.forEach(i => i.close?.());
     await call('cmd', '', 'mat_reloadmaterial background01').catch(() => {});
     setDirty(true);
-    status(`Background set: ${made}${anim ? `, ${imgs.length} frames at ${fps} a second` : ''}${dxt ? ', compressed (it would pass 1 GB)' : ''}, ${Math.round(mb / 1e6)} MB. Click Done or Save HUD to keep it.`);
+    status(`Background set: ${made}${anim ? `, ${imgs.length} frames at ${fps} a second` : ''}, ${Math.round(mb / 1e6)} MB. Click Done or Save HUD to keep it.`);
   } catch (err) {
     status(`Couldn't use that picture: ${err.message}`);
   }
@@ -4936,9 +4954,22 @@ async function parserCheck() {
   const dxPick = i => ends[dt[84 + (i >> 2)] >> (i & 3) * 2 & 3];
   check(dt.length === 96 && dd.getUint32(52, true) === 13 && ends.includes(0xf800) && ends.includes(0x001f) && dxPick(0) === 0xf800 && dxPick(13) === 0xf800 && dxPick(3) === 0x001f && dxPick(14) === 0x001f
     && [...dt.slice(88, 96)].join() === [...dt.slice(80, 88)].join(), `animated background as DXT1: two colours and each pixel's pick, 8 bytes a block (${[...dt.slice(80, 88)]})`);
+  {
+    const fl = el('canvas', { width: 32, height: 32 }), fg = fl.getContext('2d');
+    fg.fillStyle = 'rgb(37,37,37)', fg.fillRect(0, 0, 32, 32);
+    const ft = await backgroundVtf([fl, fl], 32, 32, true), ex = c => [(c >> 11) * 255 / 31, (c >> 5 & 63) * 255 / 63, (c & 31) * 255 / 31], sum = [0, 0, 0];
+    for (let o = 80; o < 80 + 512; o += 8) {
+      const a = ex(ft[o] | ft[o + 1] << 8), b = ex(ft[o + 2] | ft[o + 3] << 8), pal = [a, b, a.map((x, k) => (2 * x + b[k]) / 3), a.map((x, k) => (x + 2 * b[k]) / 3)];
+      for (let i = 0; i < 16; i++) pal[ft[o + 4 + (i >> 2)] >> (i & 3) * 2 & 3].forEach((x, k) => sum[k] += x / 1024);
+    }
+    check(sum.every(x => Math.abs(x - 37) < 0.7) && ft.slice(80, 592).join() === ft.slice(592).join(),
+      `animated background's grain: a flat colour comes out right on average (${sum.map(x => x.toFixed(2))} for 37, 1.4 off without it), the same every frame`);
+  }
   check(tex.length === 86 && dv.getUint32(52, true) === 3 && dv.getUint16(16, true) === 2 && tex[82] === 255 && tex[83] === 255, 'background texture: header, BGR order');
   check(coord('c+10', 100, 1, true) === 60 && coord('c-10', 100, 1, true) === 40 && shifted('c+166', -22) === 'c144', 'positions written "c+N" read and move');
   check(anim.length === 92 && new DataView(anim.buffer).getUint16(24, true) === 2 && anim[88] === 255, 'animated background: frame count, frames one after another');
+  check(/"\$basetexture"\t"console\/w_a"\n\t"\$basetexturetransform"\t"center \.5 \.5 scale 0\.75 1 rotate 0 translate 0 0"\n/.test(bgVmt('w_a', '', +(4 / 3 * 1080 / 1920).toFixed(4))) && !/transform/.test(bgVmt('w_a')),
+    'an animated background\'s 4:3 material shows the middle of the widescreen one');
   {
     // the picture pixel for pixel: a 6x4 one in stripes, cropped to 4x4 (its middle), keeps every stripe unblurred
     const st = el('canvas', { width: 6, height: 4 }), sg = st.getContext('2d');
