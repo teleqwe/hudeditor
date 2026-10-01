@@ -486,7 +486,8 @@ static void StepRead()
 				g_pLive[i][g_nLive[i]++] = live;
 			}
 		}
-		if ( !g_nLive[i] )
+		// (C4Panel only loads once a bomb is around: that one isn't worth a red line in the player's console on every save)
+		if ( !g_nLive[i] && Q_stricmp( f.label, "C4Panel" ) )
 			Warning( "[schemereload] %s not found in memory, skipped (see scheme_reload_status)\n", f.label );
 	}
 }

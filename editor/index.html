@@ -761,8 +761,17 @@ function activeVariant(vars, H) {
 }
 // an entry without "range" covers every character; with one, plain letters if it holds "A"
 const coversLetters = p => { if (!p.range) return true; const [lo, hi] = p.range.trim().split(/\s+/).map(x => parseInt(x, 16)); return 0x41 >= lo && 0x41 <= hi; };
-// A font entry's size in pixels on a screen H lines high.
-const entryPx = (p, H) => +p.tall * (p.yres ? 1 : H / 480);
+// A font entry's size in pixels on a screen H lines high. Without "yres" it scales only where the panel drawing it is
+// proportional: the HUD, in-game windows and the chat are; the menus' dialogs (server browser, options, console) aren't,
+// so most SourceScheme fonts are pixels at every resolution (its ConsoleText 10 is 10 px at 1440p too). SourceScheme's
+// that scale: the main menu's items and the HUD's texts it holds (centre print, captions).
+const SOURCE_SCALED = new Set(['menularge', 'trebuchet24', 'trebuchet20', 'trebuchet18', 'closecaption', 'closecaption_italic', 'closecaption_bold',
+  'closecaption_bolditalic', 'chaptertitle', 'chaptertitleblur', 'hudnumber', 'hudnumber1', 'hudnumber2', 'hudnumber3', 'hudnumber4', 'hudnumber5']);
+const fixedFont = (file, font) => (file || '').toLowerCase() === S.toLowerCase() && !SOURCE_SCALED.has((font || '').toLowerCase());
+// the main menu's items scale by screen height / 640, not the HUD's 480 (measured as the game starts: MenuLarge 8 drew
+// 18 px at 1440p, 14 drew 32)
+const fontBase = (file, font) => (file || '').toLowerCase() === S.toLowerCase() && (font || '').toLowerCase() === 'menularge' ? 640 : 480;
+const entryPx = (p, H, fixed = false, base = 480) => +p.tall * (p.yres || fixed ? 1 : H / base);
 
 // A scheme colour goes where the game reads it from: Colors if it is defined there, else BaseSettings.
 const withValue = (f, key, value) => setIn(f, tables(f).colors.has(key.toLowerCase()) ? 'Colors' : 'BaseSettings', key, value);
@@ -900,9 +909,11 @@ function setDirty(d) {
 // Changes the game only reads when it starts: a mark by Save until the game restarts (see poll), saying which.
 const RESTART_FILES = [[/^resource\/GameMenu\.res$/i, 'main menu buttons'], [/^servers\//i, 'server browser'], [/^resource\/UI\/BuyMenu/i, 'buy menu']];
 const restartFor = new Set();
+// (kept for the HUD while the game runs, so the editor opened again over a running game still shows it)
 function needRestart(what) {
   if (what) restartFor.add(what);
   const on = restartFor.size > 0;
+  try { if (on && hudName) localStorage.setItem('restartFor', JSON.stringify({ hud: hudName, what: [...restartFor] })); else if (!on) localStorage.removeItem('restartFor'); } catch {}
   $('restartmark').hidden = !on;
   $('restartmark').title = on ? `The game shows these after a restart: ${[...restartFor].join(', ')}.
 Click to restart it (unsaved changes stay).` : '';
@@ -1098,7 +1109,9 @@ async function uiFile(path) {
 // The MOTD's message is text (TextMessage) or a web page (HTMLMessage), depending on the server: with both hidden,
 // only OK is left.
 // ('|' = parts shown and hidden together)
-const WINDOW_PARTS = { specgui: [['Top bar', 'topbar', 'tall', '0'], ['Bottom bar', 'bottombarblank', 'ypos', 'r0'], ['Title (map or server)', 'titlelabel'],
+// (the bottom bar goes off to the side: the game puts the right-side text, the spectators and timer info, just above
+// the bottom bar's top, so moving its top down to the screen's edge took that text to the bottom right with it)
+const WINDOW_PARTS = { specgui: [['Top bar', 'topbar', 'tall', '0'], ['Bottom bar', 'bottombarblank'], ['Title (map or server)', 'titlelabel'],
     ['Team scores', 'CTScoreLabel|CTScoreValue|TERScoreLabel|TERScoreValue'], ['Timer', 'timerclock|timerlabel'], ['Info line', 'extrainfo'],
     ['Divider', 'DividerBar'], ['Player name', 'playerlabel']],
   specmenu: [['Settings menu', 'settingscombo'], ['Player menu', 'playercombo'], ['View menu', 'viewcombo'], ['Previous and next buttons', 'specprev|specnext']],
@@ -1107,8 +1120,11 @@ const WINDOW_PARTS = { specgui: [['Top bar', 'topbar', 'tall', '0'], ['Bottom ba
   info: [['Title', 'MessageTitle'], ['Text message', 'TextMessage'], ['Web page message', 'HTMLMessage']],
   // (the class picture and description that change with the button under the mouse take their place from ClassInfo)
   class_ct: [['Class picture and description', 'ClassInfo']], class_ter: [['Class picture and description', 'ClassInfo']] };
+// (the scoreboard's row templates: a column goes to width 0 where it is; off screen, the highlight behind your own row,
+// which runs from the first column to the end of the last, ran off the board with it)
 const hideHow = block => {
   const part = Object.values(WINDOW_PARTS).flat().find(([, b]) => b === block);
+  if (ROW_PARTS.some(r => r.toLowerCase() === (block || '').toLowerCase())) return ['wide', '0'];
   return part && part.length > 2 ? part.slice(2) : ['xpos', '9999'];
 };
 const partHidden = (f, block) => `${hideHow(block)[0]}_hudeditor` in layoutProps(f, block);
@@ -1124,10 +1140,14 @@ function setPartHidden(f, block, hide) {
   moveOff(f, block, key, off, hide);
 }
 // A part's eye. Shown: not moved off by the editor and not "visible" "0" in its file (showing one of those sets it to 1).
+// The scoreboard's row templates are "visible" "0" on purpose (the game only reads their place for each column), so
+// for them only the place counts: hidden moves that column (a team's clan tags, say) off screen in every row.
+// Class select's ClassInfo (the class picture and description) is "visible" "0" in the game's own files too, but the
+// game shows it: only its place counts there as well.
 const showRow = (f, block, label) => {
-  const first = block.split('|')[0];
-  return eyeRow(label, !partHidden(f, first) && layoutProps(f, first).visible !== '0', on => {
-    for (const b of block.split('|')) { setPartHidden(f, b, !on); if (on && layoutProps(f, b).visible === '0') save(f, 'visible', '1', b); }
+  const first = block.split('|')[0], tmpl = b => (f.name === UI_RES.scores && ROW_PARTS.some(r => r.toLowerCase() === b.toLowerCase())) || b.toLowerCase() === 'classinfo';
+  return eyeRow(label, !partHidden(f, first) && (tmpl(first) || layoutProps(f, first).visible !== '0'), on => {
+    for (const b of block.split('|')) { setPartHidden(f, b, !on); if (on && !tmpl(b) && layoutProps(f, b).visible === '0') save(f, 'visible', '1', b); }
     refreshSoon();
   });
 };
@@ -1433,6 +1453,22 @@ async function runCheckup() {
       chatFit(f, chatWide());
       refreshSoon();
     }]);
+  // the spectator bottom bar as the editor hid it before 2026-10-01: its top moved down to the screen's edge, which
+  // takes the right-side text (spectators, timer info: the game puts it just above the bar) down to the bottom right
+  const spec = await readHud(UI_RES.specgui), bar = spec != null && layoutProps({ parsed: parse(spec), bases: [] }, 'bottombarblank');
+  if (bar && 'ypos_hudeditor' in bar)
+    add('The spectator bottom bar is hidden by moving it down to the screen\'s edge, which takes the right-side text (spectators, timer info) down to the bottom right with it.',
+      ['Hide it to the side instead', async () => {
+        const f = await uiFile(UI_RES.specgui), group = Symbol();
+        commit(f, `${f.path}/bottombar`, () => {
+          let cur = f;
+          const put = (k, v) => { const text = v === null ? dropKey(cur, ['bottombarblank'], k) : setAt(cur, ['bottombarblank'], k, v); cur = { ...cur, text, parsed: parse(text) }; };
+          put('ypos', layoutProps(cur, 'bottombarblank').ypos_hudeditor); put('ypos_hudeditor', null);
+          put('xpos_hudeditor', layoutProps(cur, 'bottombarblank').xpos || '0'); put('xpos', '9999');
+          return cur.text;
+        }, group);
+        refreshSoon();
+      }]);
   // blocks written twice
   for (const f of files) {
     const seen = new Map();
@@ -1546,7 +1582,13 @@ function loadingShowRows(f) {
   const both = [f, F(LOADING_VAC)].filter(Boolean), has = (x, block) => Object.keys(layoutProps(x, block)).length > 0;
   const show = (block, label) => eyeRow(label, !partHidden(f, block), on => { for (const x of both) if (has(x, block)) setPartHidden(x, block, !on); refreshSoon(); });
   const added = f.parsed.sections.filter(s => s.path.length === 2 && /^hudeditor_(pic|text|box)\d+$/i.test(s.path[1])).map(s => show(s.path[1], addedName(f, s.path[1])));
-  return [show('InfoLabel', 'The loading text'), show('progress', 'The progress bar'), show('CancelButton', 'The Cancel button'), ...added];
+  // the window's own background (the menus' window colour) can go, so a colour box of yours is the box you see, with
+  // room round it in the window for a picture outside it (hanging under it, say): what's in the window is cut at its edge
+  const back = eyeRow('The window\'s own background', layoutProps(f, 'LoadingDialog').paintbackground !== '0', on => {
+    for (const x of both) save(x, 'paintbackground', on ? '1' : '0', 'LoadingDialog');
+    status(on ? 'The window draws its background again.' : 'The window\'s background is off: add a colour box (Custom) as the box. It shows the next time a map loads.');
+  });
+  return [show('InfoLabel', 'The loading text'), show('progress', 'The progress bar'), show('CancelButton', 'The Cancel button'), back, ...added];
 }
 
 // ---------- things added to the HUD ----------
@@ -1609,20 +1651,35 @@ async function pictureFrames(file) {
   try { img.src = url; await img.decode(); } finally { URL.revokeObjectURL(url); }
   return [{ image: img, ms: 0 }];
 }
+// The game plays an animated texture at one rate, but a GIF's or WebP's frames can each show for a different time
+// (encoders merge repeated frames into one longer one): each frame is repeated to fill its time at the shortest one's
+// rate (slower if that would take more than cap frames). times: how often each frame goes in; ms: the rate.
+function evenTiming(frames, cap) {
+  const ms = frames.map(f => f.ms > 0 ? f.ms : 100), total = ms.reduce((a, b) => a + b, 0);
+  const count = b => ms.reduce((s, m) => s + Math.max(1, Math.round(m / b)), 0);
+  let base = Math.max(1000 / 60, Math.min(...ms));
+  while (count(base) > cap && base < total) base *= 1.05;
+  return { times: ms.map(m => Math.max(1, Math.round(m / base))), ms: base };
+}
 // Writes the picture as <dir>/<name>.vtf/.vmt (power-of-two sizes up to max, smaller for long animations) and returns
 // its ImagePanel "image" (relative to materials/vgui), width/height, and the proxy lines that animate it (or '').
 async function importPicture(file, name, dir = PICTURES, max = 512) {
-  const frames = await pictureFrames(file), first = frames[0].image;
+  const frames = await pictureFrames(file), first = frames[0].image, { times, ms } = evenTiming(frames, 120), n = times.reduce((a, b) => a + b, 0);
   const iw = first.displayWidth || first.naturalWidth || first.width, ih = first.displayHeight || first.naturalHeight || first.height;
   const pow2 = n => 2 ** Math.round(Math.log2(Math.max(4, n)));
   let w = Math.min(max, pow2(iw)), h = Math.min(max, pow2(ih));
-  while (w * h * 4 * frames.length > 8 << 20 && w * h > 256) w = Math.max(16, w / 2), h = Math.max(16, h / 2);
+  while (w * h * 4 * n > 8 << 20 && w * h > 256) w = Math.max(16, w / 2), h = Math.max(16, h / 2);
   const cv = el('canvas', { width: w, height: h }), g = cv.getContext('2d', { willReadFrequently: true }), pixels = [];
   g.imageSmoothingQuality = 'high';
-  for (const { image } of frames) { g.clearRect(0, 0, w, h); g.drawImage(image, 0, 0, w, h); pixels.push(g.getImageData(0, 0, w, h).data); image.close?.(); }
+  frames.forEach(({ image }, i) => {
+    g.clearRect(0, 0, w, h); g.drawImage(image, 0, 0, w, h);
+    const px = g.getImageData(0, 0, w, h).data;
+    for (let k = 0; k < times[i]; k++) pixels.push(px);
+    image.close?.();
+  });
   const path = `${dir}/${name}`, material = path.replace(/^materials\//, '');
-  const ms = frames.reduce((s, f) => s + (f.ms || 100), 0) / frames.length, fps = Math.max(1, Math.min(60, Math.round(1000 / ms)));
-  const proxies = frames.length > 1 ? `\t"Proxies"\n\t{\n\t\t"AnimatedTexture"\n\t\t{\n\t\t\t"animatedtexturevar"\t"$basetexture"\n`
+  const fps = Math.max(1, Math.min(60, Math.round(1000 / ms)));
+  const proxies = pixels.length > 1 ? `\t"Proxies"\n\t{\n\t\t"AnimatedTexture"\n\t\t{\n\t\t\t"animatedtexturevar"\t"$basetexture"\n`
     + `\t\t\t"animatedtextureframenumvar"\t"$frame"\n\t\t\t"animatedtextureframerate"\t"${fps}"\n\t\t}\n\t}\n` : '';
   await call('writebin', `${path}.vtf`, await base64(pictureVtf(pixels, w, h)));
   await call('write', `${path}.vmt`, `"UnlitGeneric"\n{\n\t"$basetexture"\t"${material}"\n\t"$translucent"\t"1"\n\t"$vertexcolor"\t"1"\n\t"$vertexalpha"\t"1"\n`
@@ -1685,11 +1742,12 @@ async function addToHud(kind, file, lay = F(L)) {
   await writing;
   if (!inWindow) return select({ thing: { name, key: name.toLowerCase() }, info: customInfo(name), control: null });
   if (box) { status('Added: its settings are under Custom and Layout here. It shows the next time a map loads.'); return refreshSoon(); }
-  // in a window: selected as if clicked, once the game has made it
+  // in a window: selected as if clicked (clicked again until it's the one, if something is over its middle), once the
+  // game has made it
   for (let i = 0; i < 20; i++) {
     const p = live && live.panels.find(q => q.key === name.toLowerCase());
-    const hit = p && pickAt((p.x + p.w / 2) / live.W, (p.y + p.h / 2) / live.H);
-    if (hit && (hit.node || hit.control) && (hit.node || hit.control).key === name.toLowerCase()) return select(hit);
+    const hit = p && pickAll((p.x + p.w / 2) / live.W, (p.y + p.h / 2) / live.H).find(h => (h.node || h.control) && (h.node || h.control).key === name.toLowerCase());
+    if (hit) return select(hit);
     await sleep(300);
   }
   status('Added. It shows when the window is open: click it in the preview to change it.');
@@ -1813,6 +1871,8 @@ const SCOREBOARD_CVARS = [['CT players', 'cl_scoreboard_ct_color', '150 200 255'
 // The .res only has the first row of each team, as a template the game copies for every player.
 const PLAYER_ROW = /^(CT|T)Player(Avatar|Clan|Name|Status|Score|Deaths|Latency)0$/i;
 const ROW_PARTS = ['CT', 'T'].flatMap(s => ['Area', 'Avatar0', 'Clan0', 'Name0', 'Status0', 'Score0', 'Deaths0', 'Latency0'].map(k => `${s}Player${k}`));
+const SB_COLUMNS = [['avatar', 'Avatar0'], ['clan tag', 'Clan0'], ['name', 'Name0'], ['dead / MVP icon', 'Status0'], ['score', 'Score0'], ['deaths', 'Deaths0'],
+  ['ping', 'Latency0'], ['list', 'Area']];
 // They're game settings, so the HUD carries them as a cfg the game runs at startup: cfg/hudeditor_colours.cfg, run
 // from the HUD's copy of cfg/valve.rc (the game's own plus that exec, before autoexec.cfg so a player's autoexec still
 // wins). Written like any other file, so undo, Save HUD and discarding cover them; the running game gets the values too.
@@ -1920,8 +1980,15 @@ function scoreboardSections(sel, shownFonts) {
     if (d) for (const b of ROW_PARTS) { const y = cy(layoutProps(f, b).ypos); if (y !== null) save(f, 'ypos', `c${y + d}`, b); }
     refreshSoon();
   }, { type: 'number', step: 1, title: 'From the centre. Both teams\' first rows and the list under them move together' }));
+  // the player rows' columns: the game puts each row's avatar, name, icon and numbers where these row templates are
+  // (never drawn themselves, so not clickable), per team; hidden ones (moved off with their eye) are left out
+  const columns = ['CT', 'T'].flatMap(team => SB_COLUMNS.map(([label, k]) => [label, `${team}Player${k}`, k])
+    .filter(([, b]) => Object.keys(layoutProps(f, b)).length && !partHidden(f, b))
+    .flatMap(([label, b, k]) => [['xpos', 'X'], ['wide', 'width'], ...(k === 'Area' ? [['tall', 'height']] : [])]
+      .map(([key, what]) => numRow(f, b, key, `${team} ${label}: ${what}`, layoutProps(f, b)[key]))));
+  for (const r of columns) Object.assign(r.dataset, { cat: 'layout', head: 'Columns' });
   const fonts = SCOREBOARD_FONTS.filter(([name]) => !shownFonts.includes(name) && hasFont(C, name)).map(([name, what]) => fontFold(C, name, what));
-  return [['Scoreboard: background', background], ['Scoreboard: text colours', text], ['Scoreboard: player rows', rows], ['Scoreboard: MVP star', mvpRows()], ['Scoreboard: fonts', fonts]];
+  return [['Scoreboard: background', background], ['Scoreboard: text colours', text], ['Scoreboard: player rows', [...rows, ...columns]], ['Scoreboard: MVP star', mvpRows()], ['Scoreboard: fonts', fonts]];
 }
 
 async function select(sel) {
@@ -1977,8 +2044,9 @@ function pickAll(fx, fy) {
     const r = clickRects(p, info, live.W, live.H).find(inside);
     if (!r) continue;
     // menus and the console draw above the HUD, and in-game windows' buttons (team select's...) above its parts; not the
-    // windows themselves or their see-through frame pieces, which span most of the screen
-    const area = r.w * r.h, layer = p.module !== 'ClientDLL' ? 2 : info.kind === 'window' && p !== p.thing && /button/i.test(p.cls) ? 1 : 0;
+    // windows themselves or their see-through frame pieces, which span most of the screen. A menu dialog (server
+    // browser, options, console) pops up over the main menu and its logo, see-through or not.
+    const area = r.w * r.h, layer = p.module !== 'ClientDLL' ? (p.thing.frame ? 3 : 2) : info.kind === 'window' && p !== p.thing && /button/i.test(p.cls) ? 1 : 0;
     if (area > 0.9 * live.W * live.H && p !== p.thing) continue;
     found.push({ p, info, area, layer, r });
   }
@@ -2271,7 +2339,8 @@ function windowShows(lay, id, key) {
   const solid = open ? live.panels.filter(p => p.parent === open && /solid$/.test(p.key)) : [];
   if (solid.length) return Math.round(Math.max(...solid.map(p => key === 'xpos' ? p.x + p.w - open.x : p.y + p.h - open.y)) / (live.H / 480));
   const v = layoutProps(lay, win.name || win.key)[key === 'xpos' ? 'wide' : 'tall'];
-  return /^\s*\d+\s*$/.test(v || '') ? +v : null;
+  // (a window as tall as the screen, the scoreboard, counts Y from the middle as its own parts do: "c")
+  return /^\s*\d+\s*$/.test(v || '') && !(key === 'ypos' && +v >= 480) ? +v : null;
 }
 
 function selectRow(label, options, value, onChange, keys = [], id = null, dflt = null) {
@@ -2836,8 +2905,10 @@ function fontsOf(sel) {
     if (!out.length) for (const n of HUD_FONTS[sel.info.id] || []) add(hf, n, '');
     return out;
   }
-  if (WINDOW_FONTS[sel.info.id]) { // set by the game's code, whatever the controls' defaults say
+  const title = () => { if (sel.info.file === S && sel.info.id !== 'gamemenu') add(S, resolveString(S, 'FrameTitleBar.Font') || 'Default', 'title'); };
+  if (WINDOW_FONTS[sel.info.id]) { // set by the game's code, whatever the controls' defaults say (the title too: the console's)
     for (const [f, what, names] of WINDOW_FONTS[sel.info.id]) add(f, names.split('|').find(n => hasFont(f, n)), what);
+    if (!sel.control) title();
     return out;
   }
   const own = sel.res && sel.node && ownBlock(sel), ownFont = own && layoutProps(sel.res, own.block).font;
@@ -2848,7 +2919,7 @@ function fontsOf(sel) {
       add(file, font.split('|').find(n => hasFont(file, n)), what.toLowerCase());
     return out;
   }
-  if (sel.info.file === S && sel.info.id !== 'gamemenu') add(S, resolveString(S, 'FrameTitleBar.Font') || 'Default', 'title');
+  title();
   if (sel.res) for (const s of sel.res.parsed.sections.filter(s => s.path.length === 2)) {
     const f = layoutProps(sel.res, s.path[1]).font;
     if (f) add(schemeOf(sel.thing), f, s.path[1]);
@@ -2891,8 +2962,14 @@ function allFonts() {
     const apply = el('div', { className: 'row check' });
     apply.append(el('span'), go);
     apply.dataset.q = 'every font all fonts';
-    d.append(el('div', { className: 'sub', textContent: 'Every text font at once' }),
-      pickRow('Font', '', () => fontFaces, v => { face = v; }, { faces: true, note: 'Left empty: faces stay as they are' }),
+    // a new font file for all of them: into every scheme's CustomFontFiles, then picked here
+    const faceRow = pickRow('Font', '', () => fontFaces, v => { face = v; }, { faces: true, note: 'Left empty: faces stay as they are' });
+    const add = el('div', { className: 'row action' });
+    add.append(el('button', { textContent: '+ Add font', title: 'Add a .ttf or .otf font file to the HUD, for every scheme', onclick: () => {
+      addFontFile(FONT_FILES.map(([f]) => f).filter(F), fam => { faceRow.children[1].set(fam); face = fam; });
+    } }));
+    add.dataset.q = 'add font file ttf otf';
+    d.append(el('div', { className: 'sub', textContent: 'Every text font at once' }), add, faceRow,
       inputRow('Weight', '', v => { weight = v; }, { type: 'number', step: 100, min: 0, title: 'Left empty: weights stay' }),
       noteRow('Icon and symbol fonts (weapon icons, the logo, arrows) are left alone. Every screen size is changed.'), apply);
     for (const [file, where] of FONT_FILES) {
@@ -3106,8 +3183,8 @@ function fontsToAllHeights(list) {
           // (the game's "768 1023" is 768's), never under 480
           const at = SCREEN_HEIGHTS.has(high) ? high : Math.max(480, low);
           // (an entry without "yres" is proportional, the game's own say so: its tall is in 480-line units, 10 is 30 px
-          // at 1440; one with "yres" is in pixels at this height)
-          const from = p.yres ? H : 480;
+          // at 1440; one with "yres", or a menu dialog's, is in pixels at this height)
+          const from = p.yres || fixedFont(file, font) ? H : fontBase(file, font);
           for (const [k, val] of Object.entries(p)) {
             if (k === 'yres' || k === 'range') continue; // (each entry keeps its heights and its characters)
             const nv = k === 'tall' && /^\d+$/.test(val) ? String(Math.max(1, Math.round(+val * at / from))) : val;
@@ -3132,7 +3209,8 @@ function fontsToAllHeights(list) {
 // ---------- fonts by resolution: what's missing, and splitting ----------
 // A HUD made from the game's old scheme has entries for wide ranges of heights in pixels (768-1023, 1200-10000), so
 // screens inside one range get one pixel size: 900 the same as 768, 4K the same as 1440, smaller text on the bigger.
-// (The game's own entry without a range is proportional: it scales, it isn't counted.)
+// (An entry without a range scales where it's drawn proportionally, so it isn't counted. The menus' dialogs don't scale
+// at all: the server browser is the same pixels at 720p and 4K, so their fonts are left alone too, see resolutionFlaws.)
 const CHECK_HEIGHTS = [720, 768, 900, 1080, 1440, 2160];
 // the screen heights that share an entry in pixels, as groups ([[768, 900], [1440, 2160]])
 function sharedHeights(f, font) {
@@ -3149,7 +3227,7 @@ function resolutionFlaws() {
     for (const font of fontNames(file)) {
       if (!f.parsed.entries.some(e => e.path.length === 4 && e.path[1].toLowerCase() === 'fonts' && e.path[2].toLowerCase() === font.toLowerCase())) continue;
       const vars = fontVariants(f, font), p = vars.get(activeVariant(vars, live ? live.H : 1080));
-      if (!p || SYMBOL_FACES.has((p.name || '').toLowerCase()) || +(p.symbol || 0) > 0) continue;
+      if (!p || SYMBOL_FACES.has((p.name || '').toLowerCase()) || +(p.symbol || 0) > 0 || fixedFont(file, font)) continue;
       const groups = sharedHeights(f, font);
       if (groups.length) out.push({ file, font, groups });
     }
@@ -3164,7 +3242,7 @@ const SPLIT_RANGES = [[1, 600], [601, 720], [721, 768], [769, 900], [901, 1080],
 function splitText(cur, font, H) {
   const vars = fontVariants(cur, font), p = vars.get(activeVariant(vars, H));
   if (!p || !/^\d+$/.test(p.tall || '')) return null;
-  const px = entryPx(p, H), rest = Object.entries(p).filter(([k]) => !['name', 'tall', 'yres', 'range'].includes(k));
+  const px = entryPx(p, H, fixedFont(cur.name, font), fontBase(cur.name, font)), rest = Object.entries(p).filter(([k]) => !['name', 'tall', 'yres', 'range'].includes(k));
   const entries = SPLIT_RANGES.map(([a, b]) => {
     const at = SCREEN_HEIGHTS.has(b) ? b : Math.max(480, a);
     return [b === 10000 ? `${a}+` : String(b), [['name', p.name || 'Verdana'], ['tall', String(Math.max(1, Math.round(px * at / H)))], ...rest, ['yres', `${a} ${b}`]]];
@@ -3262,7 +3340,7 @@ function fontRows(file, font) {
   // the size: pixels for a range of heights, or (no range) 480-line units that grow with the screen
   const size = inputRow('Size', p.tall || '', val => put('tall', val), { type: 'number', step: 1, undoId: id('tall'), dflt: dv('tall') });
   if (/^\d+$/.test(p.tall || '')) size.lastElementChild.textContent = p.yres ? `Pixels, for ${p.yres.trim().replace(/\s+/, 'p to ')}p`
-    : `Scales with resolution: ${Math.round(entryPx(p, H))} px at ${H}p`;
+    : fixedFont(file, font) ? 'Pixels, the same at every resolution (menus don\'t scale it)' : `Scales with resolution: ${Math.round(entryPx(p, H, false, fontBase(file, font)))} px at ${H}p`;
   // one entry per resolution (see splitText), with a caution when screen sizes share one size in pixels
   const text = !SYMBOL_FACES.has((p.name || '').toLowerCase()) && !(+(p.symbol || 0) > 0), shared = text ? sharedHeights(f, font) : [];
   const split = el('div', { className: 'row action' });
@@ -3281,7 +3359,7 @@ function fontRows(file, font) {
 // Copies a font file (picked with the file chooser, like pictures) into the HUD's resource/fonts and lists it in
 // CustomFontFiles of the given schemes (the game registers it, live); then it can be picked in any Face box, where the
 // editor draws its name in it too.
-let fontSchemes = [];
+let fontSchemes = [], fontAdded = null; // (fontAdded: told the new font's family, by All fonts' + Add font)
 // A scheme's CustomFontFiles: its entries ("1" "resource/x.ttf", or a block named 1 with "font" in it) and their paths.
 const fontFileEntries = f => [...f.bases, f.parsed].flatMap(p => p.entries).filter(e => sectionOf(e) === 'customfontfiles' && (e.path.length === 2 || e.key.toLowerCase() === 'font'));
 // Lists a font file there under the next free number (not listed twice).
@@ -3290,8 +3368,9 @@ function listFontFile(f, rel) {
   const nums = fontFileEntries(f).map(e => parseInt(e.path.length === 2 ? e.key : e.path[2], 10)).filter(n => n > 0);
   save(f, String(Math.max(0, ...nums) + 1), rel, ['CustomFontFiles']);
 }
-function addFontFile(schemes) {
+function addFontFile(schemes, then = null) {
   fontSchemes = schemes;
+  fontAdded = then;
   $('fontfile').value = '';
   $('fontfile').click();
 }
@@ -3307,7 +3386,8 @@ $('fontfile').onchange = async () => {
     if (!fontFaces.includes(family)) fontFaces.unshift(family);
     try { const face = new FontFace(family, data); await face.load(); document.fonts.add(face); } catch {} // (the list shows it in itself)
     setDirty(true);
-    status(`Added "${family}". Pick it in any Face box, or in All fonts > Every text font at once.`);
+    if (fontAdded) { fontAdded(family); fontAdded = null; status(`Added "${family}" to every scheme and picked it: Apply to every text font uses it.`); }
+    else status(`Added "${family}". Pick it in any Face box, or in All fonts > Every text font at once.`);
   } catch (err) {
     status(`Couldn't add that font: ${err.message}`);
   }
@@ -3618,8 +3698,9 @@ async function setBackground(file) {
     return;
   }
   try {
-    const frames = await pictureFrames(file), imgs = frames.map(f => f.image), anim = imgs.length > 1;
-    const ms = frames.reduce((s, f) => s + (f.ms || 100), 0) / frames.length, fps = Math.max(1, Math.min(60, Math.round(1000 / ms)));
+    const frames = await pictureFrames(file), { times, ms } = evenTiming(frames, Math.max(100, frames.length));
+    const imgs = frames.flatMap((f, i) => Array(times[i]).fill(f.image)), anim = imgs.length > 1;
+    const fps = Math.max(1, Math.min(60, Math.round(1000 / ms)));
     const proxies = anim ? `\t"Proxies"\n\t{\n\t\t"AnimatedTexture"\n\t\t{\n\t\t\t"animatedtexturevar"\t"$basetexture"\n\t\t\t"animatedtextureframenumvar"\t"$frame"\n\t\t\t"animatedtextureframerate"\t"${fps}"\n\t\t}\n\t}\n` : '';
     status('Making the background...');
     for (const [i, [name, aspect]] of BACKGROUNDS.entries()) {
@@ -4323,10 +4404,16 @@ function resOptions() {
   s.disabled = !live;
 }
 $('res').onchange = () => {
-  const [w, h] = $('res').value.split('x');
+  const [w, h] = $('res').value.split('x'), was = live ? `${live.W}x${live.H}` : '';
   try { localStorage.setItem('homeRes', homeRes); } catch {}
   status(`The game goes to ${w}×${h}: fonts show their entry for ${h} lines high. Your own size comes back when the editor closes.`);
   call('cmd', '', `mat_setvideomode ${w} ${h} 1`).catch(err => status(`Couldn't change it: ${err.message}`));
+  // the game only takes sizes the monitor offers (2560×1080 on a 1440p one stayed 2560×1440): say so, show the real one
+  setTimeout(() => {
+    if (!live || `${live.W}x${live.H}` === `${w}x${h}` || `${live.W}x${live.H}` !== was) return;
+    status(`The game didn't go to ${w}×${h}: it only takes sizes your monitor offers. It's still ${live.W}×${live.H}.`);
+    resOptions();
+  }, 10000);
 };
 // back to the size the game had (when the editor closes)
 async function homeResolution() {
@@ -4599,6 +4686,8 @@ async function openHud(path) {
   if (dirty && !confirm(`Discard the unsaved changes to ${hudName}?`)) return;
   try {
     hudName = await call('open', path);
+    try { const k = JSON.parse(localStorage.getItem('restartFor') || 'null'); if (k && k.hud === hudName && live) for (const w of k.what) restartFor.add(w); } catch {}
+    needRestart();
     $('picker').hidden = true;
     $('hudbtn').textContent = hudName;
     selected = null;
@@ -4811,6 +4900,11 @@ async function parserCheck() {
   check(resolve(t, 'X') === '1 2 3 4', 'name resolves through Colors');
   check(resolve(t, 'Y') === '5 5 5 5', '[$X360] value skipped');
   check(resolve(t, 'Z') === '7 7 7 255', 'value from #base');
+  {
+    // an animation's merged frames (one shown 120 ms among 40 ms ones) are repeated, so the game's one rate keeps time
+    const a = evenTiming([{ ms: 40 }, { ms: 40 }, { ms: 120 }, { ms: 40 }], 100), b = evenTiming([{ ms: 40 }, { ms: 400 }], 4);
+    check(a.times.join() === '1,1,3,1' && a.ms === 40 && b.times.reduce((x, y) => x + y) <= 4 && b.ms > 40, `animation frames evened out (${a.times}, ${b.times} at ${Math.round(b.ms)} ms)`);
+  }
   const edited = withValue(f, 'x', '10 20 30 40');
   check(edited.includes('X\t"10 20 30 40"') && !edited.includes('X\t"A"'), 'edit in place');
   const added = parse(withValue(f, 'Z', '1 1 1 1'));
@@ -5002,6 +5096,12 @@ async function parserCheck() {
     check(before === '768/900, 1440/4K' && sv.get('600').tall === '10' && sv.get('1080').tall === '18' && sv.get('1080').yres === '901 1080' && sv.get('1440').tall === '24'
       && sv.get('2160').tall === '36' && sv.get('5').range === '0x0400 0x04FF' && !sv.has('1') && !sharedHeights(sp, 'T').length && activeVariant(sv, 900) === '900',
       `Split into resolutions (${before} -> ${[...sv].map(([k, p]) => `${k}:${p.tall}`)})`);
+    // a menu dialog's font with one entry and no range (ConsoleText) is pixels everywhere, like the dialog: not one to
+    // flag (the dialog doesn't scale either), but split by hand it scales from its pixels here (16 at 1440: 12 at 1080)
+    const cs = ['Scheme', '{', '\tFonts', '\t{', '\t\tConsoleText', '\t\t{', '\t\t\t"1" { "name" "Lexend" "tall" "16" }', '\t\t}', '\t}', '}', ''].join('\n');
+    const sf = { name: S, path: 'y', text: cs, parsed: parse(cs), bases: [] }, ct = splitText(sf, 'ConsoleText', 1440), cv = fontVariants({ ...sf, text: ct, parsed: parse(ct) }, 'ConsoleText');
+    check(fixedFont(S, 'ConsoleText') && !fixedFont(S, 'MenuLarge') && !fixedFont(C, 'Default') && entryPx({ tall: '16' }, 1440, true) === 16 && entryPx({ tall: '14' }, 1440, false, fontBase(S, 'MenuLarge')) === 31.5 && cv.get('1080').tall === '12' && cv.get('2160').tall === '24',
+      `menu dialog fonts are pixels at every resolution (split by hand: ${cv.get('1080')?.tall} at 1080, ${cv.get('2160')?.tall} at 4K)`);
   }
   const g0 = grid;
   grid = 8;
@@ -5057,10 +5157,13 @@ if (host && location.hash === '#hosttest') (async () => {
       `spectator bars start from the game's file, with an eye for every part (${eyeNames().join(', ')})`);
     setPartHidden(spec, 'topbar', true);
     setPartHidden(spec, 'CTScoreLabel', true);
+    setPartHidden(spec, 'bottombarblank', true);
     await sleep(400);
     await writing;
     const specText = await readHud('resource/UI/spectator.res') || '';
     check(/"topbar"[^}]*"tall"\s+"0"[^}]*"tall_hudeditor"\s+"52"/.test(specText) && /"CTScoreLabel"[^}]*"xpos"\s+"9999"/.test(specText), 'hiding window parts writes a copy of the game\'s file: the top bar 0 high, a label off screen');
+    // (the bottom bar keeps its top where it is, off to the side: the right-side text sits just above it)
+    check(/"bottombarblank"[^}]*"xpos"\s+"9999"/.test(specText) && /"bottombarblank"[^}]*"ypos"\s+"428"/.test(specText), 'the spectator bottom bar hides off to the side, its top kept');
     const specRows = showHideRows(specSel);
     const scoresRow = specRows.find(r => /team scores/i.test(r.textContent)), scoresEye = scoresRow.querySelector('.eye');
     check(scoresEye.classList.contains('off') && scoresEye.getAttribute('aria-pressed') === 'false' && scoresRow.classList.contains('hidden'),
@@ -5071,7 +5174,9 @@ if (host && location.hash === '#hosttest') (async () => {
     check(layoutProps(spec, 'CTScoreLabel').xpos === 'r268' && !partHidden(spec, 'CTScoreLabel'), 'showing a window part puts its position back');
     const sb = await uiFile('resource/UI/scoreboard.res'), sbSections = scoreboardSections({ res: sb, info: { id: 'scores' }, thing: { key: 'scores' } }, []);
     const sbCounts = sbSections.map(([, rows]) => rows.length);
-    check(sbCounts[0] === 2 && sbCounts[1] === 6 && sbCounts[2] === 9 && sbCounts[3] === 2 && sbCounts[4] >= 8, `scoreboard: background, text colours, player rows (and where they start), MVP star and fonts in one place (${sbCounts})`);
+    // (player rows: where they start and their colours, then each team's columns: 7 places and widths, and the list's)
+    const sbCols = sbSections[2][1].filter(r => r.dataset.head === 'Columns').length;
+    check(sbCounts[0] === 2 && sbCounts[1] === 6 && sbCounts[2] === 9 + 34 && sbCols === 34 && sbCounts[3] === 2 && sbCounts[4] >= 8, `scoreboard: background, text colours, player rows (and where they start, and their columns), MVP star and fonts in one place (${sbCounts}; ${sbCols} column rows)`);
     const menuFonts = fontsOf({ info: { kind: 'window', id: 'gamemenu', file: S }, thing: { key: 'gamemenu' } }).map(([f, n]) => `${f}:${n}`).join();
     const btnFonts = fontsOf({ info: { kind: 'window', id: 'info', file: C }, thing: { key: 'info' }, control: { cls: 'Button' } });
     check(menuFonts === `${S}:MenuLarge,${C}:ClientTitleFont` && btnFonts.length === 1 && btnFonts[0][1] === 'Default' && fontNames(C).length > 50
