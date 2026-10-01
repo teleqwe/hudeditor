@@ -56,6 +56,15 @@
   :root { --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23e6dfe4' stroke-width='1.3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); } /* the top bar's drop-down arrow (Grid, Test tools) */
   .toolsbtn::after { content: ''; display: inline-block; width: 9px; height: 6px; margin-left: 8px; vertical-align: 2px; background: var(--chevron) no-repeat center / 9px 6px; }
   .zoombtn { padding: 4px 10px; border-color: var(--accent); color: var(--accent); font-size: 12px; }
+  /* fonts that don't scale between some screen sizes: a yellow caution by Game resolution, and what it says */
+  #res { width: 190px; text-overflow: ellipsis; }
+  .caution { padding: 4px 9px; border-color: #c9a43c; background: rgba(242, 201, 76, .1); color: #f2c94c; font-size: 14px; line-height: 1.2; }
+  .caution:hover { border-color: #f2c94c; background: rgba(242, 201, 76, .18); }
+  .cautionpop { position: fixed; z-index: 20; width: min(380px, calc(100vw - 24px)); padding: 16px; background: var(--surface); border: 1px solid #c9a43c; border-radius: 8px; box-shadow: 0 12px 40px #0008; }
+  .cautionpop h3 { margin: 0 0 8px; font-size: 13px; font-weight: 550; color: #f2c94c; }
+  .cautionpop p { margin: 0 0 8px; font-size: 12px; color: var(--muted); line-height: 1.45; }
+  .cautionpop ul { margin: 0 0 10px; padding-left: 18px; font-size: 12px; max-height: 180px; overflow: auto; }
+  .cautionpop footer { display: flex; gap: 6px; justify-content: flex-end; }
   /* the grid: a drop-down that looks like the buttons beside it */
   .gridbtn { appearance: none; padding: 6px 27px 6px 11px; color: var(--text); cursor: pointer;
     background: var(--field) var(--chevron) no-repeat right 11px center / 9px 6px; }
@@ -303,6 +312,7 @@
     <button id="launch" hidden>Launch game</button>
     <button id="zoom" class="zoombtn" hidden title="Zoomed in with the mouse wheel: click for 100%">100%</button>
     <select id="res" class="gridbtn" aria-label="Game resolution" disabled title="The game's resolution, and so the preview's: see how the HUD looks on other screens. Your own comes back when the editor closes."><option>Game: -</option></select>
+    <button id="rescaution" class="caution" hidden aria-haspopup="dialog">⚠</button>
     <select id="grid" class="gridbtn" aria-label="Grid" title="Dragged parts land on a grid this many units apart (a unit is the screen height / 480)"><option value="0">Grid: off</option><option value="2">Grid: 2</option><option value="4">Grid: 4</option><option value="5">Grid: 5</option><option value="8">Grid: 8</option><option value="10">Grid: 10</option><option value="16">Grid: 16</option><option value="20">Grid: 20</option></select>
     <span class="sep" aria-hidden="true"></span>
     <button id="testserver" title="Offline game with a frozen bot and bhop/surf-style timer texts on screen">Test server</button>
@@ -723,25 +733,36 @@ function dropKey(f, sub, key) {
   return text.slice(0, e.kstart) + text.slice(after);
 }
 
-// A font's entries ("1", "2"... each for a range of screen heights), own file over #base, keys lowercase.
+// A font's entries ("1", "2"... each for a range of screen heights, or every height), keys lowercase, in the game's
+// order: the HUD's own first, then the ones #base adds after them; a key the file has twice is its first, and the
+// HUD's own over #base's (as KeyValues merges a #base).
 function fontVariants(f, font) {
   const vars = new Map();
-  for (const p of [...f.bases, f.parsed]) for (const e of p.entries) {
+  for (const p of [f.parsed, ...f.bases]) for (const e of p.entries) {
     if (e.path.length !== 4 || e.path[1].toLowerCase() !== 'fonts' || e.path[2].toLowerCase() !== font.toLowerCase()) continue;
     if (!vars.has(e.path[3])) vars.set(e.path[3], {});
-    vars.get(e.path[3])[e.key.toLowerCase()] = e.value;
+    const o = vars.get(e.path[3]), k = e.key.toLowerCase();
+    if (!(k in o)) o[k] = e.value;
   }
   return vars;
 }
 
-// The entry the game uses at this screen height: the first whose yres range contains it, else the first without one.
+// The entry the game draws plain text with at this screen height: it adds every entry that fits the height (its yres
+// range holds it, or it has none) in order, and a letter comes from the first that has it, so the first that fits and
+// whose "range" (if any: other characters' fallbacks) covers letters. With yres, "tall" is pixels; without, it is in
+// 480-line units, scaled with the screen (checked in game: 10 draws 30 px at 1440, ranged 10 draws 10 px).
 function activeVariant(vars, H) {
   for (const [k, p] of vars) {
-    const [a, b] = (p.yres || '').split(/\s+/).map(Number);
-    if (p.yres && H >= a && H <= b) return k;
+    const [a, b] = (p.yres || '').trim().split(/\s+/).map(Number);
+    if (p.yres && !(H >= a && H <= b)) continue;
+    if (coversLetters(p)) return k;
   }
-  return [...vars.keys()].find(k => !vars.get(k).yres) || [...vars.keys()][0];
+  return [...vars.keys()][0];
 }
+// an entry without "range" covers every character; with one, plain letters if it holds "A"
+const coversLetters = p => { if (!p.range) return true; const [lo, hi] = p.range.trim().split(/\s+/).map(x => parseInt(x, 16)); return 0x41 >= lo && 0x41 <= hi; };
+// A font entry's size in pixels on a screen H lines high.
+const entryPx = (p, H) => +p.tall * (p.yres ? 1 : H / 480);
 
 // A scheme colour goes where the game reads it from: Colors if it is defined there, else BaseSettings.
 const withValue = (f, key, value) => setIn(f, tables(f).colors.has(key.toLowerCase()) ? 'Colors' : 'BaseSettings', key, value);
@@ -838,11 +859,13 @@ const LAYOUT_FALLBACK = { alpha: '255', roundedcorners: '15', texture1: 'vgui/hu
   texture3: 'vgui/hud/8x800corner3', texture4: 'vgui/hud/8x800corner4' };
 
 async function undo() {
-  const step = undoSteps.pop();
-  if (!step) return status('Nothing to undo.');
+  const steps = [undoSteps.pop()];
+  if (!steps[0]) return status('Nothing to undo.');
+  // one action over several files (a split) is undone in one go
+  while (steps[0].group && undoSteps.length && undoSteps[undoSteps.length - 1].group === steps[0].group) steps.push(undoSteps.pop());
   await writing;
-  const { f, text } = step, before = parse(text);
-  writing = writing.then(async () => {
+  for (const { f, text } of steps) writing = writing.then(async () => {
+    const before = parse(text);
     try {
       if (f.name === L) {
         let reset = { ...f, text, parsed: before };
@@ -959,7 +982,7 @@ function keepChatOpen() {
 }
 
 // Writes a file's new text (made by edit() from its current text) as one undo step, once earlier writes are done.
-function commit(f, id, edit) {
+function commit(f, id, edit, group = null) {
   keepChatOpen();
   writing = writing.then(async () => {
     try {
@@ -970,7 +993,7 @@ function commit(f, id, edit) {
       }
       // one undo step per setting; a slider dragged or a number typed within 1.5 s is still that step
       const last = undoSteps[undoSteps.length - 1], now = Date.now();
-      if (!last || last.id !== id || now - last.at > 1500) undoSteps.push({ f, id, text: f.text });
+      if (!last || last.id !== id || now - last.at > 1500) undoSteps.push({ f, id, text: f.text, group });
       if (undoSteps.length > 200) undoSteps.shift();
       undoSteps[undoSteps.length - 1].at = now;
       await call('write', f.path, next);
@@ -1379,6 +1402,10 @@ async function runCheckup() {
   for (const f of files) for (const e of f.parsed.entries)
     if (e.key.toLowerCase() === 'image' && /^replay\/thumbnails\//i.test(e.value) && (await call('exists', `materials/vgui/${e.value}.vmt`)) !== '1')
       add(`${f.name}: ${e.path[1]} shows the picture ${e.value}, which isn't in the HUD.`);
+  // fonts whose size doesn't follow the screen between some resolutions (the caution by Game resolution)
+  const flaws = resolutionFlaws();
+  if (flaws.length) add(`${flaws.length} font${flaws.length > 1 ? 's use' : ' uses'} the same size at different resolutions, so text looks smaller at the bigger one (${list(flaws.map(x => `${x.font}: ${sharedText(x.groups)}`))}).`,
+    ['Split into resolutions', () => splitFonts(flaws.map(x => [x.file, x.font]))]);
   // HUD parts the game has that HudLayout leaves out (the game's console says "doesn't have an entry" for each)
   const missing = missingBlocks(F(L));
   if (missing.length) add(`scripts/HudLayout.res leaves out ${missing.length} of the game's HUD parts (${list(missing)}): the game leaves each where its code puts it. A HUD part's Missing tab lists them too.`,
@@ -1700,10 +1727,10 @@ function customRows(id, lay = F(L)) {
 // Takes an added thing out (of both loading screen files), with its edge line; its picture file goes when the HUD is
 // saved. The selection goes back to the window (or the list) if it was the thing.
 function removeAdded(lay, id) {
-  const p = layoutProps(lay, id), inWindow = lay !== F(L);
+  const p = layoutProps(lay, id), inWindow = lay !== F(L), group = Symbol();
   for (const f of lay.name === UI_RES.loadingdialog ? [lay, F(LOADING_VAC)] : [lay])
-    if (f && Object.keys(layoutProps(f, id)).length) commit(f, `${f.name}/${id}/remove`, () => dropBlock(f, [], id));
-  if (/^HudEditorEdge_/i.test(p.border || '') && F(C)) commit(F(C), `${C}/${p.border}/remove`, () => dropBlock(F(C), ['Borders'], p.border));
+    if (f && Object.keys(layoutProps(f, id)).length) commit(f, `${f.name}/${id}/remove`, () => dropBlock(f, [], id), group);
+  if (/^HudEditorEdge_/i.test(p.border || '') && F(C)) commit(F(C), `${C}/${p.border}/remove`, () => dropBlock(F(C), ['Borders'], p.border), group);
   dropPicture(p.image);
   const was = selected && (inWindow ? selected.res === lay && (ownBlock(selected) || {}).block?.toLowerCase() === id.toLowerCase() : selected.info.id === id);
   if (was) select(inWindow ? { ...selected, control: null, node: null } : null);
@@ -2897,6 +2924,7 @@ const SYMBOL_FACES = new Set(['marlett', 'counter-strike', 'counter-strike logo'
 async function setAllFonts(face, weight) {
   if (!face && !weight) return status('Type a font, a weight, or both first.');
   let n = 0;
+  const group = Symbol();
   for (const [file] of FONT_FILES) {
     const f = F(file);
     if (!f) continue;
@@ -2912,7 +2940,7 @@ async function setAllFonts(face, weight) {
         n++;
       }
       return cur.text;
-    });
+    }, group);
   }
   await writing;
   render();
@@ -3059,9 +3087,9 @@ const FONT_EXTRA = [['italic', 'Italic', 'flag', '1'], ['underline', 'Underline'
 // height it is made for: its end when that is a real one (HUDs like telehud end each range at a resolution: "901 1080"),
 // else its start (the game's own begin there: "768 1023"; never under 480). From the game's proportional entry (no
 // yres, tall in 480-line units) one for 1080 gets tall × 1080 / 480; from an entry in pixels, tall × 1080 / this
-// height. list: [file, font] pairs; one undo step a file that changes.
+// height. list: [file, font] pairs; one undo step for all the files.
 function fontsToAllHeights(list) {
-  const H = live ? live.H : 1080, fonts = new Set(), heights = new Set();
+  const H = live ? live.H : 1080, fonts = new Set(), heights = new Set(), group = Symbol();
   const flagKeys = [...FONT_FLAGS.map(([k]) => k), ...FONT_EXTRA.filter(x => (x[2] || 'flag') === 'flag').map(([k]) => k)];
   let changed = 0;
   for (const file of new Set(list.map(([f]) => f))) {
@@ -3095,12 +3123,99 @@ function fontsToAllHeights(list) {
     // (nothing to change in this file: no write, no undo step; one would take the place of the edit before it)
     if (edit() === f.text) continue;
     changed++;
-    commit(f, `${file}/fonts to every height`, edit);
+    commit(f, `${file}/fonts to every height`, edit, group);
   }
   if (!changed) return status(fonts.size ? 'The other screen heights already match this one.' : 'Nothing to copy: no other screen heights.');
   writing.then(() => { render(); status(`${[...fonts].join(', ')}: copied to the entries for ${[...heights].sort((a, b) => a - b).join(', ')} lines high, sizes scaled from ${H}. Ctrl+Z undoes it.`); });
   refreshSoon();
 }
+// ---------- fonts by resolution: what's missing, and splitting ----------
+// A HUD made from the game's old scheme has entries for wide ranges of heights in pixels (768-1023, 1200-10000), so
+// screens inside one range get one pixel size: 900 the same as 768, 4K the same as 1440, smaller text on the bigger.
+// (The game's own entry without a range is proportional: it scales, it isn't counted.)
+const CHECK_HEIGHTS = [720, 768, 900, 1080, 1440, 2160];
+// the screen heights that share an entry in pixels, as groups ([[768, 900], [1440, 2160]])
+function sharedHeights(f, font) {
+  const vars = fontVariants(f, font), by = new Map();
+  for (const h of CHECK_HEIGHTS) { const v = activeVariant(vars, h), p = vars.get(v); if (p && p.yres) by.set(v, [...(by.get(v) || []), h]); }
+  return [...by.values()].filter(g => g.length > 1);
+}
+// The HUD's own text fonts with heights sharing a size (not ones only #base has, nor icon and symbol fonts).
+function resolutionFlaws() {
+  const out = [];
+  for (const [file] of FONT_FILES) {
+    const f = F(file);
+    if (!f || f.defaultText) continue;
+    for (const font of fontNames(file)) {
+      if (!f.parsed.entries.some(e => e.path.length === 4 && e.path[1].toLowerCase() === 'fonts' && e.path[2].toLowerCase() === font.toLowerCase())) continue;
+      const vars = fontVariants(f, font), p = vars.get(activeVariant(vars, live ? live.H : 1080));
+      if (!p || SYMBOL_FACES.has((p.name || '').toLowerCase()) || +(p.symbol || 0) > 0) continue;
+      const groups = sharedHeights(f, font);
+      if (groups.length) out.push({ file, font, groups });
+    }
+  }
+  return out;
+}
+// Split into resolutions: a font as it looks on this screen, rebuilt as one entry per resolution (telehud's way: each
+// range ends at a screen height), each sized for its height in pixels; 4K gets its own. The entries are named by their
+// height, so a #base's "1", "2"... can't merge keys into them (KeyValues merges a #base by name, after the HUD's own);
+// the HUD's own entries for other characters (a "range" not covering letters) stay, after them.
+const SPLIT_RANGES = [[1, 600], [601, 720], [721, 768], [769, 900], [901, 1080], [1081, 1440], [1441, 2160], [2161, 10000]];
+function splitText(cur, font, H) {
+  const vars = fontVariants(cur, font), p = vars.get(activeVariant(vars, H));
+  if (!p || !/^\d+$/.test(p.tall || '')) return null;
+  const px = entryPx(p, H), rest = Object.entries(p).filter(([k]) => !['name', 'tall', 'yres', 'range'].includes(k));
+  const entries = SPLIT_RANGES.map(([a, b]) => {
+    const at = SCREEN_HEIGHTS.has(b) ? b : Math.max(480, a);
+    return [b === 10000 ? `${a}+` : String(b), [['name', p.name || 'Verdana'], ['tall', String(Math.max(1, Math.round(px * at / H)))], ...rest, ['yres', `${a} ${b}`]]];
+  });
+  const others = [...fontVariants({ parsed: cur.parsed, bases: [] }, font)].filter(([, q]) => !coversLetters(q)).map(([k, q]) => [k, Object.entries(q)]);
+  return setBlock(cur, ['Fonts'], font, [...entries, ...others]);
+}
+function splitFonts(list) {
+  const H = live ? live.H : 1080, group = Symbol();
+  for (const file of new Set(list.map(([f]) => f))) {
+    const f = F(file);
+    commit(f, `${file}/split fonts`, () => {
+      let cur = f;
+      for (const [, font] of list.filter(([x]) => x === file)) { const text = splitText(cur, font, H); if (text) cur = { ...cur, text, parsed: parse(text) }; }
+      return cur.text;
+    }, group);
+  }
+  writing.then(() => { checkup = null; render(); status(`Split ${list.length > 1 ? `${list.length} fonts` : list[0][1]}: each resolution has its own size now, scaled from ${H}p. Pick a resolution to adjust one. Ctrl+Z to undo.`); });
+  refreshSoon();
+}
+// The caution by Game resolution: shown while the HUD has such fonts; a click explains and offers the split.
+const sharedText = groups => groups.map(g => g.map(h => h === 2160 ? '4K' : h).join('/')).join(', ');
+function updateResCaution() {
+  const flaws = files.length ? resolutionFlaws() : [], b = $('rescaution');
+  b.hidden = !flaws.length;
+  b.title = flaws.length ? `${flaws.length} font${flaws.length > 1 ? 's' : ''} won't resize between some resolutions. Click to see.` : '';
+  b.setAttribute('aria-label', b.title);
+  if (!flaws.length) closeCaution();
+}
+let cautionPop = null;
+const closeCaution = () => { if (cautionPop) { cautionPop.remove(); cautionPop = null; } };
+$('rescaution').onclick = () => {
+  if (cautionPop) return closeCaution();
+  const flaws = resolutionFlaws(), pop = cautionPop = el('div', { className: 'cautionpop', role: 'dialog' }), H = live ? live.H : 1080;
+  pop.setAttribute('aria-label', 'Fonts that don\'t resize');
+  const list = el('ul');
+  list.append(...flaws.slice(0, 12).map(x => el('li', { textContent: `${x.font} (${x.file === C ? 'in game' : x.file === S ? 'menus' : 'chat'}): ${sharedText(x.groups)}` })));
+  if (flaws.length > 12) list.append(el('li', { textContent: `and ${flaws.length - 12} more` }));
+  const split = el('button', { className: 'primary', textContent: 'Split into resolutions', onclick: () => { closeCaution(); splitFonts(flaws.map(x => [x.file, x.font])); } });
+  const foot = el('footer');
+  foot.append(el('button', { textContent: 'Close', onclick: closeCaution }), split);
+  pop.append(el('h3', { textContent: 'Some fonts don\'t resize' }),
+    el('p', { textContent: 'These use the same size at the resolutions listed, so text looks smaller at the bigger one:' }),
+    list,
+    el('p', { textContent: `Split gives every resolution its own size, scaled from how it looks at ${H}p. Pick a resolution afterwards to adjust it. Ctrl+Z to undo.` }),
+    foot);
+  document.body.append(pop);
+  const r = $('rescaution').getBoundingClientRect();
+  pop.style.top = `${r.bottom + 8}px`;
+  pop.style.left = `${clamp(r.right - pop.offsetWidth, 12, innerWidth - pop.offsetWidth - 12)}px`;
+};
 // A font's settings for the current screen height. Edits go to that entry only (fonts have one per resolution).
 function fontRows(file, font) {
   const f = F(file);
@@ -3144,12 +3259,23 @@ function fontRows(file, font) {
   plus.disabled = !menu.childElementCount;
   add.append(el('div', { className: 'addhead', textContent: 'Font options' }), plus, menu);
   add.dataset.q = FONT_EXTRA.map(x => x[1]).join(' ').toLowerCase();
+  // the size: pixels for a range of heights, or (no range) 480-line units that grow with the screen
+  const size = inputRow('Size', p.tall || '', val => put('tall', val), { type: 'number', step: 1, undoId: id('tall'), dflt: dv('tall') });
+  if (/^\d+$/.test(p.tall || '')) size.lastElementChild.textContent = p.yres ? `Pixels, for ${p.yres.trim().replace(/\s+/, 'p to ')}p`
+    : `Scales with resolution: ${Math.round(entryPx(p, H))} px at ${H}p`;
+  // one entry per resolution (see splitText), with a caution when screen sizes share one size in pixels
+  const text = !SYMBOL_FACES.has((p.name || '').toLowerCase()) && !(+(p.symbol || 0) > 0), shared = text ? sharedHeights(f, font) : [];
+  const split = el('div', { className: 'row action' });
+  split.append(el('button', { className: shared.length ? '' : 'ghost', textContent: 'Split into resolutions', onclick: () => splitFonts([[file, font]]),
+    title: 'Gives every resolution its own size, scaled from how it looks now' }));
+  split.dataset.q = 'split resolutions yres screen size';
   return [
     pickRow('Face', p.name || '', () => fontFaces, val => put('name', val), { faces: true, id: id('name'), note: vars.size > 1 ? `Entry "${v}", for ${H}p screens` : '', dflt: dv('name') }),
-    inputRow('Size', p.tall || '', val => put('tall', val), { type: 'number', step: 1, undoId: id('tall'), dflt: dv('tall') }),
+    size,
     inputRow('Weight', p.weight || '400', val => put('weight', val), { type: 'number', step: 100, min: 0, slider: 1000, undoId: id('weight'), dflt: dv('weight', '400') }),
     inputRow('Blur', p.blur || '0', val => put('blur', val), { type: 'number', step: 1, min: 0, undoId: id('blur'), dflt: dv('blur', '0') }),
-    add, effects, ...extras];
+    add, effects, ...extras,
+    ...(text ? [split, ...(shared.length ? [noteRow(`⚠ Same size at ${sharedText(shared)}, so it looks smaller at the bigger one.`)] : [])] : [])];
 }
 
 // Copies a font file (picked with the file chooser, like pictures) into the HUD's resource/fonts and lists it in
@@ -3704,6 +3830,7 @@ function render() {
   scroller().scrollTop = top;
   if (fpop && !document.contains(fpop.owner)) closeFontPop(); // its row has gone
   if (cpop && !document.contains(cpop.owner)) closePicker();
+  updateResCaution();
 }
 // What scrolls: the list, or with a selection its settings beside the categories.
 const scroller = () => document.querySelector('#list .section-stack') || $('list');
@@ -4853,6 +4980,29 @@ async function parserCheck() {
         `All resolutions: sizes scaled from the proportional entry, and nothing to do makes no undo step (${[...tv].map(([k, p]) => `${k}:${p.tall}`)}, ${commits} writes)`);
     } finally { [files, live, commit, render] = keep; }
   }
+  // the entry the game draws with: the first that fits, in the game's order (the HUD's own, then #base's); one for
+  // other characters (a range without letters) is skipped
+  {
+    const own = parse('S { Fonts { T { "1" { "tall" "5" } "3" { "tall" "7" "yres" "1081 1440" } } } }'), base = parse('S { Fonts { T { "1" { "tall" "9" "yres" "1 100" } "2" { "tall" "8" } } } }');
+    const ov = fontVariants({ parsed: own, bases: [base] }, 'T');
+    const rv = new Map([['1', { tall: '6', range: '0x0400 0x04FF' }], ['2', { tall: '7' }]]);
+    check([...ov.keys()].join() === '1,3,2' && ov.get('1').tall === '5' && ov.get('1').yres === '1 100' && activeVariant(new Map([['1', { tall: '5' }], ['2', { tall: '7', yres: '1081 1440' }]]), 1440) === '1'
+      && activeVariant(rv, 1440) === '2', `font entries in the game's order, the first that fits draws (${[...ov.keys()]})`);
+  }
+  // Split into resolutions: the game's old ranges (768-1023 for 768 and 900, 1200-10000 for 1440 and 4K) found, and the
+  // font rebuilt as one entry per resolution from its look here (proportional 10 at 1440 is 30 px)
+  {
+    // (a line a block, as the files are: blocks are written by whole lines)
+    const src = ['Scheme', '{', '\tFonts', '\t{', '\t\tT', '\t\t{', '\t\t\t"1" { "name" "Arial" "tall" "14" "yres" "768 1023" }', '\t\t\t"2" { "name" "Arial" "tall" "20" "yres" "1024 1199" }',
+      '\t\t\t"3" { "name" "Arial" "tall" "24" "yres" "1200 10000" }', '\t\t\t"4" { "name" "Arial" "tall" "10" "weight" "900" }', '\t\t\t"5" { "name" "Arial" "tall" "9" "range" "0x0400 0x04FF" }',
+      '\t\t}', '\t}', '}', ''].join('\n');
+    const tf = { name: C, path: 'x', text: src, parsed: parse(src), bases: [] }, before = sharedText(sharedHeights(tf, 'T'));
+    const st = splitText(tf, 'T', 1440), sp = { ...tf, text: st, parsed: parse(st) }, sv = fontVariants(sp, 'T');
+    // (at 1440 the game draws with "3", 24 px: 600 gets 10, 1080 18, 4K 36)
+    check(before === '768/900, 1440/4K' && sv.get('600').tall === '10' && sv.get('1080').tall === '18' && sv.get('1080').yres === '901 1080' && sv.get('1440').tall === '24'
+      && sv.get('2160').tall === '36' && sv.get('5').range === '0x0400 0x04FF' && !sv.has('1') && !sharedHeights(sp, 'T').length && activeVariant(sv, 900) === '900',
+      `Split into resolutions (${before} -> ${[...sv].map(([k, p]) => `${k}:${p.tall}`)})`);
+  }
   const g0 = grid;
   grid = 8;
   const gv = [gridded('13'), gridded('c-29'), gridded('r3'), gridded('f0')].join();
@@ -4892,6 +5042,14 @@ if (host && location.hash === '#hosttest') (async () => {
     await undo();
     const undone = await readHud('scripts/HudLayout.res');
     check(!isHidden('HudHealth') && !/"alpha"/.test(undone) && /"xpos"\t\t"20"/.test(undone), 'undo puts the file back as it was');
+    {
+      const g = Symbol(), c0 = F(C).text, l0 = F(L).text;
+      commit(F(C), 'two files 1', () => `${F(C).text}// one action\n`, g);
+      commit(F(L), 'two files 2', () => `${F(L).text}// one action\n`, g);
+      await writing;
+      await undo();
+      check(F(C).text === c0 && F(L).text === l0 && (await readHud(F(C).path)) === c0, 'one action over two files (a split) is one undo step');
+    }
     save(F(C), 'Panel.FgColor', '9 9 9 255');
     const spec = await uiFile('resource/UI/spectator.res');
     const specSel = { res: spec, info: { id: 'specgui', kind: 'window' }, thing: { key: 'specgui' } }, eyeNames = () => showHideRows(specSel).map(r => r.querySelector('.rename').textContent);

@@ -342,8 +342,8 @@ static KeyValues *FindPeer( KeyValues *start, const char *name )
 	return NULL;
 }
 
-// pruneFrom: the depth from which blocks missing from the file are removed too (a border's sides and lines);
-// above it they stay, since fonts and borders can't be deleted from a running game
+// pruneFrom: the depth from which blocks missing from the file are removed too (a font's entries, a border's sides
+// and lines); above it they stay, since fonts and borders can't be deleted from a running game
 static int MergeInto( KeyValues *live, KeyValues *fresh, int pruneFrom = INT_MAX, int depth = 0 )
 {
 	int changed = 0;
@@ -371,7 +371,24 @@ static int MergeInto( KeyValues *live, KeyValues *fresh, int pruneFrom = INT_MAX
 		k->deleteThis();
 		++changed;
 	}
-	return changed;
+	// where the lists now hold the same keys, put them in the file's order too: a font uses the first entry that
+	// fits the screen, and a border's lines go outside in (new keys were added at the end)
+	if ( depth < pruneFrom )
+		return changed;
+	KeyValues *a = live->GetFirstSubKey(), *b = fresh->GetFirstSubKey();
+	for ( ; a && b && !Q_stricmp( a->GetName(), b->GetName() ); a = a->GetNextKey(), b = b->GetNextKey() )
+		;
+	if ( !a && !b )
+		return changed;
+	for ( KeyValues *k = fresh->GetFirstSubKey(); k; k = k->GetNextKey() )
+	{
+		KeyValues *m = live->FindKey( k->GetName() );
+		if ( !m )
+			continue;
+		live->RemoveSubKey( m );
+		live->AddSubKey( m );
+	}
+	return changed + 1;
 }
 
 // Sends "reloadscheme" to the top panel of each module; Panel::InvalidateLayout(false, true)
@@ -554,7 +571,7 @@ static void StepFonts()
 		return;
 	int added = RegisterNewFontFiles();
 	for ( int i = 0; i < NUM_FILES; ++i )
-		g_nFonts += MergeSection( i, "Fonts" );
+		g_nFonts += MergeSection( i, "Fonts", 1 );	// a font can't go, but entries taken out of it do (e.g. after a split)
 	if ( g_nFonts || added )
 	{
 		g_pSchemeMgr->ReloadFonts();
