@@ -835,11 +835,12 @@ async function loadAll() {
   const gm = (await readHud(GM)) ?? GAME_MENU; // written into the HUD on the first change
   files.push({ name: GM, path: GM, text: gm, parsed: parse(gm), bases: [] });
   await Promise.all(SB_PAGES.map(uiFile));
-  for (const path of [CVAR_CFG, VALVE_RC, CS_LOGO]) { // the scoreboard name colours and the logo, when the HUD has them
+  for (const path of [CVAR_CFG, VALVE_RC, CS_LOGO, SB_SELECT]) { // the scoreboard's name colours and highlight, the logo, when the HUD has them
     const text = await readHud(path);
     if (text != null) files.push({ name: path, path, text, parsed: parse(''), bases: [] });
   }
   logoOwn = F(CS_LOGO) && !logoClear(F(CS_LOGO).text) ? F(CS_LOGO).text : null;
+  sbOpened = F(SB_SELECT) ? F(SB_SELECT).text : null;
   squareAll = (await readHud(CORNER_VMT(1)) || '').includes('vgui/white');
   render();
   drawBoxes();
@@ -892,7 +893,8 @@ async function undo() {
       await call('write', f.path, text);
       Object.assign(f, { text, parsed: before });
       if (f.name === CVAR_CFG) applyCvars(text); // a cfg only runs at startup: give the game the values now
-      if (f.name === CS_LOGO) call('cmd', '', 'mat_reloadmaterial cs_logo').catch(() => {});
+      const mat = { [CS_LOGO]: 'cs_logo', [SB_SELECT]: 'scoreboard-select' }[f.name]; // (materials: the game takes them on a reload)
+      if (mat) call('cmd', '', `mat_reloadmaterial ${mat}`).catch(() => {});
       setDirty(true);
       status('Undone.');
     } catch (err) {
@@ -2011,26 +2013,36 @@ const SB_BOX = 'HudEditorBackground';
 
 // Your own row's highlight: the game draws the image vgui/scoreboard/scoreboard-select (an orange frame) behind it. A
 // HUD can have its own material of that name; this one is a flat see-through colour (vgui/white, tinted), reloaded live.
+// Written like any other file (undo, Save HUD, discarding): before the HUD has one, the game's own material is the text
+// an undo puts back. (Its opacity shows about four times stronger in game: 5% measured about 20%.)
 const SB_SELECT = 'materials/vgui/scoreboard/scoreboard-select.vmt';
-let sbSelect = null, sbTimer = null; // the HUD's material text (null: the game's own)
-async function loadSbSelect() { sbSelect = await readHud(SB_SELECT); }
+const SB_SELECT_GAME = 'UnlitGeneric\n{\n\t"$basetexture" "vgui/scoreboard/scoreboard-select"\n\t"$translucent" 1\n}\n';
+let sbTimer = null, sbGroup = null, sbOpened = null; // (sbOpened: the HUD's material when opened, null: none)
+// the row's colour while the highlight isn't a flat colour of the editor's (the game's orange frame, or a HUD's own
+// picture): picked again (its ↺), it puts that back
+const SB_PICTURE = '255 160 0 255';
 function sbSelectColour() {
-  const c = sbSelect && /"\$color"\s+"\[\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)\s*\]"/.exec(sbSelect), a = sbSelect && /"\$alpha"\s+"([\d.]+)"/.exec(sbSelect);
+  const t = (F(SB_SELECT) || {}).text || '';
+  const c = /"\$color"\s+"\[\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)\s*\]"/.exec(t), a = /"\$alpha"\s+"([\d.]+)"/.exec(t);
   return c ? `${[1, 2, 3].map(i => Math.round(c[i] * 255)).join(' ')} ${Math.round((a ? +a[1] : 1) * 255)}` : null;
 }
-function setSbSelect(rgba) {
+function sbSelectText(rgba) {
   const [r, g, b, a] = toRgba(rgba), n = x => (x / 255).toFixed(3);
-  sbSelect = `// Your own row's highlight on the scoreboard, made by the HUD editor\nUnlitGeneric\n{\n\t"$basetexture"\t"vgui/white"\n`
+  return `// Your own row's highlight on the scoreboard, made by the HUD editor\nUnlitGeneric\n{\n\t"$basetexture"\t"vgui/white"\n`
     + `\t"$color"\t"[${n(r)} ${n(g)} ${n(b)}]"\n\t"$alpha"\t"${n(a)}"\n\t"$translucent"\t"1"\n\t"$vertexcolor"\t"1"\n\t"$vertexalpha"\t"1"\n}\n`;
-  const text = sbSelect;
+}
+const sbSelectFor = rgba => rgba === SB_PICTURE && !/"\$color"/.test(sbOpened || '') ? sbOpened ?? SB_SELECT_GAME : sbSelectText(rgba);
+function setSbSelect(rgba) {
+  const text = sbSelectFor(rgba), group = sbGroup ??= burstGroup(); // (a picker drag: one undo step)
+  waiting.add(SB_SELECT); // (the list isn't redrawn from the old text meanwhile)
   clearTimeout(sbTimer);
   sbTimer = setTimeout(() => {
-    writing = writing.then(async () => {
-      try {
-        await call('write', SB_SELECT, text);
-        await call('cmd', '', 'mat_reloadmaterial scoreboard-select');
-        setDirty(true);
-      } catch (err) { status(`Couldn't apply: ${err.message}`); }
+    sbGroup = null;
+    commit(hudFile(SB_SELECT, SB_SELECT_GAME), 'own row', () => text, group);
+    writing.then(() => {
+      waiting.delete(SB_SELECT);
+      if (!waiting.size && renderAfterSave) { renderAfterSave = false; render(); }
+      call('cmd', '', 'mat_reloadmaterial scoreboard-select').catch(() => {});
     });
   }, 250);
 }
@@ -2083,7 +2095,7 @@ function scoreboardSections(sel, shownFonts) {
     const v = resolve(t, layoutProps(f, blocks[0]).fgcolor_override || '') || '255 255 255 255';
     return colorRow(label, '', v, v2 => blocks.forEach(b => save(f, 'fgcolor_override', v2, b)), ['fgcolor_override'], gameColour(C, gameProps(f.name, blocks[0]).fgcolor_override));
   });
-  const rows = [colorRow('Your own row', 'The highlight behind your name (a material in the HUD)', sbSelectColour() || '255 160 0 255', setSbSelect, ['scoreboard-select']),
+  const rows = [colorRow('Your own row', 'The highlight behind your name (a material in the HUD)', sbSelectColour() || SB_PICTURE, setSbSelect, ['scoreboard-select']),
     noteRow('Name colours are game settings: the HUD keeps them in cfg/hudeditor_colours.cfg, which the game runs at startup.'),
     ...SCOREBOARD_CVARS.map(([label, prefix, def]) => {
       const now = cvarColour(prefix, def);
@@ -2116,7 +2128,7 @@ async function select(sel) {
   // would never get the file
   if (sel) sel.res = await uiFile(resPath(sel));
   if (sel && STARTUP_RES.has(sel.thing.key)) await uiFile(UI_RES[sel.thing.key]); // (its Custom tab: the buy menu's own file, whatever page's control is clicked)
-  if (sel && sel.thing.key === 'scores') await Promise.all([loadCvars(), loadSbSelect()]);
+  if (sel && sel.thing.key === 'scores') await loadCvars();
   if (sel && CLASS_PAGES[sel.thing.key]) await Promise.all(CLASS_PAGES[sel.thing.key].map(async n => { // (Class picture)
     await uiFile(classPage(n));
     if (!classGame[n] && host) try { const t = await call('vanilla', `${n}.res`); classGame[n] = { text: t, parsed: parse(t), bases: [] }; } catch {}
@@ -4872,7 +4884,7 @@ async function openHud(path) {
     chatResOk = false;
     setDirty(false);
     await loadAll();
-    call('cmd', '', 'mat_reloadmaterial background01; mat_reloadmaterial cs_logo').catch(() => {}); // this HUD's menu background and logo (or the game's), not the last one's
+    call('cmd', '', 'mat_reloadmaterial background01; mat_reloadmaterial cs_logo; mat_reloadmaterial scoreboard-select').catch(() => {}); // this HUD's menu background, logo and highlight (or the game's), not the last one's
     // the game's name colours to this HUD's (or back to config.cfg's after discarding a HUD's new cfg)
     if (F(CVAR_CFG) || cvarStart) { cvarValues = null; await loadCvars(); applyCvars(F(CVAR_CFG) && F(CVAR_CFG).text); }
     status(live ? `Editing ${hudName}. Click anything in the preview to edit it.` : `Editing ${hudName}.`);
@@ -5260,6 +5272,19 @@ async function parserCheck() {
   tu?.onclick();
   delete opened['selfcheck|tick'];
   check(tr.querySelector('.arrows.quiet') && tu && ticked === false, 'a tick box has no ↺ to see, and ↺ Reset part can still untick it');
+  // your own row's highlight: its colour read back from the material it writes
+  {
+    const keep = files;
+    files = [{ name: SB_SELECT, path: SB_SELECT, text: sbSelectText('10 20 30 64'), parsed: parse(''), bases: [] }];
+    try { check(sbSelectColour() === '10 20 30 64', `your own row's highlight reads back its colour (${sbSelectColour()})`); } finally { files = keep; }
+    // (its ↺ on a HUD that started with the game's picture, or one of its own: that again, not a flat orange)
+    const keepO = sbOpened;
+    try {
+      sbOpened = null; const none = sbSelectFor(SB_PICTURE);
+      sbOpened = 'own picture'; const own = sbSelectFor(SB_PICTURE);
+      check(none === SB_SELECT_GAME && own === 'own picture' && /"\$alpha"/.test(sbSelectFor('255 160 0 128')), 'your own row\'s ↺ puts back the picture it started with');
+    } finally { sbOpened = keepO; }
+  }
   // the CS logo's eye: hidden is a see-through material of its name; shown again, the HUD's own one if it had one
   {
     const keep = [files, commit, logoOwn], wrote = [];
