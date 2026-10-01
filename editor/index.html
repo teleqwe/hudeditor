@@ -1010,12 +1010,16 @@ function keepChatOpen() {
 // Writes a file's new text (made by edit() from its current text) as one undo step, once earlier writes are done.
 // group: the action it's part of (one Ctrl+Z for all of it); force: written even when it doesn't change (a copy put in).
 const groupInRun = new Map(); // an action that continues the last one's run: the run's group (see below)
+let resetGroup = null; // (while a ↺ Reset writes: everything it writes, whatever group each ↺ has, is its one step)
 function commit(f, id, edit, group = null, force = false) {
+  const reset = resetGroup;
+  group = reset || group;
   keepChatOpen();
   writing = writing.then(async () => {
     try {
       const next = edit();
       if (next === f.text && !force) return; // (nothing changes: no write, no empty undo step)
+      f.opened ??= f.text; // (as the HUD was opened: ↺ Reset window)
       if (f.defaultText) {
         await call('write', f.path.replace(/[^/]+$/, STUBS[f.name][0]), f.defaultText);
         f.defaultText = null;
@@ -1025,8 +1029,8 @@ function commit(f, id, edit, group = null, force = false) {
       let g = (group && groupInRun.get(group)) || group;
       // a setting changed again within 1.5 s continues the step it started (the last group's steps): the rest of this
       // action then joins that group too, earlier steps of it included, so one Ctrl+Z undoes the run
-      let sameRun = false;
-      if (last && now - last.at <= 1500) for (let i = undoSteps.length - 1; i >= 0 && (undoSteps[i] === last || (last.group && undoSteps[i].group === last.group)); i--) if (undoSteps[i].ids.has(id)) { sameRun = true; break; }
+      let sameRun = false; // (a reset is a step of its own, even straight after a change)
+      if (!reset && last && now - last.at <= 1500) for (let i = undoSteps.length - 1; i >= 0 && (undoSteps[i] === last || (last.group && undoSteps[i].group === last.group)); i--) if (undoSteps[i].ids.has(id)) { sameRun = true; break; }
       if (sameRun && group && last.group && g !== last.group) {
         groupInRun.set(group, last.group);
         for (const s of undoSteps) if (s.group === g) s.group = last.group;
@@ -1117,6 +1121,10 @@ const UI_RES = { scores: 'resource/UI/scoreboard.res', specgui: 'resource/UI/spe
 // The buy menu's main page (BuySubMenu_CT / _TER) has a file of its own, where its controls' own settings go; its
 // other pages all make a panel named BuySubMenu, so they aren't told apart here yet.
 const BUY_PAGES = { buysubmenu_ct: 'resource/UI/BuyMenu_CT.res', buysubmenu_ter: 'resource/UI/BuyMenu_TER.res' };
+// A window's files that are open in the editor (↺ Reset window): its .res (the buy menu's is both sides'), the loading
+// screen's VAC one, the buy menu's main page, the class pages.
+const windowFiles = sel => [UI_RES[sel.info.id], sel.info.id === 'loadingdialog' && LOADING_VAC, BUY_PAGES[`buysubmenu_${sel.info.id.replace(/^buy_/, '')}`],
+  ...(CLASS_PAGES[sel.info.id] || []).map(classPage)].filter(Boolean).map(p => F(p)).filter(Boolean);
 function resPath(sel) {
   for (let p = sel.node || sel.control; p; p = p.parent) if (BUY_PAGES[p.key]) return BUY_PAGES[p.key];
   return UI_RES[sel.thing.key];
@@ -1686,14 +1694,20 @@ const PICTURES = 'materials/vgui/replay/thumbnails';
 // Files the editor made that may be used by nothing now (a removed or changed picture, an old menu background): they
 // go (to the Recycle Bin) when the HUD is saved, unless something uses them again by then (an undo). path -> used()
 const dropped = new Map();
+// used(): does any of the HUD's files name it (the windows' files the editor hasn't opened this time too)
+const namedAnywhere = name => async () => [...files.map(f => f.text), ...await Promise.all([...new Set([...Object.values(UI_RES), LOADING_VAC, ...Object.values(BUY_PAGES)])].filter(p => !F(p)).map(readHud))]
+  .some(t => (t || '').toLowerCase().includes(name.toLowerCase()));
 function dropPicture(image) {
   if (!/^replay\/thumbnails\//i.test(image || '')) return; // the editor's own pictures only
-  // (the windows' files the editor hasn't opened this time too)
-  const used = async () => [...files.map(f => f.text), ...await Promise.all([...new Set([...Object.values(UI_RES), LOADING_VAC, ...Object.values(BUY_PAGES)])].filter(p => !F(p)).map(readHud))]
-    .some(t => (t || '').toLowerCase().includes(image.toLowerCase()));
-  for (const ext of ['vtf', 'vmt']) dropped.set(`materials/vgui/${image}.${ext}`, used);
+  for (const ext of ['vtf', 'vmt']) dropped.set(`materials/vgui/${image}.${ext}`, namedAnywhere(image));
 }
+const SQUARE_CORNERS = [1, 2, 3, 4].flatMap(i => ['vmt', 'vtf'].map(ext => `materials/vgui/hudeditor/square_corner${i}.${ext}`));
 async function dropUnused() {
+  // the square corner images (setCorners) once no box is square, however the last one went: back to rounded, undone,
+  // removed, in an earlier session (a file that isn't there is left alone)
+  let sq = null;
+  const squareUsed = namedAnywhere('hudeditor/square_corner');
+  for (const p of SQUARE_CORNERS) if (!dropped.has(p)) dropped.set(p, () => sq ??= squareUsed());
   for (const [path, used] of dropped) if (!(await used())) await call('remove', path).catch(err => status(`Couldn't remove ${path}: ${err.message}`));
   dropped.clear();
 }
@@ -2756,7 +2770,7 @@ async function setCorners(lay, id, square, drawn) {
   try {
     const base = square ? await call('corners', 'square') : ROUND_CORNERS;
     // written even to put the defaults back: values HudLayout no longer sets stay in a running game
-    for (let i = 1; i <= 4; i++) save(lay, `Texture${i}`, base + i, id);
+    for (let i = 1; i <= 4; i++) save(lay, `Texture${i}`, base + i, id); // (its images go on Save once none is square: dropUnused)
     if (!drawn) { save(lay, 'PaintBackgroundType', square ? '0' : '2', id); if (!square) save(lay, 'RoundedCorners', '15', id); }
     // a panel with a "border" takes its box shape from the border, and a running game keeps a border once set
     if (!drawn && layoutProps(lay, id).border !== undefined) {
@@ -3928,6 +3942,9 @@ async function addStartupBackground(name, tex) {
 
 // Everything editable for a selection, as [title, rows, kind]: colours, fonts, borders, layout (places and sizes), then
 // the rest (what's shown, the menu's buttons...). Titles say the kind first, then what it's for.
+// (rows tagged own: the clicked part's own settings, what ↺ Reset part puts back on a window's part; the rest there is
+// shared with the window or other parts)
+const mine = rows => { for (const r of rows) r.dataset.own = '1'; return rows; };
 function selectionSections(sel) {
   const groups = { show: [], colour: [], font: [], border: [], layout: [], custom: [], missing: [], other: [] }, add = (kind, title, rows) => groups[kind].push([title, rows]);
   const { info, control } = sel, fonts = fontsOf(sel), own = sel.res && ownBlock(sel);
@@ -3945,9 +3962,9 @@ function selectionSections(sel) {
     add('colour', `${name}: this ${own.what} only`, [
       noteRow(`Only ${name}${name !== own.block ? ` (${own.block})` : ''} in ${sel.res.name.split('/').pop()} changes here. Further down: the colours ${own.what === 'part' ? 'it shares with others like it' : `every ${own.what} shares`}.`),
       ...(STARTUP_RES.has(info.id) ? [noteRow('The buy menu reads its own settings when the game makes it: these show after a game restart. The shared colours and fonts below change straight away.')] : []),
-      ...resRows(sel.res, own.block, own.defaults, schemeOf(sel.thing), own.ctl)]);
+      ...mine(resRows(sel.res, own.block, own.defaults, schemeOf(sel.thing), own.ctl))]);
   }
-  if (own && /^hudeditor_(pic|text|box)/i.test(own.block)) add('colour', `What this ${own.block.replace(/^hudeditor_|\d+$/gi, '').replace('pic', 'picture')} shows`, customRows(own.block, sel.res));
+  if (own && /^hudeditor_(pic|text|box)/i.test(own.block)) add('colour', `What this ${own.block.replace(/^hudeditor_|\d+$/gi, '').replace('pic', 'picture')} shows`, mine(customRows(own.block, sel.res)));
   if (control) {
     const [ctl, what, keys] = controlIn(control, sel.thing);
     const file = schemeOf(control), where = file === C ? 'in-game windows' : file === CH ? 'the chat' : 'menus';
@@ -4261,12 +4278,34 @@ function renderList() {
     else stack.append(el('p', { className: 'meta', textContent: 'Nothing to edit here yet.' }));
     layout.append(nav, stack);
     list.append(layout);
-    // at the bottom: every ↺ of this selection at once (the ones lit when clicked, in every category), and Done
-    const reset = el('button', { textContent: `↺ Reset ${selected.info.kind === 'hud' && !selected.control ? 'part' : 'all'}`,
-      title: 'Put every setting here back to how it was when the HUD was opened', onclick: () => {
-        const undos = sections.flatMap(s => s[1]).flatMap(r => [...r.querySelectorAll('.undo:not(.off)')]);
-        if (!undos.length) return status('Nothing here has changed since the HUD was opened.');
+    // at the bottom: ↺ for this selection at once (the ones lit when clicked, in every category), and Done. A part of a
+    // window: its own settings only. A window: every setting it shows, then its files as they were opened (every part
+    // in it, added and hidden ones too).
+    const rows = sections.flatMap(s => s[1]), part = (selected.control || selected.node) && rows.some(r => r.dataset.own);
+    const win = !part && selected.info.kind === 'window' && !selected.control && !selected.node && !['menubg', 'gamelogo'].includes(selected.info.id);
+    const reset = el('button', { textContent: `↺ Reset ${part || selected.info.kind === 'hud' && !selected.control ? 'part' : win ? 'window' : 'all'}`,
+      title: part ? 'Put this part\'s own settings back to how they were when the HUD was opened (the colours it shares with others stay)'
+        : win ? `Put this window back to how it was when the HUD was opened: every setting here${UI_RES[selected.info.id] ? ' and every part in it' : ''}`
+        : 'Put every setting here back to how it was when the HUD was opened', onclick: () => {
+        const undos = rows.filter(r => !part || r.dataset.own).flatMap(r => [...r.querySelectorAll('.undo:not(.off)')]);
+        const back = win ? windowFiles(selected).filter(f => f.opened != null && f.text !== f.opened) : [];
+        if (!undos.length && !back.length) return status('Nothing here has changed since the HUD was opened.');
+        // one Ctrl+Z for all of it: every write until it's done (some ↺ write later, or in a group of their own)
+        const group = resetGroup = burstGroup();
+        setTimeout(() => writing.then(() => { if (resetGroup === group) resetGroup = null; }), 1500);
         for (const u of undos) u.onclick();
+        // (after the settings above are written, so the files end as they were opened)
+        if (back.length) {
+          waiting.add('window reset');
+          setTimeout(() => {
+            waiting.delete('window reset');
+            for (const f of back) {
+              for (const pic of f.text.match(/replay\/thumbnails\/[^"\s]+/gi) || []) dropPicture(pic); // (on Save, if nothing names it)
+              commit(f, `${f.name}/reset`, () => f.opened, group);
+            }
+            if (!waiting.size && renderAfterSave) writing.then(() => { renderAfterSave = false; render(); });
+          }, 300);
+        }
         refreshSoon();
       } });
     const done = el('button', { className: 'primary', textContent: 'Done', title: 'Save the changes into the HUD and go back to the list' });
@@ -5409,6 +5448,44 @@ if (host && location.hash === '#hosttest') (async () => {
       await sleep(400); await writing;
       await undo();
       check(F(C).text === c0 && F(L).text === l0 && (await readHud(F(L).path)) === l0, 'saves in one go, then again at once, are one undo step');
+    }
+    {
+      // a loading screen setting writes both its files (one undo step); ↺ Reset window has their text from before
+      const ld = await uiFile(UI_RES.loadingdialog), vac = await uiFile(LOADING_VAC), l0 = ld.text, v0 = vac.text;
+      const wide = loadingRows(ld).map(r => r.querySelector('input[aria-label="Box width"]')).find(Boolean);
+      wide.value = String(+wide.value + 4); wide.oninput();
+      await sleep(400); await writing;
+      const both = ld.text !== l0 && vac.text !== v0;
+      await undo();
+      check(both && ld.text === l0 && vac.text === v0 && ld.opened === l0 && windowFiles({ info: { id: 'loadingdialog' } }).length === 2,
+        'a loading screen setting writes both its files, one Ctrl+Z puts both back, and Reset window knows them as opened');
+      delete opened['|Box width'];
+    }
+    {
+      // square corner images: named while a box is square, let go (to go on Save) once none is
+      const used = namedAnywhere('hudeditor/square_corner');
+      await setCorners(F(L), 'HudHealth', true); await sleep(400); await writing;
+      const made = await call('exists', SQUARE_CORNERS[1]), usedSquare = await used();
+      await setCorners(F(L), 'HudHealth', false); await sleep(400); await writing;
+      check(made === '1' && usedSquare && !(await used()), 'square corner images are kept while a box is square, and go on Save once none is');
+    }
+    {
+      // ↺ Reset window: the loading screen's files as they were opened; one Ctrl+Z brings the changes back, a write
+      // in a group of its own while it runs (as some ↺ make) too
+      await select(LOADING_SEL()); await sleep(300);
+      const ld = F(UI_RES.loadingdialog), vac = F(LOADING_VAC), l0 = ld.opened ?? ld.text, v0 = vac.opened ?? vac.text;
+      for (const f of [ld, vac]) save(f, 'wide', '444', 'LoadingDialog');
+      save(ld, 'xpos', '7', 'InfoLabel');
+      await sleep(400); await writing; render(); await sleep(300);
+      const changed = [ld.text, vac.text], rb = [...$('footbtns').children].find(b => b.textContent === '↺ Reset window');
+      rb?.click();
+      commit(vac, 'selftest own group', () => `${vac.text}// own group\n`, Symbol());
+      await sleep(1900); await writing;
+      const back = ld.text === l0 && vac.text === v0;
+      await undo();
+      check(rb && back && ld.text === changed[0] && vac.text === changed[1], 'Reset window puts the window\'s files back as they were opened, and one Ctrl+Z brings the changes back');
+      for (let i = 0; i < 3 && ld.text !== l0; i++) await undo();
+      await select(null);
     }
     {
       // a file bigger than one message goes in pieces (a 1080p animated background is about 620 MB)
