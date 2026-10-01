@@ -3056,13 +3056,16 @@ const FONT_EXTRA = [['italic', 'Italic', 'flag', '1'], ['underline', 'Underline'
 
 // Fonts as they are at this screen height, copied to every other height's entry (the footer's All resolutions): the
 // same face, weight and effects, the size scaled by height. An entry for a range of heights is sized for its lowest
-// (768-1023 gets tall × 768 / 1440; one starting under 480, for 480). list: [file, font] pairs; one undo step a file.
+// (one starting under 480, for 480). From the game's proportional entry (no yres, tall in 480-line units) 768-1023
+// gets tall × 768 / 480; from an entry in pixels, tall × 768 / this height. list: [file, font] pairs; one undo step a
+// file that changes.
 function fontsToAllHeights(list) {
   const H = live ? live.H : 1080, fonts = new Set(), heights = new Set();
   const flagKeys = [...FONT_FLAGS.map(([k]) => k), ...FONT_EXTRA.filter(x => (x[2] || 'flag') === 'flag').map(([k]) => k)];
+  let changed = 0;
   for (const file of new Set(list.map(([f]) => f))) {
     const f = F(file);
-    commit(f, `${file}/fonts to every height`, () => {
+    const edit = () => {
       let cur = f;
       const put = (font, v, k, val) => { const text = setAt(cur, ['Fonts', font, v], k, val); cur = { ...cur, text, parsed: parse(text) }; };
       for (const [, font] of list.filter(([x]) => x === file)) {
@@ -3085,9 +3088,14 @@ function fontsToAllHeights(list) {
         }
       }
       return cur.text;
-    });
+    };
+    // (nothing to change in this file: no write, no undo step; one would take the place of the edit before it)
+    if (edit() === f.text) continue;
+    changed++;
+    commit(f, `${file}/fonts to every height`, edit);
   }
-  writing.then(() => { render(); status(fonts.size ? `${[...fonts].join(', ')}: copied to the entries for ${[...heights].sort((a, b) => a - b).join(', ')} lines high, sizes scaled from ${H}. Ctrl+Z undoes it.` : 'Nothing to copy: no other screen heights.'); });
+  if (!changed) return status(fonts.size ? 'The other screen heights already match this one.' : 'Nothing to copy: no other screen heights.');
+  writing.then(() => { render(); status(`${[...fonts].join(', ')}: copied to the entries for ${[...heights].sort((a, b) => a - b).join(', ')} lines high, sizes scaled from ${H}. Ctrl+Z undoes it.`); });
   refreshSoon();
 }
 // A font's settings for the current screen height. Edits go to that entry only (fonts have one per resolution).
@@ -4169,10 +4177,12 @@ function resOptions() {
   const s = $('res'), now = live ? `${live.W}x${live.H}` : '';
   if (live && !homeRes && live.W >= 640 && live.H >= 480) homeRes = now; // (not the tiny window of a game still starting)
   const opt = (w, h) => el('option', { value: `${w}x${h}`, textContent: `Game: ${w}×${h}${`${w}x${h}` === homeRes ? ' (yours)' : ''}` });
-  const known = RESOLUTIONS.flatMap(([, l]) => l.map(([w, h]) => `${w}x${h}`)), extra = [...new Set([homeRes, now].filter(r => r && !known.includes(r)))];
+  // (a window bigger than your own size wouldn't fit the screen: those aren't offered)
+  const [mw, mh] = (homeRes || '99999x99999').split('x').map(Number), fits = ([w, h]) => w <= mw && h <= mh;
+  const known = RESOLUTIONS.flatMap(([, l]) => l.filter(fits).map(([w, h]) => `${w}x${h}`)), extra = [...new Set([homeRes, now].filter(r => r && !known.includes(r)))];
   s.replaceChildren();
   if (extra.length) { const g = el('optgroup', { label: 'Yours' }); g.append(...extra.map(r => opt(...r.split('x')))); s.append(g); }
-  for (const [label, list] of RESOLUTIONS) { const g = el('optgroup', { label }); g.append(...list.map(([w, h]) => opt(w, h))); s.append(g); }
+  for (const [label, list] of RESOLUTIONS) { if (!list.some(fits)) continue; const g = el('optgroup', { label }); g.append(...list.filter(fits).map(([w, h]) => opt(w, h))); s.append(g); }
   s.value = now;
   s.disabled = !live;
 }
@@ -4815,6 +4825,22 @@ async function parserCheck() {
   pd?.click();
   closePicker(); cr.remove(); delete opened['selfcheck|X|'];
   check(pd && got === '9 9 9 128' && !cr.querySelector('.dflt'), `a colour's Default is in its pop-out and puts the game's colour in (${got})`);
+  // All resolutions: from the game's proportional entry (480-line units) to each height range, in pixels for its lowest
+  // height; run again with nothing left to change, no write and no undo step (one took the place of a real edit)
+  {
+    const src = 'Scheme { Fonts { T { "1" { "tall" "8" "yres" "480 767" } "2" { "tall" "20" "yres" "768 1023" } "3" { "tall" "10" "weight" "700" } } } }';
+    const tf = { name: C, path: 'x', text: src, parsed: parse(src), bases: [] }, keep = [files, live, commit, render];
+    let commits = 0;
+    files = [tf]; live = { W: 2560, H: 1440, panels: [] }; render = () => {};
+    commit = (t, id, edit) => { commits++; const text = edit(); Object.assign(t, { text, parsed: parse(text) }); };
+    try {
+      fontsToAllHeights([[C, 'T']]);
+      const once = commits, tv = fontVariants(tf, 'T');
+      fontsToAllHeights([[C, 'T']]);
+      check(tv.get('1').tall === '10' && tv.get('2').tall === '16' && tv.get('2').weight === '700' && tv.get('3').tall === '10' && once === 1 && commits === 1,
+        `All resolutions: sizes scaled from the proportional entry, and nothing to do makes no undo step (${[...tv].map(([k, p]) => `${k}:${p.tall}`)}, ${commits} writes)`);
+    } finally { [files, live, commit, render] = keep; }
+  }
   const g0 = grid;
   grid = 8;
   const gv = [gridded('13'), gridded('c-29'), gridded('r3'), gridded('f0')].join();
