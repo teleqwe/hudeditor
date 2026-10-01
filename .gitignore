@@ -10,5 +10,5 @@ app/build/
 # Working notes
 PLAN.md
 
-# local test helpers (paths are this PC's)
-dev/
+# Each HUD build's own folder under dev/ (art, screenshots, one-off scripts); the shared test scripts in dev/ are kept
+dev/*/
