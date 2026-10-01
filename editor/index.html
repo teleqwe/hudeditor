@@ -224,6 +224,9 @@
   .opts > .row.toggle > input { order: -1; }
   .opts > .row.toggle > .meta, .opts .undo.off { display: none; }
   .opts .arrows { width: auto; }
+  /* tick boxes keep their ↺ out of sight (for ↺ Reset part); its room stays so rows line up, except between ticks */
+  .arrows.quiet .undo { visibility: hidden; pointer-events: none; }
+  .opts .arrows.quiet { display: none; }
   /* a font's extra options: + opens what it can also have */
   .row.addkey { display: grid; grid-template-columns: minmax(0, 1fr) auto; row-gap: 10px; align-items: center; }
   .addhead { font-size: 12px; font-weight: 500; color: var(--muted); }
@@ -1385,7 +1388,7 @@ async function runCheckup() {
       if (own) add(`${which} is the HUD's font file ${own.path}, but no scheme lists it in CustomFontFiles, so the game never loads it: players who don't have "${own.family}" installed see Tahoma.`,
         ['List it in CustomFontFiles', () => { listFontFile(f, own.path); checkup = null; refreshSoon(); }]);
       else if (alias) add(`${which} isn't a name Windows knows, so the game shows Tahoma: the HUD's font file ${alias.path} is called "${alias.family}".`,
-        [`Use "${alias.family}"`, () => { renameFace(file, face, alias.family); if (!isListed(alias)) listFontFile(f, alias.path); }]);
+        [`Use "${alias.family}"`, () => { const group = Symbol(); renameFace(file, face, alias.family, group); if (!isListed(alias)) listFontFile(f, alias.path, group); }]);
       else if (installed.has(k) || installed.has(family(k))) {
         if (!WINDOWS_FONTS.has(k) && !WINDOWS_FONTS.has(family(k)))
           add(`${which} is installed on this PC but isn't in the HUD, so players who don't have it see Tahoma. Add its font file to bring it with the HUD.`, ['Add its font file...', () => addFontFile([file])]);
@@ -1486,14 +1489,14 @@ async function runCheckup() {
   render();
 }
 // Every font entry in `file` with the face `from` gets the face `to` instead.
-function renameFace(file, from, to) {
+function renameFace(file, from, to, group = null) {
   const f = F(file);
   commit(f, `${file}/face ${from}`, () => {
     let cur = f;
     for (const font of fontNames(file)) for (const [v, p] of fontVariants(cur, font))
       if ((p.name || '').trim().toLowerCase() === from.toLowerCase()) { const text = setAt(cur, ['Fonts', font, v], 'name', to); cur = { ...cur, text, parsed: parse(text) }; }
     return cur.text;
-  });
+  }, group);
   checkup = null;
   refreshSoon();
 }
@@ -2219,8 +2222,9 @@ const UNDO_SVG = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.2 5.5A
 // place when hidden, so rows line up. Returns the pair; its update(v) is called with every new value.
 // ↺ goes back to how it was when the HUD was opened. (The game's own value: a colour's pop-out has Default; the main
 // menu's list has The game's buttons. Other rows still get the game's value passed in, unused since 2026-10-01.)
-function undoArrow(id, now, show, put) {
-  const first = opened[id] ??= now, w = el('span', { className: 'arrows' });
+// quiet: a tick box's, never shown (ticking it again is its undo) but still put back by ↺ Reset part.
+function undoArrow(id, now, show, put, quiet = false) {
+  const first = opened[id] ??= now, w = el('span', { className: quiet ? 'arrows quiet' : 'arrows' });
   const b = el('button', { className: 'undo', type: 'button', innerHTML: UNDO_SVG });
   w.update = v => { b.classList.toggle('off', v === first); b.title = `${show(first)} → ${show(v)}\nClick to go back to ${show(first)}`; };
   // (inside a tick box's label: a click here isn't the tick's)
@@ -2384,7 +2388,7 @@ function checkRow(label, checked, onChange, id = null, dflt = null) {
   row.innerHTML = `<div></div><input type="checkbox"${checked ? ' checked' : ''}>`;
   row.firstElementChild.textContent = label;
   const box = row.lastElementChild, word = on => on ? 'on' : 'off';
-  const undo = undoArrow(id || `${rowScope}|${label}`, word(checked), v => v, v => { box.checked = v === 'on'; onChange(box.checked); });
+  const undo = undoArrow(id || `${rowScope}|${label}`, word(checked), v => v, v => { box.checked = v === 'on'; onChange(box.checked); }, true);
   box.onchange = e => { undo.update(word(e.target.checked)); onChange(e.target.checked); };
   row.append(undo);
   row.dataset.q = label.toLowerCase();
@@ -2784,7 +2788,7 @@ function borderRows(file, name) {
     return borderBody(cur, own ? now : { props: now ? now.props : {}, base: readBorder(f, name).base, sides: now ? now.sides : null });
   }, ['Borders']);
   const sides = el('div', { className: 'row sides' }), opts = el('div', { className: 'opts' }), on = () => sidesOf(cur);
-  const boxes = {}, undo = undoArrow(`${file}/${name}/sides`, on(), v => v, v => { for (const s of SIDES) boxes[s].checked = cur.on[s] = v.split(', ').includes(s); write(); });
+  const boxes = {}, undo = undoArrow(`${file}/${name}/sides`, on(), v => v, v => { for (const s of SIDES) boxes[s].checked = cur.on[s] = v.split(', ').includes(s); write(); }, true);
   opts.append(...['Top', 'Right', 'Bottom', 'Left'].map(s => {
     const l = el('label'), box = boxes[s] = el('input', { type: 'checkbox', checked: cur.on[s], onchange: () => { cur.on[s] = box.checked; undo.update(on()); write(); } });
     l.append(box, s);
@@ -3140,7 +3144,7 @@ function inputRow(label, value, onChange, attrs = {}) {
 // On/off: a tick box at the right (the whole row clicks it). row.set(on) shows a new value.
 function toggleRow(label, on, onChange, note = '', id = null, dflt = null) {
   const row = el('label', { className: 'row toggle' }), box = el('input', { type: 'checkbox' }), word = v => v ? 'on' : 'off';
-  const undo = undoArrow(id || `${rowScope}|${label}`, word(on), v => v, v => { row.set(v === 'on'); onChange(on); });
+  const undo = undoArrow(id || `${rowScope}|${label}`, word(on), v => v, v => { row.set(v === 'on'); onChange(on); }, true);
   row.set = v => { on = v; box.checked = v; undo.update(word(on)); };
   box.onchange = () => { row.set(box.checked); onChange(on); };
   const name = el('div'), meta = el('div', { className: 'meta' });
@@ -3362,11 +3366,14 @@ function fontRows(file, font) {
 let fontSchemes = [], fontAdded = null; // (fontAdded: told the new font's family, by All fonts' + Add font)
 // A scheme's CustomFontFiles: its entries ("1" "resource/x.ttf", or a block named 1 with "font" in it) and their paths.
 const fontFileEntries = f => [...f.bases, f.parsed].flatMap(p => p.entries).filter(e => sectionOf(e) === 'customfontfiles' && (e.path.length === 2 || e.key.toLowerCase() === 'font'));
-// Lists a font file there under the next free number (not listed twice).
-function listFontFile(f, rel) {
+// Lists a font file there under the next free number (not listed twice). group: one undo step with the other schemes'.
+function listFontFile(f, rel, group = null) {
   if (fontFileEntries(f).some(e => e.value.replace(/\\/g, '/').toLowerCase() === rel.toLowerCase())) return;
-  const nums = fontFileEntries(f).map(e => parseInt(e.path.length === 2 ? e.key : e.path[2], 10)).filter(n => n > 0);
-  save(f, String(Math.max(0, ...nums) + 1), rel, ['CustomFontFiles']);
+  // (the next free number counted when it's written, from the file as it is then)
+  commit(f, `${f.name}/CustomFontFiles/${rel}`, () => {
+    const nums = fontFileEntries(f).map(e => parseInt(e.path.length === 2 ? e.key : e.path[2], 10)).filter(n => n > 0);
+    return setAt(f, ['CustomFontFiles'], String(Math.max(0, ...nums) + 1), rel);
+  }, group);
 }
 function addFontFile(schemes, then = null) {
   fontSchemes = schemes;
@@ -3382,7 +3389,9 @@ $('fontfile').onchange = async () => {
     // (one already in the HUD under that name is listed as it is: the game keeps a font file it has loaded locked)
     if (await call('exists', rel) !== '1') await call('writebin', rel, await base64(new Uint8Array(data)));
     const family = (await call('fontfamily', rel)) || file.name.replace(/\.\w+$/, '');
-    for (const f of fontSchemes.map(F).filter(Boolean)) listFontFile(f, rel);
+    const group = Symbol(); // (one Ctrl+Z takes it out of every scheme)
+    for (const f of fontSchemes.map(F).filter(Boolean)) listFontFile(f, rel, group);
+    await writing;
     if (!fontFaces.includes(family)) fontFaces.unshift(family);
     try { const face = new FontFace(family, data); await face.load(); document.fonts.add(face); } catch {} // (the list shows it in itself)
     setDirty(true);
@@ -5115,6 +5124,14 @@ async function parserCheck() {
   ua.onclick();
   delete opened['selfcheck|x'];
   check(offAtFirst && tip.startsWith('400 → 600') && put === '400' && ua.classList.contains('off'), `↺ shows once changed, says then → now, and puts the first value back (${tip})`);
+  // a tick box's ↺ stays out of sight, but is still there for ↺ Reset part to click
+  let ticked = null;
+  const tr = toggleRow('selfcheck tick', false, v => { ticked = v; }, '', 'selfcheck|tick');
+  tr.set(true);
+  const tu = tr.querySelector('.undo:not(.off)');
+  tu?.onclick();
+  delete opened['selfcheck|tick'];
+  check(tr.querySelector('.arrows.quiet') && tu && ticked === false, 'a tick box has no ↺ to see, and ↺ Reset part can still untick it');
   // the game's colour: Default in the colour's pop-out
   let got = null;
   const cr = colorRow('X', '', '1 2 3 255', v => { got = v; }, [], '9 9 9 128', 'selfcheck');
