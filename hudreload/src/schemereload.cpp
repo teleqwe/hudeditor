@@ -1009,6 +1009,45 @@ static bool IsCodeMade( const char *name )
 	return false;
 }
 
+// The game places team select, class select and the MOTD itself when it makes them, in the middle of the screen,
+// whatever their .res says (checked without this plugin, 2026-10-02: team select at 0,52, the MOTD at 0,0 and at
+// c-320,200 all came out centred, their top at the top of the screen). The re-apply below gives them their file's place
+// again, and so does the MOTD itself whenever its scheme is applied (it reads its .res again, place included: the
+// refresh after a reload), so they're put back in the middle after a reload and on every tick (see TimerTick).
+static void CentreWindows()
+{
+	if ( g_pEngineClient && g_pEngineClient->IsDrawingLoadingImage() )
+		return; // (left alone while a map loads, as reloads are, see Tick)
+	// (among the game viewport's own panels: not a GameUI panel that happens to have one of these names)
+	VPANEL vp = FindNamed( TopPanel(), "CBaseViewport", 0 );
+	int pw = 0, ph = 0;
+	if ( vp )
+		g_pVPanel->GetSize( vp, pw, ph );
+	if ( pw <= 0 || ph <= 0 ) // (not there or not laid out yet)
+		return;
+	for ( int i = 0; i < g_pVPanel->GetChildCount( vp ); ++i )
+	{
+		VPANEL win = g_pVPanel->GetChild( vp, i );
+		const char *n = win ? g_pVPanel->GetName( win ) : NULL;
+		if ( !n || ( Q_stricmp( n, "team" ) && Q_stricmp( n, "class_ct" ) && Q_stricmp( n, "class_ter" ) && Q_stricmp( n, "info" ) ) )
+			continue;
+		int x, y, w, h;
+		g_pVPanel->GetPos( win, x, y );
+		g_pVPanel->GetSize( win, w, h );
+		if ( x != ( pw - w ) / 2 || y != ( ph - h ) / 2 )
+			g_pVPanel->SetPos( win, ( pw - w ) / 2, ( ph - h ) / 2 );
+	}
+}
+static bool g_bCentreBroken;
+static void Centre()
+{
+	if ( !g_bCentreBroken && !SR_SafeCall( CentreWindows ) )
+	{
+		g_bCentreBroken = true;
+		Warning( "[schemereload] crashed while centring team/class select and the MOTD - switched off until restart\n" );
+	}
+}
+
 static void ReapplyLayouts()
 {
 	// (the round-end and killer panels are HUD parts that read their .res once too; the killer panel's parts are blocks
@@ -1067,16 +1106,6 @@ static void ReapplyLayouts()
 				g_ApplyBroken.CopyAndAddToTail( id );
 				Warning( "[schemereload] applying %s's settings crashed; it's left alone until a restart\n", id );
 			}
-			// the game places these windows itself when it makes them, in the middle of the screen, whatever their .res
-			// says (checked without this plugin, 2026-10-02: team select at 0,52, the MOTD at 0,0 and at c-320,200 all
-			// came out centred, their top at the top of the screen): the place the file gave back is undone the same way
-			else if ( i < 4 && p == win )
-			{
-				int w, h, pw, ph;
-				g_pVPanel->GetSize( win, w, h );
-				g_pVPanel->GetSize( g_pVPanel->GetParent( win ), pw, ph );
-				g_pVPanel->SetPos( win, ( pw - w ) / 2, ( ph - h ) / 2 );
-			}
 		}
 		if ( res )
 			res->deleteThis();
@@ -1105,6 +1134,7 @@ static void StepPanels()
 	RestoreVisibility( TopPanel(), was, 0 );
 	g_flReshowUntil = Plat_FloatTime() + 0.7;
 	HideRowTemplates();
+	Centre();
 }
 
 // Some panels hide themselves a frame after a reload (the scoreboard does whenever its scheme is applied), after the
@@ -1525,6 +1555,7 @@ static void TimerTick()
 		s_reloadAllowed = true;
 	}
 	SR_SafeCall( RunCommandFile );
+	Centre();
 	if ( !g_bDumpBroken && g_pEngineServer && !SR_SafeCall( DumpPanels ) )
 	{
 		g_bDumpBroken = true;
