@@ -998,6 +998,16 @@ static void MakeOne()
 	( (PanelVPanelFn)vt[SlotAddActionSignalTarget()] )( g_Made, g_MakeInV );
 }
 static bool IsEditorBlock( const char *name ) { return !Q_strnicmp( name, "hudeditor", 9 ); }
+// The box and logo these windows draw in code: the game lays them out itself and a .res block for one never reaches
+// players (checked without this plugin, 2026-10-02), so one isn't applied here either (the preview shows what they see)
+static bool IsCodeMade( const char *name )
+{
+	for ( const char *n : { "TopSolid", "UpperMiddleSolid", "LowerMiddleSolid", "BottomSolid", "TopLeftPanel", "TopRightPanel",
+			  "BottomLeftPanel", "BottomRightPanel", "ExclamationPanel" } )
+		if ( !Q_stricmp( name, n ) )
+			return true;
+	return false;
+}
 
 static void ReapplyLayouts()
 {
@@ -1024,6 +1034,8 @@ static void ReapplyLayouts()
 		}
 		for ( KeyValues *b = res ? res->GetFirstTrueSubKey() : NULL; b; b = b->GetNextTrueSubKey() )
 		{
+			if ( i < 4 && IsCodeMade( b->GetName() ) )
+				continue;
 			VPANEL p = FindNamed( win, b->GetName(), 0 );
 			void *panel = p ? g_pVPanel->GetPanel( p, "ClientDLL" ) : NULL;
 			bool mine = IsEditorBlock( b->GetName() );
@@ -1055,16 +1067,15 @@ static void ReapplyLayouts()
 				g_ApplyBroken.CopyAndAddToTail( id );
 				Warning( "[schemereload] applying %s's settings crashed; it's left alone until a restart\n", id );
 			}
-			// a window its .res places at 0,0 (as the game's own files do) is centred by the game when it makes it; any
-			// other place is used as it is (checked in game: team select at 0,0 sits in the middle, at 0,52 on the left)
+			// the game places these windows itself when it makes them, in the middle of the screen, whatever their .res
+			// says (checked without this plugin, 2026-10-02: team select at 0,52, the MOTD at 0,0 and at c-320,200 all
+			// came out centred, their top at the top of the screen): the place the file gave back is undone the same way
 			else if ( i < 4 && p == win )
 			{
-				int x, y, w, h, pw, ph;
-				g_pVPanel->GetPos( win, x, y );
+				int w, h, pw, ph;
 				g_pVPanel->GetSize( win, w, h );
 				g_pVPanel->GetSize( g_pVPanel->GetParent( win ), pw, ph );
-				if ( !x && !y )
-					g_pVPanel->SetPos( win, ( pw - w ) / 2, ( ph - h ) / 2 );
+				g_pVPanel->SetPos( win, ( pw - w ) / 2, ( ph - h ) / 2 );
 			}
 		}
 		if ( res )
