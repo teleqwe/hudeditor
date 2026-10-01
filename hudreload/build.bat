@@ -4,6 +4,8 @@ rem Needs: Visual Studio 2022 Build Tools (C++), Source SDK 2013 checked out at 
 setlocal
 
 if "%SDK%"=="" set SDK=%~dp0sdk\src
+rem sdk\ is gitignored, so a git worktree has none: use the main checkout's
+if not exist "%SDK%\public\tier1\KeyValues.h" for /f "delims=" %%i in ('git -C "%~dp0." rev-parse --path-format^=absolute --git-common-dir') do set SDK=%%~dpihudreload\sdk\src
 set GAME=C:\Program Files (x86)\Steam\steamapps\common\Counter-Strike Source\cstrike
 set OUT=%~dp0build
 
