@@ -119,8 +119,14 @@
   .sidebar-top { flex: none; display: grid; gap: 10px; padding: 14px 16px; background: var(--surface); border-bottom: 1px solid var(--line); }
   #search { width: 100%; padding: 8px 10px; }
   #parts:empty { display: none; }
+  #ingame { display: grid; gap: 8px; }
+  #ingame[hidden] { display: none; }
   .ingame { display: flex; gap: 8px; }
-  .ingame button { flex: 1; }
+  .ingame button { flex: 1; min-width: 0; padding: 6px 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ingame.chips button { padding: 3px 8px; border-radius: 12px; font-size: 12px; }
+  .ingame.chips button[aria-pressed="false"] { opacity: .5; text-decoration: line-through; }
+  .toolsbtn[aria-expanded="true"] { border-color: var(--accent); background: var(--soft); }
+  .toolsbtn::after { content: ''; display: inline-block; width: 9px; height: 6px; margin-left: 7px; vertical-align: 2px; background: var(--chevron) no-repeat center / 9px 6px; }
   .parts > summary { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; color: var(--muted); }
   .parts > summary::before { display: none; }
   .parts > summary::after { content: '⌄'; }
@@ -401,9 +407,19 @@
 <aside>
   <div class="sidebar-top" id="top">
     <!-- in a map: the scoreboard and the chat held open to edit them (see inGameRow) -->
-    <div id="ingame" class="ingame" hidden>
-      <button id="scores" aria-pressed="false" title="Keep the scoreboard open to edit it. Click again (or press Tab in the game) to close it.">Toggle scoreboard</button>
-      <button id="keepchat" aria-pressed="false" title="Keep the chat open (typing) to edit it: opened again after a change reloads the HUD. Click again to close it.">Toggle chat</button>
+    <div id="ingame" hidden>
+      <div class="ingame">
+        <button id="scores" aria-pressed="false" title="Keep the scoreboard open to edit it. Click again (or press Tab in the game) to close it.">Toggle scoreboard</button>
+        <button id="keepchat" aria-pressed="false" title="Keep the chat open (typing) to edit it: opened again after a change reloads the HUD. Click again to close it.">Toggle chat</button>
+        <button id="textsbtn" class="toolsbtn" aria-expanded="false">Speed &amp; timer</button>
+      </div>
+      <!-- the test game's sample texts, each on or off (remembered): the bhop/surf timer and speed texts -->
+      <div id="textchips" class="ingame chips" hidden>
+        <button data-bit="1" title="Timer box (font HudHintText) and right-side text (HudHintTextSmall)">Timer</button>
+        <button data-bit="8" title="Record times in the top left corner (font CenterPrintText, ClientScheme)">Record times</button>
+        <button data-bit="2" title="Speed in the centre print (font Trebuchet24, SourceScheme)">Small speed</button>
+        <button data-bit="4" title="Large speed text under it, like jhud (font CenterPrintText, ClientScheme)">Large speed</button>
+      </div>
     </div>
     <!-- (search: off the screen, 10-02; the dev harness still types in it, ut.setKey) -->
     <input type="search" id="search" hidden placeholder="Find a HUD part or setting…" aria-label="Find a HUD part or setting">
@@ -5245,7 +5261,7 @@ const TEST_SETUP = 'disconnect; sv_cheats 1; mp_autokick 0; mp_ignore_round_win_
 // 1 timer box and right side, 2 speed, 4 jhud, 8 top left. Remembered between runs.
 let texts = 15;
 try { texts = +(localStorage.getItem('texts') ?? 15); } catch {}
-const showTexts = () => { for (const b of $('texts').querySelectorAll('button')) b.setAttribute('aria-pressed', !!(texts & b.dataset.bit)); };
+const showTexts = () => { for (const b of document.querySelectorAll('#texts button, #textchips button')) b.setAttribute('aria-pressed', !!(texts & b.dataset.bit)); };
 
 async function toggleText(bit) {
   texts ^= bit;
@@ -5286,8 +5302,12 @@ function testTools() {
 // let go of what they held
 const inMap = () => !!live && live.panels.some(p => p.module === 'ClientDLL' && HUD[p.name]);
 function inGameRow() {
-  const on = inMap();
+  const on = inMap(), local = on && live.local;
   $('ingame').hidden = !on;
+  // Speed & timer: the sample texts are the test game's (the plugin sends them on its own server only)
+  $('textsbtn').disabled = !local;
+  $('textsbtn').title = local ? 'The test game\'s sample timer and speed texts: each on or off' : 'Only in the test game (Test server): the sample timer and speed texts';
+  if (!local) { $('textchips').hidden = true; $('textsbtn').setAttribute('aria-expanded', 'false'); }
   if (!on && (keepScores || keepChat)) {
     keepScores = keepChat = false;
     $('scores').setAttribute('aria-pressed', 'false');
@@ -5628,6 +5648,8 @@ if (host) {
     if (keepChat !== !!chatOpen()) { chatSent = Date.now(); await call('key', keepChat ? await chatKeyScan() : '01').catch(() => {}); }
   };
   $('texts').onclick = e => { const b = e.target.closest('button'); if (b) toggleText(+b.dataset.bit); };
+  $('textchips').onclick = e => { const b = e.target.closest('button'); if (b) toggleText(+b.dataset.bit); };
+  $('textsbtn').onclick = () => { const open = $('textchips').hidden; $('textchips').hidden = !open; $('textsbtn').setAttribute('aria-expanded', String(open)); };
   showTexts();
   $('capture').onclick = () => capture(false);
   $('launch').onclick = () => launchForHud(true);
