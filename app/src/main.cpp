@@ -344,6 +344,14 @@ static wstring WriteCorners( const wstring &shape )
 }
 
 // ---------- settings: recent HUD folders ----------
+// The editor only looks in the custom folder: a HUD from anywhere else comes in by dropping it on the page (a copy)
+static bool InCustom( const wstring &p )
+{
+	size_t at = p.find_last_of( L"\\/" );
+	return !g_custom.empty() && at != wstring::npos && !_wcsicmp( p.substr( 0, at ).c_str(), g_custom.c_str() );
+}
+
+// The HUDs in custom opened last, newest first (the picker lists them first)
 static std::vector< wstring > Recent()
 {
 	std::vector< wstring > out;
@@ -359,7 +367,7 @@ static std::vector< wstring > Recent()
 		wstring line = all.substr( a, b - a );
 		if ( !line.empty() && line.back() == L'\r' )
 			line.pop_back();
-		if ( !line.empty() && IsHud( line ) )
+		if ( !line.empty() && InCustom( line ) && IsHud( line ) )
 			out.push_back( line );
 	}
 	return out;
@@ -367,6 +375,8 @@ static std::vector< wstring > Recent()
 
 static void RememberHud( const wstring &path )
 {
+	if ( !InCustom( path ) || !g_selftestOut.empty() ) // (not the --selftest folder)
+		return;
 	wstring text = path + L"\n";
 	int n = 0;
 	for ( auto &r : Recent() )
@@ -525,6 +535,44 @@ static wstring ImportDir()
 {
 	return g_unsaved.substr( 0, g_unsaved.rfind( L'\\' ) ) + L"\\import";
 }
+// A dropped folder bigger than any HUD (a whole Steam library) isn't copied, nor one that can't be read through
+static bool TooBigForHud( const wstring &dir )
+{
+	namespace fs = std::filesystem;
+	std::error_code ec;
+	unsigned long long bytes = 0, n = 0;
+	for ( fs::recursive_directory_iterator it( dir, fs::directory_options::skip_permission_denied, ec ), end; !ec && it != end; it.increment( ec ) )
+	{
+		std::error_code e;
+		if ( !it->is_regular_file( e ) )
+			continue;
+		unsigned long long size = it->file_size( e );
+		if ( ++n > 20000 || ( !e && ( bytes += size ) > ( 1ull << 30 ) ) )
+			return true;
+	}
+	return !!ec;
+}
+// Files that came in read-only (a HUD copied from a CD, an archive that kept the flag) are made writable: the editor
+// writes into them
+static void MakeWritable( const wstring &dir )
+{
+	EachFile( dir, L"", [&]( const wstring &rel ) {
+		wstring p = dir + L"\\" + rel;
+		DWORD a = GetFileAttributesW( p.c_str() );
+		if ( a != INVALID_FILE_ATTRIBUTES && ( a & FILE_ATTRIBUTE_READONLY ) )
+			SetFileAttributesW( p.c_str(), a & ~FILE_ATTRIBUTE_READONLY );
+	} );
+}
+// Is one of the two folders inside the other (or the same)?
+static bool Nested( wstring a, wstring b )
+{
+	for ( auto *s : { &a, &b } )
+		*s = std::filesystem::path( *s ).lexically_normal().wstring() + L"\\";
+	size_t n = a.size() < b.size() ? a.size() : b.size();
+	return !_wcsnicmp( a.c_str(), b.c_str(), n );
+}
+// The paths of the files the page sent with its message (a folder dropped on it), see add_WebMessageReceived
+static std::vector< wstring > g_dropped;
 static bool Untar( const wstring &archive, const wstring &dir )
 {
 	wchar_t sys[MAX_PATH];
@@ -571,24 +619,6 @@ static bool CreateHud( const wstring &dir )
 	wstring r = dir + L"\\resource\\";
 	return WriteAll( r + L"clientscheme_default.res", Res( L"CLIENT_DEF" ) ) && WriteAll( r + L"sourcescheme_default.res", Res( L"SOURCE_DEF" ) ) &&
 		   WriteAll( r + L"ClientScheme.res", stub( "clientscheme_default.res" ) ) && WriteAll( r + L"SourceScheme.res", stub( "sourcescheme_default.res" ) );
-}
-
-static wstring PickFolder()
-{
-	ComPtr< IFileOpenDialog > dlg;
-	if ( FAILED( CoCreateInstance( CLSID_FileOpenDialog, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS( &dlg ) ) ) )
-		return wstring();
-	DWORD opts;
-	dlg->GetOptions( &opts );
-	dlg->SetOptions( opts | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM );
-	dlg->SetTitle( L"Pick your HUD folder (the one with resource/ and scripts/ inside)" );
-	ComPtr< IShellItem > item;
-	wchar_t *path = NULL;
-	if ( FAILED( dlg->Show( g_hwnd ) ) || FAILED( dlg->GetResult( &item ) ) || FAILED( item->GetDisplayName( SIGDN_FILESYSPATH, &path ) ) )
-		return wstring();
-	wstring out = path;
-	CoTaskMemFree( path );
-	return out;
 }
 
 // The family name inside a .ttf/.otf (name table, name ID 1): the name the game's "name" key must use.
@@ -878,8 +908,8 @@ static void OnMessage( const wstring &msg )
 		else if ( ( out = Launch() ).size() )
 			ok = false;
 	}
-	else if ( op == L"huds" ) // "label\tpath" per line: recent HUDs, then HUD folders in custom
-	{
+	else if ( op == L"huds" ) // "label\tpath\tcustom" per line: the HUD folders in custom, the ones opened last first; then
+	{                         // "\tcurrent\t<the HUD open now>"
 		std::vector< wstring > seen;
 		auto add = [&]( const wstring &p, const wstring &where ) {
 			for ( auto &s : seen )
@@ -889,9 +919,9 @@ static void OnMessage( const wstring &msg )
 			out += NameOf( p ) + L"\t" + p + L"\t" + where + L"\n";
 		};
 		for ( auto &r : Recent() )
-			add( r, L"recent" );
+			add( r, L"custom" );
 		WIN32_FIND_DATAW fd;
-		HANDLE h = FindFirstFileW( ( g_custom + L"\\*" ).c_str(), &fd );
+		HANDLE h = g_custom.empty() ? INVALID_HANDLE_VALUE : FindFirstFileW( ( g_custom + L"\\*" ).c_str(), &fd ); // (no game: nothing)
 		for ( BOOL more = h != INVALID_HANDLE_VALUE; more; more = FindNextFileW( h, &fd ) )
 		{
 			wstring p = g_custom + L"\\" + fd.cFileName;
@@ -902,25 +932,37 @@ static void OnMessage( const wstring &msg )
 			FindClose( h );
 		out += L"\tcurrent\t" + g_hudPath;
 	}
-	else if ( op == L"browse" )
-	{
-		if ( ( out = PickFolder() ).empty() )
-			fail( L"cancelled" );
-	}
-	else if ( op == L"unpack" ) // arg = an archive's name, body = the archive in base64: "hud\t<folder in it>" per HUD in
-	{                           // it ("" for its top), then up to 20 "other\t<file>" for what's beside them
-		wstring dir = ImportDir(), x = dir + L"\\x", file = dir + L"\\" + NameOf( arg );
+	else if ( op == L"unpack" || op == L"importfolder" ) // unpack: arg = an archive's name, body = the archive in base64.
+	{ // importfolder: a folder dropped on the page, its path from the File sent with the message (never from the page's
+	  // text; arg in --selftest), copied in. Answer: "hud\t<folder in it>" per HUD in it ("" for its top), then up to 20
+	  // "other\t<file>" for what's beside them; for a HUD folder already in custom, "incustom\t<its path>"
+		bool folder = op == L"importfolder";
+		wstring from = !folder ? L"" : !g_dropped.empty() ? g_dropped[0] : g_selftestOut.empty() ? L"" : arg;
+		while ( from.size() > 3 && ( from.back() == L'\\' || from.back() == L'/' ) )
+			from.pop_back();
+		wstring name = folder ? NameOf( from ) : NameOf( arg ), dir = ImportDir(), x = dir + L"\\x", file = dir + L"\\" + name;
 		std::error_code ec;
-		std::filesystem::remove_all( dir, ec );
 		std::vector< wstring > huds;
 		if ( g_custom.empty() )
 			fail( noGame );
-		else if ( !WriteAll( file, Unbase64( body ) ) || SHCreateDirectoryExW( NULL, x.c_str(), NULL ) != ERROR_SUCCESS )
-			fail( L"Couldn't unpack it in " + dir );
-		else if ( !Untar( file, x ) )
-			fail( L"Windows couldn't unpack " + NameOf( arg ) + L". Use a .zip, .rar or .7z (an installer isn't a HUD folder: run it yourself)." );
-		else if ( FindHuds( x, L"", huds ), huds.empty() )
-			fail( NameOf( arg ) + L" has no HUD in it: no folder with resource or scripts inside." );
+		else if ( folder && !IsDir( from ) )
+			fail( L"Drop the HUD's folder here, or its .zip, .rar or .7z." );
+		else if ( folder && InCustom( from ) && IsHud( from ) )
+			out = L"incustom\t" + from;
+		else if ( folder && ( from.size() <= 3 || !_wcsicmp( from.c_str(), g_custom.c_str() ) || !_wcsicmp( from.c_str(), g_game.c_str() ) ) )
+			fail( L"That's a whole drive or the game's own folder: drop one HUD's folder." );
+		else if ( folder && Nested( from, dir.substr( 0, dir.rfind( L'\\' ) ) ) )
+			fail( L"That folder holds the editor's own files, or is inside them: drop the HUD's own folder." );
+		else if ( folder && TooBigForHud( from ) )
+			fail( name + L" is too big to be a HUD (over 1 GB or 20,000 files), or couldn't be read: drop the HUD's own folder." );
+		else if ( std::filesystem::remove_all( dir, ec ), SHCreateDirectoryExW( NULL, x.c_str(), NULL ) != ERROR_SUCCESS )
+			fail( L"Couldn't make " + x );
+		else if ( folder ? ( std::filesystem::copy( from, x, std::filesystem::copy_options::recursive | std::filesystem::copy_options::skip_symlinks, ec ), !!ec ) : !WriteAll( file, Unbase64( body ) ) )
+			fail( folder ? L"Couldn't copy " + name + L": " + Widen( ec.message(), CP_ACP ) : L"Couldn't unpack it in " + dir );
+		else if ( !folder && !Untar( file, x ) )
+			fail( L"Windows couldn't unpack " + name + L". Use a .zip, .rar or .7z (an installer isn't a HUD folder: run it yourself)." );
+		else if ( MakeWritable( x ), FindHuds( x, L"", huds ), huds.empty() )
+			fail( name + L" has no HUD in it: no folder with resource or scripts inside." );
 		else
 		{
 			for ( auto &h : huds )
@@ -959,8 +1001,8 @@ static void OnMessage( const wstring &msg )
 				out = path;
 		}
 	}
-	else if ( op == L"moveout" ) // arg = a HUD in the custom folder: moved to the Desktop (the game only reads custom), still
-	{                            // listed as a recent HUD; answers where. Fails while the game has its font files open.
+	else if ( op == L"moveout" ) // arg = a HUD in the custom folder: moved to the Desktop (the game only reads custom; out
+	{                            // of the editor's list too); answers where. Fails while the game has its font files open.
 		wchar_t *desk = NULL;
 		wstring to;
 		if ( SUCCEEDED( SHGetKnownFolderPath( FOLDERID_Desktop, 0, NULL, &desk ) ) )
@@ -974,10 +1016,7 @@ static void OnMessage( const wstring &msg )
 		else if ( std::filesystem::rename( arg, to, ec ), ec )
 			fail( GameRunning() ? L"The game has files of it open (its fonts): it can move once the game has quit." : L"Couldn't move it to " + to );
 		else
-		{
-			RememberHud( to );
 			out = to;
-		}
 	}
 	else if ( op == L"rename" ) // arg = a HUD folder, body = its new name (in the same folder): answers the new path; kept in
 	{                           // its place in the recent list. Fails while the game has its font files open.
@@ -1319,6 +1358,20 @@ static HRESULT OnController( HRESULT hr, ICoreWebView2Controller *ctl )
 
 	g_web->add_WebMessageReceived( Callback< ICoreWebView2WebMessageReceivedEventHandler >(
 		[]( ICoreWebView2 *, ICoreWebView2WebMessageReceivedEventArgs *args ) -> HRESULT {
+			// files sent with it (postMessageWithAdditionalObjects): their paths, as the user dropped them
+			g_dropped.clear();
+			ComPtr< ICoreWebView2WebMessageReceivedEventArgs2 > args2;
+			ComPtr< ICoreWebView2ObjectCollectionView > objs;
+			UINT32 n = 0;
+			if ( SUCCEEDED( args->QueryInterface( IID_PPV_ARGS( &args2 ) ) ) && SUCCEEDED( args2->get_AdditionalObjects( &objs ) ) && objs && SUCCEEDED( objs->get_Count( &n ) ) )
+				for ( UINT32 i = 0; i < n; ++i )
+				{
+					ComPtr< IUnknown > o;
+					ComPtr< ICoreWebView2File > f;
+					LPWSTR p = NULL;
+					if ( SUCCEEDED( objs->GetValueAtIndex( i, &o ) ) && o && SUCCEEDED( o.As( &f ) ) && SUCCEEDED( f->get_Path( &p ) ) && p )
+						g_dropped.push_back( p ), CoTaskMemFree( p );
+				}
 			LPWSTR s = NULL;
 			if ( SUCCEEDED( args->TryGetWebMessageAsString( &s ) ) && s )
 			{
@@ -1410,6 +1463,10 @@ static LRESULT CALLBACK WndProc( HWND h, UINT m, WPARAM w, LPARAM l )
 		// commands no game took (a HUD opened, the game never started): not for a game started from Steam later
 		if ( !g_game.empty() && !GameRunning() )
 			DeleteFileW( ( g_game + L"\\addons\\schemereload_cmd.txt" ).c_str() );
+		{
+			std::error_code ec; // the last import's copy (a dropped folder's other files, an archive's)
+			std::filesystem::remove_all( ImportDir(), ec );
+		}
 		PostQuitMessage( g_exitCode );
 		return 0;
 	}

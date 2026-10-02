@@ -300,6 +300,10 @@
   #picker .hud { display: block; width: 100%; margin: 6px 0; padding: 9px 12px; text-align: left; }
   #picker .hud.primary { color: var(--text); background: var(--soft); border-color: var(--accent); font-weight: 400; }
   #picker .hud .meta { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* where a HUD's folder or archive is dropped (anywhere on the editor works too) */
+  #picker .hud.drop { padding: 16px 12px; text-align: center; border-style: dashed; }
+  #picker .hud.drop .meta { white-space: normal; }
+  body.dragging #picker .hud.drop { border-color: var(--accent); background: var(--soft); }
   .mvpthumb { width: 44px; height: 44px; display: grid; place-items: center; font-size: 32px; line-height: 1; color: #f2c230; border: 1px solid var(--line); border-radius: 6px; }
   .mvpthumb canvas { max-width: 40px; max-height: 40px; }
   #picker .hudrow { display: flex; gap: 6px; align-items: center; margin: 6px 0; }
@@ -396,12 +400,11 @@
 <input type="file" id="fontfile" accept=".ttf,.otf" hidden>
 <div id="picker" hidden><div>
   <h2>Which HUD do you want to edit?</h2>
-  <p class="meta">Changes show in game straight away. They are kept when you click Done or Save HUD.</p>
+  <p class="meta">The HUDs in your custom folder (cstrike/custom). Changes show in game straight away. They are kept when you click Done or Save HUD.</p>
   <div id="hudlist"></div>
-  <button id="importhud" class="hud">Import a downloaded HUD...<span class="meta">The .zip, .rar or .7z as downloaded (or drop it on the editor): it goes in your custom folder</span></button>
+  <button id="importhud" class="hud drop">Add a HUD: drop it here<span class="meta">Its folder, or the .zip, .rar or .7z as downloaded. A copy goes in your custom folder. (Or click to pick the archive.)</span></button>
   <input type="file" id="importfile" accept=".zip,.rar,.7z" hidden>
   <div id="importlist"></div>
-  <button id="browse" class="hud">Browse for a HUD folder...<span class="meta">Any folder with resource/ or scripts/ inside</span></button>
   <button id="newhud" class="hud">Start a new HUD<span class="meta">From the default look, in your custom folder</span></button>
   <form id="newform" hidden><input id="newname" placeholder="Name it, e.g. Pink Surf" maxlength="60" aria-label="Name for the new HUD"><button class="primary">Create</button></form>
   <p id="newerr" class="meta"></p>
@@ -807,10 +810,12 @@ if (host) host.addEventListener('message', e => {
   delete pending[id];
   if (s[a + 1] === '1') p.res(s.slice(a + 3)); else p.rej(new Error(s.slice(a + 3)));
 });
-const call = (op, arg = '', body = '') => new Promise((res, rej) => {
+// (files: File objects sent along, whose paths only the exe sees: a folder dropped on the page)
+const call = (op, arg = '', body = '', files = null) => new Promise((res, rej) => {
   const id = ++seq;
   pending[id] = { res, rej };
-  host.postMessage(`${id}\n${op}\n${arg}\n${body}`);
+  if (files) host.postMessageWithAdditionalObjects(`${id}\n${op}\n${arg}\n${body}`, files);
+  else host.postMessage(`${id}\n${op}\n${arg}\n${body}`);
 });
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -1625,7 +1630,7 @@ function renameFace(file, from, to, group = null) {
 // moving one it has loaded waits for a restart of the game.
 async function moveOut(paths) {
   const left = [...paths], go = async () => { while (left.length) { await call('moveout', left[0]); left.shift(); } };
-  const done = () => status(`Moved to your Desktop: ${paths.map(p => p.split(/[\\/]/).pop()).join(', ')}. The HUD list still has ${paths.length > 1 ? 'them' : 'it'}.`);
+  const done = () => status(`Moved to your Desktop: ${paths.map(p => p.split(/[\\/]/).pop()).join(', ')}. To edit ${paths.length > 1 ? 'one' : 'it'} again, drop ${paths.length > 1 ? 'its' : 'the'} folder on the editor (a copy goes back in custom).`);
   try { await go(); done(); }
   catch (err) {
     if (!live || !/game has quit/.test(err.message)) return status(`Couldn't move it: ${err.message}`);
@@ -5282,16 +5287,16 @@ async function showPicker(canCancel, keepImport = false) {
   const huds = lines.filter(Boolean).map(l => l.split('\t'));
   const box = $('hudlist');
   box.innerHTML = '';
-  for (const [name, path, where] of huds) {
+  for (const [name, path] of huds) {
     // (mine: the HUD open in the editor; at startup the exe's current one isn't open in it yet)
     const mine = !!hudName && path.toLowerCase() === current.toLowerCase(), row = el('div', { className: 'hudrow' });
     const b = el('button', { className: 'hud' + (mine ? ' primary' : ''), textContent: name });
-    b.append(el('span', { className: 'meta', textContent: `${where === 'custom' ? 'In your custom folder' : 'Recent'} · ${path}` }));
+    if (mine) b.append(el('span', { className: 'meta', textContent: 'Open now' }));
     b.onclick = () => openHud(path);
     row.append(b, el('button', { className: 'ghost', textContent: 'Rename', title: `Give ${name} another name (its folder's, where it is)`, onclick: () => renameRow(row, name, path, mine, canCancel) }));
     box.append(row);
   }
-  if (!huds.length) box.append(el('p', { className: 'meta', textContent: 'No HUDs found yet. Import one you downloaded, browse for yours, or start a new one.' }));
+  if (!huds.length) box.append(el('p', { className: 'meta', textContent: 'No HUDs in your custom folder yet. Drop one you downloaded here, or start a new one.' }));
   $('pickclose').hidden = !canCancel;
   $('picker').hidden = false;
 }
@@ -5368,23 +5373,32 @@ async function openHud(path) {
 // folder and opened; several (a HUD's variants) are listed, each with a name to give it. Folder names that say nothing
 // (cstrike, custom, my_custom_stuff...) give way to the archive's name, without the tag GameBanana adds to it.
 const DULL_NAMES = /^(cstrike|custom|hud|huds|default|my_custom_stuff|mycustomstuff|resource|scripts|files|upload)$/i;
-async function importHud(file) {
+// folder: a HUD's folder dropped on the editor, copied in the same way (the exe gets its path from the File; the folder
+// itself is left as it is). One that's in the custom folder already is just opened.
+async function importHud(file, folder = false) {
   const box = $('importlist'), msg = (text, err = false) => box.replaceChildren(el('p', { className: `meta${err ? ' err' : ''}`, textContent: text }));
-  if (!/\.(zip|rar|7z)$/i.test(file.name)) return msg(`${file.name} isn't a .zip, .rar or .7z. An installer (.exe) isn't a HUD folder: run it yourself, then Browse for the folder it made.`, true);
-  msg(`Unpacking ${file.name}...`);
+  if (!folder && !/\.(zip|rar|7z)$/i.test(file.name)) return msg(`${file.name} isn't a .zip, .rar or .7z. An installer (.exe) isn't a HUD folder: run it yourself, then drop the folder it made here.`, true);
+  msg(folder ? `Copying ${file.name}...` : `Unpacking ${file.name}...`);
   let found;
-  try { found = (await call('unpack', file.name, await base64(new Uint8Array(await file.arrayBuffer())))).split('\n').filter(Boolean).map(l => l.split('\t')); }
+  try { found = (folder ? await call('importfolder', '', '', [file]) : await call('unpack', file.name, await base64(new Uint8Array(await file.arrayBuffer())))).split('\n').filter(Boolean).map(l => l.split('\t')); }
   catch (err) { return msg(err.message, true); }
+  const there = found.find(([k]) => k === 'incustom');
+  if (there) {
+    box.replaceChildren();
+    await openHud(there[1]); // (it may not open: unsaved changes kept, or it failed and said why)
+    if (sameFolder(hudPath, there[1])) status(`${file.name} is in your custom folder already: it's open now.`);
+    return;
+  }
   const huds = found.filter(([k]) => k === 'hud').map(([, rel]) => rel), other = found.filter(([k]) => k === 'other').map(([, rel]) => rel.replace(/\\/g, '/'));
   // (names that say nothing, the archive's too, as cstrike_e649a.rar: "Imported HUD", and the name is asked for)
-  const dull = n => !n || DULL_NAMES.test(n.trim().replace(/\s+/g, '_')), raw = file.name.replace(/\.[^.]+$/, '').replace(/_[0-9a-f]{5}$/i, '').replace(/[_]+/g, ' ').trim();
+  const dull = n => !n || DULL_NAMES.test(n.trim().replace(/\s+/g, '_')), raw = (folder ? file.name : file.name.replace(/\.[^.]+$/, '')).replace(/_[0-9a-f]{5}$/i, '').replace(/[_]+/g, ' ').trim();
   const stem = dull(raw) ? 'Imported HUD' : raw, says = rel => !dull(rel.split('\\').pop()) || !dull(raw);
   const taken = new Set((await call('huds')).split('\n').map(l => (l.split('\t')[0] || '').toLowerCase()));
   const unique = n => { let m = n, i = 2; while (taken.has(m.toLowerCase())) m = `${n} ${i++}`; return m; };
   const nameFor = rel => { const last = rel.split('\\').pop(); return unique(dull(last) ? (huds.length > 1 && last ? `${stem} ${last}` : stem) : last); };
   // files beside the HUD that a player is told to copy elsewhere (a cfg for cstrike/cfg)
   const cfgs = other.filter(p => /\.cfg$/i.test(p));
-  const cfgNote = cfgs.length ? ` The archive also has ${cfgs.join(', ')}, which isn't part of the HUD folder: if its instructions say so, copy it into cstrike/cfg yourself.` : '';
+  const cfgNote = cfgs.length ? ` ${folder ? 'The folder' : 'The archive'} also has ${cfgs.join(', ')}, which isn't part of the HUD folder: if its instructions say so, copy it into cstrike/cfg yourself.` : '';
   const put = async (rel, name) => {
     try {
       const path = await call('importhud', rel, name.trim());
@@ -5402,20 +5416,30 @@ async function importHud(file) {
   for (const rel of huds) {
     const row = el('div', { className: 'pick' }), name = el('input', { value: nameFor(rel), maxLength: 60 });
     name.setAttribute('aria-label', 'Name for this HUD');
-    row.append(name, el('button', { className: 'primary', textContent: 'Import', onclick: () => put(rel, name.value) }), el('span', { className: 'meta', textContent: `In the archive: ${rel ? rel.slice(1).replace(/\\/g, '/') : 'all of it'}` }));
+    row.append(name, el('button', { className: 'primary', textContent: 'Import', onclick: () => put(rel, name.value) }), el('span', { className: 'meta', textContent: `In the ${folder ? 'folder' : 'archive'}: ${rel ? rel.slice(1).replace(/\\/g, '/') : 'all of it'}` }));
     box.append(row);
   }
   if (cfgNote) box.append(el('p', { className: 'meta', textContent: cfgNote.trim() }));
 }
-// An archive dropped anywhere on the editor is imported (anything else dropped is left alone, not opened as a page).
-document.addEventListener('dragover', e => { if (e.dataTransfer && [...e.dataTransfer.items].some(i => i.kind === 'file')) e.preventDefault(); });
+// A HUD's folder or archive dropped anywhere on the editor is imported (anything else dropped is left alone, not opened
+// as a page). The drop place in the picker lights up while something is dragged over.
+let dragDepth = 0;
+const dragging = on => document.body.classList.toggle('dragging', on);
+const hasFiles = e => !!e.dataTransfer && [...e.dataTransfer.items].some(i => i.kind === 'file');
+document.addEventListener('dragenter', e => { if (hasFiles(e)) dragging(++dragDepth > 0); });
+document.addEventListener('dragleave', e => { if (hasFiles(e)) dragDepth = Math.max(0, dragDepth - 1), dragging(dragDepth > 0); });
+document.addEventListener('dragover', e => { if (hasFiles(e)) e.preventDefault(); });
 document.addEventListener('drop', e => {
+  dragDepth = 0; dragging(false);
   const f = e.dataTransfer && e.dataTransfer.files[0];
   if (!f) return;
   e.preventDefault();
-  if (!/\.(zip|rar|7z)$/i.test(f.name)) return status('Drop a HUD\'s .zip, .rar or .7z here to import it.');
+  // (a folder: only while the drop is handled can the page tell)
+  const item = [...e.dataTransfer.items].find(i => i.kind === 'file'), entry = item && item.webkitGetAsEntry && item.webkitGetAsEntry();
+  const folder = !!(entry && entry.isDirectory);
+  if (!folder && !/\.(zip|rar|7z)$/i.test(f.name)) return status('Drop a HUD here to add it: its folder, or its .zip, .rar or .7z.');
   showPicker(true);
-  importHud(f);
+  importHud(f, folder);
 });
 
 // (a change still being typed, or a colour by kind waiting for the picker to rest)
@@ -5450,7 +5474,6 @@ async function onHostEvent(ev) {
 if (host) {
   $('hudbtn').onclick = () => showPicker(true);
   $('pickclose').onclick = () => { $('picker').hidden = true; };
-  $('browse').onclick = async () => { try { await openHud(await call('browse')); } catch {} };
   $('importhud').onclick = () => { $('importfile').value = ''; $('importfile').click(); };
   $('importfile').onchange = () => { const f = $('importfile').files[0]; if (f) importHud(f); };
   $('newhud').onclick = () => { $('newform').hidden = false; $('newerr').textContent = ''; $('newname').focus(); };
@@ -5949,6 +5972,12 @@ if (host && location.hash === '#hosttest') (async () => {
     const path = await call('new', 'myhud');
     await openHud(path);
     check(hudName === 'myhud' && F(C) && F(S) && F(L) && F(L).defaultText && F(L).bases.length === 1 && F(CH).defaultText && F(CH).bases.length === 1, 'new HUD opens, with the game\'s HudLayout and ChatScheme');
+    {
+      // the editor only lists the custom folder; a HUD folder dropped from there is opened, not copied
+      const listed = (await call('huds')).split('\n').filter(l => l && !l.startsWith('\t')).map(l => l.split('\t'));
+      check(listed.length === 1 && listed[0][1] === path && listed[0][2] === 'custom', 'the HUD list is the HUDs in the custom folder');
+      check(await call('importfolder', path) === `incustom\t${path}`, 'a HUD folder dropped from the custom folder is opened, not copied');
+    }
     for (const [id, hud] of Object.entries(HUD)) for (const [, keys] of hud.colours || [])
       for (const k of keys.split('|')) if (!['Yellowish', 'Caution'].includes(k)) check(resolve(tables(F(hud.scheme || C)), k), `${hud.scheme || C} has ${k}`);
     save(F(C), 'Panel.FgColor', '1 2 3 255');
