@@ -119,8 +119,7 @@
   .sidebar-top { flex: none; display: grid; gap: 10px; padding: 14px 16px; background: var(--surface); border-bottom: 1px solid var(--line); }
   #search { width: 100%; padding: 8px 10px; }
   #parts:empty { display: none; }
-  #ingame { display: grid; gap: 8px; }
-  #ingame[hidden] { display: none; }
+  #ingame { display: grid; gap: 8px; padding: 10px 0 4px; }
   .ingame { display: flex; gap: 8px; }
   .ingame button { flex: 1; min-width: 0; padding: 6px 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ingame.chips button { padding: 3px 8px; border-radius: 12px; font-size: 12px; }
@@ -405,12 +404,12 @@
   <footer class="preview-footer"><div class="msg"><span id="status">Starting...</span><span id="hint">Click a part of the game to edit it (again: the one under it); Ctrl+click adds more. The wheel zooms.</span></div><span id="gamestate"></span></footer>
 </section>
 <aside>
-  <div class="sidebar-top" id="top">
-    <!-- in a map: the scoreboard and the chat held open to edit them (see inGameRow) -->
-    <div id="ingame" hidden>
+  <!-- In-game Toggles, a panel at the top of the list in a map (see renderList); kept here while it isn't shown -->
+  <div id="ingamehold" hidden>
+    <div id="ingame">
       <div class="ingame">
-        <button id="scores" aria-pressed="false" title="Keep the scoreboard open to edit it. Click again (or press Tab in the game) to close it.">Toggle scoreboard</button>
-        <button id="keepchat" aria-pressed="false" title="Keep the chat open (typing) to edit it: opened again after a change reloads the HUD. Click again to close it.">Toggle chat</button>
+        <button id="scores" aria-pressed="false" title="Keep the scoreboard open to edit it. Click again (or press Tab in the game) to close it.">Scoreboard</button>
+        <button id="keepchat" aria-pressed="false" title="Keep the chat open (typing) to edit it: opened again after a change reloads the HUD. Click again to close it.">Chat</button>
         <button id="textsbtn" class="toolsbtn" aria-expanded="false">Speed &amp; timer</button>
       </div>
       <!-- the test game's sample texts, each on or off (remembered): the bhop/surf timer and speed texts -->
@@ -421,6 +420,8 @@
         <button data-bit="4" title="Large speed text under it, like jhud (font CenterPrintText, ClientScheme)">Large speed</button>
       </div>
     </div>
+  </div>
+  <div class="sidebar-top" id="top">
     <!-- (search: off the screen, 10-02; the dev harness still types in it, ut.setKey) -->
     <input type="search" id="search" hidden placeholder="Find a HUD part or setting…" aria-label="Find a HUD part or setting">
     <div id="parts"></div>
@@ -4634,6 +4635,7 @@ function fontsCard(sections) {
 function renderList() {
   pendingRender = false;
   const list = $('list'), q = $('search').value.trim().toLowerCase();
+  $('ingamehold').append(ingameEl); // (out of the list before it empties: its buttons are found by id)
   list.innerHTML = '';
   list.classList.remove('picked');
   $('parts').replaceChildren();
@@ -4778,6 +4780,7 @@ function renderList() {
   const parts = things.length ? things.map(partRow) : [el('p', { className: 'meta', style: 'padding: 8px 12px; margin: 0', textContent: 'Nothing editable on screen right now.' })];
   // at the main menu, its background is a thing of its own too (clicking the empty background selects it as well)
   if (menuUp()) parts.push(partRow({ thing: BG_SEL().thing, info: BG_SEL().info }));
+  if (inMap()) list.append(card('In-game Toggles', [ingameEl])); // (the scoreboard and chat held open, the sample texts)
   list.append(card(live ? 'On screen now' : 'HUD parts', parts));
   // adding only while playing: what it adds is part of the HUD in a map (windows have their own, see addRows); what's
   // been added is listed anyway
@@ -5298,12 +5301,14 @@ function testTools() {
   $('notlocal').hidden = local;
   if (!$('tools').hidden) placeTools(); // taller now: still whole in the window
 }
-// In a map: Toggle scoreboard and Toggle chat at the top of the sidebar (held open, see poll); out of one, they go and
-// let go of what they held
+// In a map: the In-game Toggles panel at the top of the list (the scoreboard and the chat held open, see poll; the test
+// game's sample texts); out of one, it goes and lets go of what it held
 const inMap = () => !!live && live.panels.some(p => p.module === 'ClientDLL' && HUD[p.name]);
+const ingameEl = $('ingame'); // (moved into the panel and back to #ingamehold, see renderList)
+let shownInMap = false;
 function inGameRow() {
   const on = inMap(), local = on && live.local;
-  $('ingame').hidden = !on;
+  if (on !== shownInMap) { shownInMap = on; render(); }
   // Speed & timer: the sample texts are the test game's (the plugin sends them on its own server only)
   $('textsbtn').disabled = !local;
   $('textsbtn').title = local ? 'The test game\'s sample timer and speed texts: each on or off' : 'Only in the test game (Test server): the sample timer and speed texts';
@@ -5313,10 +5318,9 @@ function inGameRow() {
     $('scores').setAttribute('aria-pressed', 'false');
     $('keepchat').setAttribute('aria-pressed', 'false');
   }
-  topBar();
 }
-// the sidebar's top strip only while it holds something (the toggles, On screen now over a selection)
-const topBar = () => { $('top').hidden = $('ingame').hidden && !$('parts').childElementCount; };
+// the sidebar's top strip only while it holds something (On screen now over a selection)
+const topBar = () => { $('top').hidden = !$('parts').childElementCount; };
 
 async function testServer() {
   if (!live) { status('Start the game first.'); return; }
