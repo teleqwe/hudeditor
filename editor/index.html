@@ -51,7 +51,9 @@
   #hudbtn::before { content: 'HUD'; margin-right: 9px; padding-right: 9px; border-right: 1px solid var(--line); font-size: 11px; font-weight: 500; letter-spacing: .06em; color: var(--muted); }
   #hudbtn:hover { border-color: var(--accent); background-color: var(--soft); }
   .app-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
-  #restartmark { padding: 4px 10px; border-color: var(--accent); color: var(--accent); font-size: 15px; line-height: 1.2; }
+  /* ⚠: changes the game shows only after a restart (a click lists them); Discard: back to the HUD as last saved */
+  #restartmark { padding: 4px 9px; font-size: 14px; }
+  #discard:disabled { visibility: hidden; }
   .app-actions .sep { width: 1px; height: 24px; margin: 0 6px; background: var(--line); }
 
   /* the game: test tools over it (when open), messages under it */
@@ -138,6 +140,7 @@
   .selected-head p { margin: 2px 0 0; color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .selected-head .back { flex: none; width: 28px; height: 28px; padding: 0 0 2px; border-color: transparent; background: none; color: var(--muted); font-size: 18px; line-height: 1; }
   .selected-head .back:hover { color: var(--text); border-color: var(--line); }
+  .selected-head .close { font-size: 14px; }
   .settings-layout { flex: 1; min-height: 0; display: grid; grid-template-columns: 96px minmax(0, 1fr); }
   .category-nav { display: flex; flex-direction: column; gap: 7px; padding: 12px 7px; overflow: auto; background: var(--surface); border-right: 1px solid var(--line); }
   .category-button { padding: 9px 7px; white-space: nowrap; border-color: transparent; border-radius: 6px; background: transparent; color: var(--muted); text-align: left; }
@@ -162,7 +165,15 @@
   summary::before, .tri::before { content: ''; display: inline-block; flex: none; width: 0; height: 0; margin-right: 8px; vertical-align: 1px;
     border-left: 6px solid var(--muted); border-top: 4px solid transparent; border-bottom: 4px solid transparent; transition: transform .15s; }
   details[open] > summary::before, .card:not(.folded) > .sub.tri::before, .tri[aria-expanded="true"]::before { transform: rotate(90deg); }
-  #list > details > summary { margin: 18px 0 4px; font-size: 12px; font-weight: 500; color: var(--muted); }
+  /* the list's sections: panels of their own that fold (all folded when the editor starts) */
+  #list > .card, #list > details { margin: 10px 0 0; padding: 0 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+  #list > .card > .sub, #list > details > summary { display: flex; align-items: center; gap: 6px; margin: 0 -12px; padding: 12px; border-radius: 7px;
+    font-size: 13px; font-weight: 550; color: var(--text); }
+  #list > .card > .sub:hover, #list > details > summary:hover { background: var(--raised); }
+  #list > .card:not(.folded) > .sub, #list > details[open] > summary { margin-bottom: 2px; border-bottom: 1px solid var(--line); border-radius: 7px 7px 0 0; }
+  #list > .card:not(.folded), #list > details[open] { padding-bottom: 6px; }
+  #list > .card .sub::before, #list > details > summary::before { margin-right: 4px; }
+  .sub + .row[hidden] + .row { border-top: 0; } /* (a hidden first row, as Colours by kind's warning: no line under the title) */
   .fold > summary { padding: 13px 0 3px; font-weight: 550; }
   .fold[open] > summary { padding-bottom: 0; }
   :is(.row, .fold, .thing-btn) + :is(.row, .fold) { border-top: 1px solid var(--thin); }
@@ -340,8 +351,9 @@
     <button id="testserver" title="Offline game with a frozen bot and bhop/surf-style timer texts on screen">Test server</button>
     <button id="toolsbtn" class="toolsbtn" aria-expanded="false" title="Scoreboard and the sample texts on the test server">Test tools</button>
     <span class="sep" aria-hidden="true"></span>
-    <button id="restartmark" hidden>⟳</button>
+    <button id="restartmark" class="caution" hidden aria-haspopup="dialog">⚠</button>
     <button id="explore" title="Open the HUD's folder">Folder</button>
+    <button id="discard" class="ghost" disabled title="Put the HUD back to how it was last saved: every unsaved change goes">Discard changes</button>
     <button id="save" class="primary" disabled>Save HUD</button>
   </div>
 </header>
@@ -521,8 +533,8 @@ const WINDOW_COLOURS = {
     ['Title', 'FrameTitleBar.TextColor', ''], ['Title bar', 'FrameTitleBar.BgColor', ''], ['Text', 'Label.TextColor', ''], ['Borders', 'Border.Bright|Border.Dark', ''],
     // (checked 2026-10-02: a plain start shows tooltips in these; in the editor's game a reload gives the box the text
     // fields' colours until the game restarts)
-    ['Tooltip text', 'Tooltip.TextColor', 'What players see. Shows after a game restart (⟳): until then the editor\'s game shows tooltips in the text field colours'],
-    ['Tooltip background', 'Tooltip.BgColor', 'What players see. Shows after a game restart (⟳)']],
+    ['Tooltip text', 'Tooltip.TextColor', 'What players see. Shows after a game restart (the ⚠ by Save HUD): until then the editor\'s game shows tooltips in the text field colours'],
+    ['Tooltip background', 'Tooltip.BgColor', 'What players see. Shows after a game restart (the ⚠ by Save HUD)']],
 };
 const EXTRA = {
   gamemenu: [['Menu text', 'MainMenu.TextColor', 'Resume Game, Find Servers, Options...'], ['Menu text (mouse over)', 'MainMenu.ArmedTextColor', ''],
@@ -935,12 +947,13 @@ async function undo() {
 
 function setDirty(d) {
   dirty = d;
-  $('save').disabled = !d;
+  $('save').disabled = $('discard').disabled = !d;
   $('save').textContent = d ? 'Save HUD *' : 'Save HUD';
   $('savestate').textContent = d ? 'Unsaved changes' : 'No unsaved changes';
 }
 
-// Changes the game only reads when it starts: a mark by Save until the game restarts (see poll), saying which.
+// Changes the game only reads when it starts: a ⚠ by Save until the game restarts (see poll); a click lists them, with a
+// button that restarts the game.
 const RESTART_FILES = [[/^resource\/GameMenu\.res$/i, 'main menu buttons'], [/^servers\//i, 'server browser'], [/^resource\/UI\/BuyMenu/i, 'buy menu']];
 const restartFor = new Set();
 // (kept for the HUD while the game runs, so the editor opened again over a running game still shows it)
@@ -949,8 +962,28 @@ function needRestart(what) {
   const on = restartFor.size > 0;
   try { if (on && hudName) localStorage.setItem('restartFor', JSON.stringify({ hud: hudName, what: [...restartFor] })); else if (!on) localStorage.removeItem('restartFor'); } catch {}
   $('restartmark').hidden = !on;
-  $('restartmark').title = on ? `The game shows these after a restart: ${[...restartFor].join(', ')}.
-Click to restart it (unsaved changes stay).` : '';
+  $('restartmark').title = on ? `${restartFor.size} change${restartFor.size > 1 ? 's' : ''} the game shows only after a restart: click to see` : '';
+  if (!on) closeRestartPop();
+  else if (restartPop) showRestartPop(); // (the list as it is now)
+}
+let restartPop = null;
+const closeRestartPop = () => { if (restartPop) { restartPop.remove(); restartPop = null; } };
+function showRestartPop() {
+  closeRestartPop();
+  const pop = restartPop = el('div', { className: 'cautionpop', role: 'dialog' }), list = el('ul');
+  pop.setAttribute('aria-label', 'Changes that need a game restart');
+  list.append(...[...restartFor].map(w => el('li', { textContent: w[0].toUpperCase() + w.slice(1) })));
+  const foot = el('footer');
+  foot.append(el('button', { textContent: 'Close', onclick: closeRestartPop }),
+    // (no game running: it starts it, with this HUD)
+    el('button', { className: 'primary', textContent: live ? 'Restart the game' : 'Start the game', disabled: restarting || launching, onclick: () => { closeRestartPop(); restartGame(); } }));
+  pop.append(el('h3', { textContent: 'These show after a game restart' }),
+    el('p', { textContent: 'The game reads them only when it starts:' }), list,
+    el('p', { textContent: live ? 'A restart quits the game and starts it again with this HUD. Unsaved changes stay.' : 'The game isn\'t running: they show once it starts.' }), foot);
+  document.body.append(pop);
+  const r = $('restartmark').getBoundingClientRect();
+  pop.style.top = `${r.bottom + 8}px`;
+  pop.style.left = `${clamp(r.right - pop.offsetWidth, 12, innerWidth - pop.offsetWidth - 12)}px`;
 }
 
 // Every edit goes through here. section = HudLayout block for layout settings; scheme colours are sorted into Colors/BaseSettings.
@@ -1953,7 +1986,7 @@ async function addToHud(kind, file, lay = F(L)) {
   await writing;
   if (!inWindow) return select({ thing: { name, key: name.toLowerCase() }, info: customInfo(name), control: null });
   if (box && !loadingUp()) { status('Added: its settings are under Custom and Layout here. Show the box (top of this page) to see it.'); return refreshSoon(); }
-  if (STARTUP_RES.has(win.info.id)) { status('Added: the buy menu shows it after a game restart (⟳). Then click it in the preview to change it.'); return select({ ...win, control: null, node: null }); }
+  if (STARTUP_RES.has(win.info.id)) { status('Added: the buy menu shows it after a game restart (the ⚠ by Save HUD). Then click it in the preview to change it.'); return select({ ...win, control: null, node: null }); }
   // in a window: selected as if clicked (clicked again until it's the one, if something is over its middle), once the
   // game has made it
   for (let i = 0; i < 20; i++) {
@@ -2065,7 +2098,7 @@ function addRows(lay = F(L)) {
     el('button', { textContent: '+ Text', onclick: () => addToHud('text', null, lay) }), el('button', { textContent: '+ Colour box', onclick: () => addToHud('box', null, lay) }));
   if (lay !== F(L)) {
     r.dataset.q = 'add picture gif text box window';
-    return [...addedList(lay), r, ...(lay.name === UI_RES.buy_ct ? [noteRow('The buy menu reads its file when the game makes it: what\'s added shows after a game restart (⟳).')] : [])];
+    return [...addedList(lay), r, ...(lay.name === UI_RES.buy_ct ? [noteRow('The buy menu reads its file when the game makes it: what\'s added shows after a game restart (the ⚠ by Save HUD).')] : [])];
   }
   r.dataset.q = 'add picture image gif logo text label box colour background';
   return [...addedList(), r, noteRow('These go on the HUD you see while playing, in the middle of the screen, over the game (HudLayout). For a window (scoreboard, team select, class select, MOTD), open it, click it in the preview and use its Custom tab.'),
@@ -2302,9 +2335,10 @@ function pickAll(fx, fy) {
   // parts thinner than a few screen pixels (1-unit lines) get that much room round them, or no click lands on them
   const tol = 3 * live.W / Math.max(1, $('boxes').getBoundingClientRect().width);
   const inside = r => { const ex = r.w < 2 * tol ? tol : 0, ey = r.h < 2 * tol ? tol : 0; return x >= r.x - ex && y >= r.y - ey && x <= r.x + r.w + ex && y <= r.y + r.h + ey; };
-  const found = [], cover = covered();
+  const found = [], cover = covered(), loading = loadingUp();
   for (const p of live.panels) {
     if (!p.thing || p.w * p.h <= 0 || CONTAINERS.has(p.key) || p.key.startsWith('frame_') && p.key.endsWith('grip')) continue;
+    if (loading && p.thing.key !== 'loadingdialog') continue; // (it's in front of everything: only its parts)
     const info = thingInfo(p.thing);
     if (!info || (p === p.thing && NO_CLICK.has(p.key)) || (cover && info.kind === 'hud')) continue;
     if (info.kind === 'hud' && canHide(info.id) && isHidden(info.id)) continue; // hidden parts are still laid out, but not seen
@@ -2452,9 +2486,11 @@ function openPicker(anchor, rgba, onPick, owner, title = 'Colour', alpha = true,
   paste.onclick = async () => {
     let text = '';
     try { text = await navigator.clipboard.readText(); } catch {}
-    const p = parseColour(text) || parseColour(colourClip);
+    const src = parseColour(text) ? text : colourClip, p = parseColour(src);
     if (!p) return flash(paste, 'No colour');
-    c = alpha ? p : [...p.slice(0, 3), c[3]];
+    // (one without an opacity, #hex, R G B or rgb(), keeps this one's)
+    const hasA = /^#?[\da-f]{8}$/i.test(src.trim()) || src.replace(/^rgba?\(|\)$/gi, '').split(/[\s,/]+/).filter(Boolean).length === 4;
+    c = alpha && hasA ? p : [...p.slice(0, 3), c[3]];
     emit();
     flash(paste, 'Pasted');
   };
@@ -2955,6 +2991,8 @@ function readability(all) {
     .filter(([k]) => kindsPicked.has(k) || kindsPicked.has('text'))
     .map(([k, what]) => [what, top(k) && contrast(text, top(k))]).filter(([, r]) => r && r < 3);
 }
+// A kind's opacity set to a (its most opaque was top): one that was own scaled by as much, never to 0 (it would leave the kind)
+const kindAlpha = (own, top, a) => top ? Math.max(1, Math.min(255, Math.round(own * a / top))) : a;
 const WHERE = [[C, 'In game'], [S, 'Menus'], [CH, 'Chat']];
 const placeWords = p => !p.sub ? `${p.key} (${WHERE.find(([s]) => s === p.scheme)[1].toLowerCase()})`
   : /^borders$/i.test(p.sub[0]) ? `${p.sub[1]}: ${p.sub[2]} line ${p.sub[3]}` : `${p.path.split('/').pop()}: ${p.sub.join(' / ')} ${p.key}`;
@@ -2968,9 +3006,15 @@ function kindRows() {
     if (!mine.length) continue;
     for (const p of mine) opened[`kind|${p.id}`] ??= p.value; // (↺: each as the HUD was opened)
     const sig = l => l.map(p => p.value).join(), word = s => { const c = topColour(s ? s.split(',') : []); return c.length ? `${c[0][0]}${c.length > 1 ? ` and ${c.length - 1} more` : ''}` : 'none'; };
-    const row = colorRow(name, note, `${topColour((on.length ? on : mine).map(p => p.value))[0][0]} 255`,
-      v => setKind(kind, p => `${toRgba(v).slice(0, 3).join(' ')} ${toRgba(p.value)[3]}`, false, after), [], null, 'kinds');
-    row.querySelector('.alpha').hidden = true; // (each place keeps its own opacity)
+    // its opacity: the kind's most opaque one. Changed, every one is scaled by as much (see-through ones stay as see-through
+    // next to the rest; the invisible ones aren't in a kind), from their opacities as this row was drawn, so changing
+    // it in steps (each written) doesn't drift; left alone, each keeps its own
+    const was = new Map((on.length ? on : mine).map(p => [p.id, toRgba(p.value)[3]])), top = Math.max(...was.values());
+    const row = colorRow(name, note, `${topColour((on.length ? on : mine).map(p => p.value))[0][0]} ${top}`, v => {
+      const [r, g, b, a] = toRgba(v);
+      setKind(kind, p => `${r} ${g} ${b} ${kindAlpha(was.get(p.id) ?? toRgba(p.value)[3], top, a)}`, false, after); // (a back at top: each as it was)
+    }, [], null, 'kinds');
+    row.querySelector('.alpha').title = 'Opacity: changing it scales every colour here by as much (the see-through ones stay more see-through than the rest)';
     const now = el('div', { className: 'shares' }), say = l => { l = l.filter(kindOn); const n = topColour(l.map(p => p.value)).length; now.textContent = `${l.length} colours here, ${n > 1 ? `now ${n} different` : 'all one colour'}`; };
     row.querySelector('.meta').append(now);
     // ↺: a step of its own, like ↺ Reset (see renderList)
@@ -2989,10 +3033,13 @@ function kindRows() {
     fold.append(el('summary', { textContent: `What it changes: ${on.length} of ${mine.length}` }),
       ...(where.length > 1 ? [ticks('Where', where.map(([s, w, l]) => tick(`${kind}|@${s}`, w, l)))] : []),
       ticks('What', what.map(item => tick(`${kind}|${item}`, item, mine.filter(p => p.item === item))), true));
-    rows.push(row, fold);
+    // ("What it changes", its ticks, and the notes below: hidden for now, 10-02; rows.push(row, fold) shows it again)
+    void fold;
+    rows.push(row);
   }
-  return [warn, ...rows, noteRow('Each colour keeps its own see-through amount, so see-through things stay see-through. A kind changes only what\'s listed under it: things of other kinds that shared a colour with it keep theirs.'),
-    noteRow('In no kind (change them where they are): team colours, greyed-out text, tooltips, the main menu logo, the bomb screen, your own row on the scoreboard, pictures, and colours nothing in CS:S draws (All other colours).')];
+  return [warn, ...rows];
+  // noteRow('Each colour keeps its own see-through amount, so see-through things stay see-through. A kind changes only what\'s listed under it: things of other kinds that shared a colour with it keep theirs.'),
+  // noteRow('In no kind (change them where they are): team colours, greyed-out text, tooltips, the main menu logo, the bomb screen, your own row on the scoreboard, pictures, and colours nothing in CS:S draws (All other colours).')
 }
 
 // Rows for a HUD part: its colours, HudLayout colours, box and position/size.
@@ -3999,7 +4046,7 @@ const menuText = items => `"GameMenu"\n{\n${items.map((it, i) => `\t"${i + 1}"\n
 function setMenu(items) {
   const f = F(GM);
   commit(f, 'gamemenu', () => menuText(items));
-  writing = writing.then(() => { status('Menu buttons changed: the ⟳ by Save HUD restarts the game to show them, Save HUD keeps them.'); render(); });
+  writing = writing.then(() => { status('Menu buttons changed: the ⚠ by Save HUD restarts the game to show them, Save HUD keeps them.'); render(); });
 }
 function menuRows() {
   const f = F(GM);
@@ -4057,7 +4104,7 @@ function menuRows() {
   gap.dataset.q = 'menu button gap space empty game default';
   // ↺ for the whole list: back to the buttons, in their order, as the HUD was opened
   const names = text => menuItems({ parsed: parse(text) }).map(menuName).join(', ');
-  const note = noteRow('The game reads these when it starts: the ⟳ by Save HUD restarts it to show them. ');
+  const note = noteRow('The game reads these when it starts: the ⚠ by Save HUD restarts it to show them. ');
   note.append(undoArrow(`${GM}/buttons`, menuText(items), names, text => setMenu(menuItems({ parsed: parse(text) }))));
   note.lastElementChild.style.cssText = 'display: inline-flex; vertical-align: middle';
   return [...rows, add, run, gap, note];
@@ -4463,7 +4510,7 @@ const el = (tag, props) => Object.assign(document.createElement(tag), props);
 
 // Rebuilding the list between mouse-down and mouse-up moves the click onto a new row (a Hide button click would
 // select the row instead), so a render asked for while a button is held waits for its release.
-let pointerDown = false, renderOnRelease = false, openOther = false;
+let pointerDown = false, renderOnRelease = false, openOther = false, openColours = false;
 document.addEventListener('pointerdown', () => { pointerDown = true; }, true);
 document.addEventListener('pointerup', () => {
   pointerDown = false;
@@ -4485,10 +4532,10 @@ function render() {
 // What scrolls: the list, or with a selection its settings beside the categories.
 const scroller = () => document.querySelector('#list .section-stack') || $('list');
 
-// A heading over rows. In the list, a click on it folds them (remembered by title), like every fold here with the
-// triangle at its left; a search shows everything it finds anyway. fold false: a plain heading; no title: none.
-let folded = new Set();
-try { folded = new Set(JSON.parse(localStorage.getItem('folded') || '[]')); } catch {}
+// A heading over rows. In the list, a click on it unfolds them (all folded when the editor starts; the ones opened stay
+// open while it runs), like every fold here with the triangle at its left; a search shows everything it finds anyway.
+// fold false: a plain heading; no title: none.
+const unfolded = new Set();
 function card(title, rows, fold = true) {
   const c = el('section', { className: 'card' });
   if (!title) { c.append(...rows); return c; }
@@ -4500,10 +4547,9 @@ function card(title, rows, fold = true) {
       if (e.target.closest('button') || e.target.isContentEditable) return; // its own buttons, a title being renamed
       const on = !c.classList.contains('folded');
       set(on);
-      on ? folded.add(title) : folded.delete(title);
-      try { localStorage.setItem('folded', JSON.stringify([...folded])); } catch {}
+      on ? unfolded.delete(title) : unfolded.add(title);
     };
-    set(folded.has(title) && !$('search').value.trim());
+    set(!unfolded.has(title) && !$('search').value.trim());
   }
   sub.append(renameable(title));
   keysTip(sub, rows);
@@ -4617,6 +4663,10 @@ function renderList() {
     head.append(back, titles);
     const hide = hideButton(selected);
     if (hide) head.append(hide);
+    // ✕: closes it, back to the list from anywhere (as ‹ does from a window: the loading screen closes in the game too)
+    const close = el('button', { className: 'back close', textContent: '✕', title: 'Close (back to the list; changes stay unsaved until Save HUD)', onclick: () => select(null) });
+    close.setAttribute('aria-label', 'Close');
+    head.append(close);
     list.append(head);
     rowScope = [selected.thing.key, selected.control?.key, selected.node?.key].filter(Boolean).join('/');
     const sections = selectionSections(selected);
@@ -4723,8 +4773,9 @@ function renderList() {
   const loading = el('div', { className: 'row action' });
   loading.append(el('button', { textContent: 'Edit the loading screen', title: 'The box that shows while a map loads: the game holds it open while you edit it', onclick: () => select(LOADING_SEL()) }));
   list.append(card('Loading screen', [loading, noteRow('The box that shows while a map loads. The game holds it open while it\'s picked here.')]));
-  list.append(card('MVP star', mvpRows())); // (your own picture as the star: on the scoreboard and the round-end panel)
-  list.append(card('HUD check-up', checkupRows()));
+  // (the MVP star is the scoreboard's: Scoreboard: MVP star, see scoreboardSections)
+  // The HUD check-up, off for now (10-02): its code stays (checkupRows, runCheckup); this line puts it back in the list.
+  // list.append(card('HUD check-up', checkupRows()));
   // parts that only show now and then (kill feed, pickup history, weapon selection...), so they can be hidden too
   if (live && F(L)) {
     const shown = new Set(things.map(t => t.info.id));
@@ -4738,7 +4789,8 @@ function renderList() {
       list.append(d);
     }
   }
-  const other = el('details');
+  const other = el('details', { open: openColours });
+  other.ontoggle = () => { openColours = other.open; }; // (stays open over the list's redraws, as the cards do)
   other.append(el('summary', { textContent: 'All other colours' }), ...otherRows(C, 'In game'), ...otherRows(S, 'Menus'), ...otherRows(CH, 'Chat'));
   list.append(other, allFonts());
 }
@@ -4746,9 +4798,9 @@ function renderList() {
 // ---------- preview boxes ----------
 function boxList() {
   if (live) {
-    const boxes = [], sel = selected, cover = covered();
+    const boxes = [], sel = selected, cover = covered(), loading = loadingUp();
     for (const p of live.panels) {
-      if (!p.thing || p !== p.thing) continue;
+      if (!p.thing || p !== p.thing || (loading && p.key !== 'loadingdialog')) continue; // (the loading screen: only its box)
       const info = thingInfo(p);
       if (!info || NO_CLICK.has(p.key) || (cover && info.kind === 'hud')) continue;
       for (const r of clickRects(p, info, live.W, live.H))
@@ -5291,6 +5343,7 @@ async function restartGame(between = null) {
 
 // ---------- HUD picker ----------
 async function showPicker(canCancel, keepImport = false) {
+  closeRestartPop(); // (it would sit over the list)
   if (!keepImport) $('importlist').replaceChildren(); // (an import's message from last time)
   const lines = (await call('huds')).split('\n');
   const current = lines.pop().split('\t')[2] || '';
@@ -5347,16 +5400,19 @@ function renameRow(row, name, path, mine, canCancel) {
   input.select();
 }
 
+// (true once it's open: false if it was kept, or couldn't open, said why)
 async function openHud(path) {
-  if (dirty && !confirm(`Discard the unsaved changes to ${hudName}?`)) return;
+  if (dirty && !confirm(`Discard the unsaved changes to ${hudName}?`)) return false;
   try {
     hudName = await call('open', path);
     hudPath = path;
     try { const k = JSON.parse(localStorage.getItem('restartFor') || 'null'); if (k && k.hud === hudName && live) for (const w of k.what) restartFor.add(w); } catch {}
     needRestart();
     $('picker').hidden = true;
+    closeRestartPop();
     $('hudbtn').textContent = hudName;
     selected = null;
+    also = []; // (parts Ctrl+clicked with the last one)
     holdLoading(false);
     undoSteps.length = 0;
     dropped.clear();
@@ -5365,7 +5421,9 @@ async function openHud(path) {
     chatResOk = false;
     setDirty(false);
     await loadAll();
-    call('cmd', '', 'mat_reloadmaterial background01; mat_reloadmaterial cs_logo; mat_reloadmaterial scoreboard-select').catch(() => {}); // this HUD's menu background, logo and highlight (or the game's), not the last one's
+    // this HUD's menu background, logo, highlight, MVP star and box corners (or the game's), not the last one's (or the
+    // discarded ones: Discard changes opens it again)
+    call('cmd', '', 'mat_reloadmaterial background01; mat_reloadmaterial cs_logo; mat_reloadmaterial scoreboard-select; mat_reloadmaterial scoreboard_mvp; mat_reloadmaterial win_panel_mvpstar; mat_reloadmaterial 8x800corner').catch(() => {});
     // the game's name colours to this HUD's (or back to config.cfg's after discarding a HUD's new cfg)
     if (F(CVAR_CFG) || cvarStart) { cvarValues = null; await loadCvars(); applyCvars(F(CVAR_CFG) && F(CVAR_CFG).text); }
     status(live ? `Editing ${hudName}. Click anything in the preview to edit it.` : `Editing ${hudName}.`);
@@ -5373,8 +5431,10 @@ async function openHud(path) {
     await launchForHud();
     // the HUD's own font faces first in the font name suggestions
     call('hudfonts').then(list => { fontFaces = [...new Set([...list.split('\n').filter(Boolean).map(l => l.split('\t')[0]), ...fontFaces])]; }).catch(() => {});
+    return true;
   } catch (err) {
     alert(err.message);
+    return false;
   }
 }
 
@@ -5420,8 +5480,8 @@ async function importHud(file, folder = false) {
       box.replaceChildren();
       await openHud(path);
       if (hudName !== name.trim()) return;
-      // (a game running with another HUD has that one's buttons: openHud put up the ⟳; one it starts now has these)
-      const later = restartFor.has(`${hudName}'s main menu buttons`) ? ' Its main menu buttons show once the game restarts (the ⟳ by Save HUD).' : '';
+      // (a game running with another HUD has that one's buttons: openHud put up the ⚠; one it starts now has these)
+      const later = restartFor.has(`${hudName}'s main menu buttons`) ? ' Its main menu buttons show once the game restarts (the ⚠ by Save HUD).' : '';
       status(`Imported ${hudName} into your custom folder.${later}${cfgNote}`);
     } catch (err) { msg(err.message, true); }
   };
@@ -5506,7 +5566,17 @@ if (host) {
     }
   };
   $('save').onclick = saveHud;
-  $('restartmark').onclick = () => restartGame(); // (not the click itself as "between": it quit the game and stopped there)
+  $('restartmark').onclick = () => restartPop ? closeRestartPop() : showRestartPop();
+  document.addEventListener('mousedown', e => { if (restartPop && !restartPop.contains(e.target) && !$('restartmark').contains(e.target)) closeRestartPop(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && restartPop) closeRestartPop(); });
+  // Discard changes: every unsaved change goes (the exe puts the saved files back as the HUD is opened again)
+  $('discard').onclick = async () => {
+    await settled();
+    if (!dirty || !hudPath || !confirm(`Discard every unsaved change to ${hudName}? It goes back to how it was last saved.`)) return;
+    setDirty(false); // (asked here: not again as it opens)
+    if (!(await openHud(hudPath))) return setDirty(true); // (it couldn't open: the changes are still there, unsaved)
+    status(`Discarded the unsaved changes: ${hudName} is as it was last saved. Values taken out of HudLayout can stay in the game until it restarts.`);
+  };
   $('grid').value = String(grid);
   $('grid').onchange = () => { grid = +$('grid').value; try { localStorage.setItem('grid', grid); } catch {} };
   document.addEventListener('keydown', e => {
@@ -5578,7 +5648,7 @@ window.addEventListener('focus', () => keysDown.clear());
 
 // The game is started once a HUD is picked, not before: it reads the main menu's buttons once, as it starts, and the
 // plugin mounts the HUD being edited as it loads, so the game starts with that HUD's own. Another HUD opened while it
-// runs shows its buttons after a restart (⟳). Which HUD the game started with: the plugin says (live.loadHud), else the
+// runs shows its buttons after a restart (the ⚠ by Save HUD). Which HUD the game started with: the plugin says (live.loadHud), else the
 // one this editor launched it with (gameHud). hudPath: the open HUD's folder. menuSeen: the loadHud last checked.
 let startState = '', launching = false, gameHud = null, hudPath = null, menuSeen = null;
 const sameFolder = (a, b) => [a, b].map(p => (p || '').replace(/\//g, '\\').replace(/\\+$/, '').toLowerCase()).reduce((x, y) => !!x && x === y);
@@ -5964,6 +6034,9 @@ async function parserCheck() {
       && sv.get('2160').tall === '36' && sv.get('5').range === '0x0400 0x04FF' && !sv.has('1') && !sharedHeights(sp, 'T').length && activeVariant(sv, 900) === '900',
       `Split into resolutions (${before} -> ${[...sv].map(([k, p]) => `${k}:${p.tall}`)})`);
     check(!isSplit(tf, 'T') && isSplit(sp, 'T'), 'a split font is known as split (its button shows ✓, done)');
+    // a kind's opacity: each scaled from its own as the row was drawn, back to each as it was, never to 0 (out of the kind)
+    const ka = [kindAlpha(20, 255, 128), kindAlpha(255, 255, 128), kindAlpha(20, 255, 255), kindAlpha(3, 200, 10), kindAlpha(200, 200, 0)].join();
+    check(ka === '10,128,20,1,1', `a kind's opacity scales each colour's (${ka})`);
     // a menu dialog's font with one entry and no range (ConsoleText) is pixels everywhere, like the dialog: not one to
     // flag (the dialog doesn't scale either), but split by hand it scales from its pixels here (16 at 1440: 12 at 1080)
     const cs = ['Scheme', '{', '\tFonts', '\t{', '\t\tConsoleText', '\t\t{', '\t\t\t"1" { "name" "Lexend" "tall" "16" }', '\t\t}', '\t}', '}', ''].join('\n');
