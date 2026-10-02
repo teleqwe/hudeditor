@@ -35,3 +35,29 @@ V_ARCTIC RCDATA "../defaults/ui/classes/arctic.res"
 V_GUERILLA RCDATA "../defaults/ui/classes/guerilla.res"
 V_AUTOSELECT_CT RCDATA "../defaults/ui/classes/autoselect_ct.res"
 V_AUTOSELECT_T RCDATA "../defaults/ui/classes/autoselect_t.res"
+// the version (file properties); keep it the same as APP_VERSION in main.cpp and the page's header badge
+1 VERSIONINFO
+FILEVERSION 0,9,0,0
+PRODUCTVERSION 0,9,0,0
+FILEFLAGSMASK 0x3F
+FILEFLAGS 0x2
+FILEOS 0x40004
+FILETYPE 0x1
+BEGIN
+	BLOCK "StringFileInfo"
+	BEGIN
+		BLOCK "040904B0"
+		BEGIN
+			VALUE "FileDescription", "CS:S HUD Editor"
+			VALUE "FileVersion", "0.9.0-beta"
+			VALUE "ProductName", "CS:S HUD Editor"
+			VALUE "ProductVersion", "0.9.0-beta"
+			VALUE "LegalCopyright", "Copyright (c) 2026 tele4. MIT License."
+			VALUE "OriginalFilename", "CSSHudEditor.exe"
+		END
+	END
+	BLOCK "VarFileInfo"
+	BEGIN
+		VALUE "Translation", 0x409, 1200
+	END
+END

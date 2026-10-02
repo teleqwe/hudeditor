@@ -36,6 +36,7 @@ static ComPtr<ICoreWebView2> g_web;
 static wstring g_game;        // ...\Counter-Strike Source\cstrike
 static wstring g_custom;      // g_game\custom, or the --selftest folder
 static wstring g_hudPath;     // the HUD being edited
+#define APP_VERSION L"0.9.0 beta" // (also in app.rc and the page's header)
 static wstring g_unsaved;     // saved versions of the files changed since the last save (see KeepSaved)
 static wstring g_settings;    // recent HUD folders, most recent first
 static wstring g_steamExe;
@@ -1447,7 +1448,7 @@ int WINAPI wWinMain( HINSTANCE inst, HINSTANCE, LPWSTR, int show )
 	wc.hbrBackground = CreateSolidBrush( RGB( 0x11, 0x10, 0x13 ) ); // the page's background (--base)
 	wc.lpszClassName = L"CSSHudEditor";
 	RegisterClassW( &wc );
-	g_hwnd = CreateWindowW( wc.lpszClassName, L"CS:S HUD Editor", WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, 1500, 900, NULL, NULL, inst, NULL );
+	g_hwnd = CreateWindowW( wc.lpszClassName, L"CS:S HUD Editor " APP_VERSION, WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, 1500, 900, NULL, NULL, inst, NULL );
 	// the title bar in the page's colours: dark (Windows 10 20H1+), then its surface, edge and text colours (Windows 11)
 	BOOL dark = TRUE;
 	COLORREF caption = RGB( 0x19, 0x17, 0x1b ), edge = RGB( 0x42, 0x39, 0x41 ), title = RGB( 0xe6, 0xdf, 0xe4 );
