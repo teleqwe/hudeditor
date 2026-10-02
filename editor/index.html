@@ -121,7 +121,7 @@
   #parts:empty { display: none; }
   #ingame { display: grid; gap: 8px; padding: 10px 0 4px; }
   .ingame { display: flex; gap: 8px; }
-  .ingame button { flex: 1; min-width: 0; padding: 6px 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ingame button { flex: 1 1 auto; min-width: 0; padding: 6px 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ingame.chips button { padding: 3px 8px; border-radius: 12px; font-size: 12px; }
   .ingame.chips button[aria-pressed="false"] { opacity: .5; text-decoration: line-through; }
   .toolsbtn[aria-expanded="true"] { border-color: var(--accent); background: var(--soft); }
@@ -163,7 +163,7 @@
   .section-stack > .card:first-child > .sub, .section-stack > .card.fonts:first-child .divider:first-child { margin-top: 12px; }
   .card > .sub.tri { cursor: pointer; user-select: none; }
   .card > .sub > .renamed-wrap, .card.fonts .divider > .renamed-wrap { flex: 1; }
-  .card.folded > :not(.sub) { display: none; }
+  .card.folded > :not(.sub) { display: none !important; } /* (over a part's own display, as In-game Toggles' grid) */
   .card.fonts .divider .addfont { margin: 0; font-weight: 400; }
   details > summary { list-style: none; cursor: pointer; }
   summary::-webkit-details-marker { display: none; }
@@ -1066,8 +1066,9 @@ function chatFit(c, wide, pad = parseInt(layoutProps(c, 'HudChatHistory').xpos, 
   save(c, 'xpos_hudeditor' in fb ? 'xpos_hudeditor' : 'xpos', x, 'ChatFiltersButton', group); // (hidden: off screen, its place kept)
 }
 
-// A reload re-applies the chat's settings, which takes it out of typing. If it was open when an edit started, press
-// the player's chat key once it closes (the game opens it only from a real key press; the editor comes back after).
+// A reload re-applies the chat's settings, which takes it out of typing. If it was open (typed in) when an edit
+// started, the plugin holds it shown open from then on, as In-game Toggles' Chat does: no key pressed (that brought
+// the game forward and the cursor onto the chat every time)
 let chatKey = null, chatWatch = null;
 const chatOpen = () => live && live.panels.some(p => p.key === 'hudchat' && p.keys); // typing: the chat takes keys
 // the player's messagemode key (config.cfg), as a scan code
@@ -1080,15 +1081,10 @@ async function chatKeyScan() {
   return chatKey;
 }
 function keepChatOpen() {
-  const open = chatOpen;
-  if (chatWatch || !open()) return;
-  let tries = 0;
-  chatWatch = setInterval(async () => {
-    if (open() && ++tries < 12) return; // wait up to 6 s for the reload
-    clearInterval(chatWatch);
-    if (!open()) await call('key', await chatKeyScan()).catch(() => {});
-    chatWatch = null;
-  }, 500);
+  if (keepChat || !chatOpen()) return;
+  keepChat = true;
+  $('keepchat').setAttribute('aria-pressed', 'true');
+  call('cmd', '', 'schemereload_chat 1').catch(() => {});
 }
 
 // Writes a file's new text (made by edit() from its current text) as one undo step, once earlier writes are done.
@@ -5197,8 +5193,7 @@ async function poll() {
   if (loadHud !== menuSeen) { menuSeen = loadHud; if (live) menuMark(); }
   // the scoreboard closes when the HUD reloads: open it again while it's being kept open
   if (keepScores && live && !live.panels.some(p => p.key === 'scores') && Date.now() - scoresSent > 1500) { scoresSent = Date.now(); call('cmd', '', '+showscores'); }
-  // the same for the chat (a reload takes it out of typing): the player's chat key opens it again
-  if (keepChat && live && !chatOpen() && !chatWatch && Date.now() - chatSent > 4000) { chatSent = Date.now(); chatKeyScan().then(k => call('key', k)).catch(() => {}); }
+  // (the chat: the plugin holds it, see Chat in In-game Toggles)
   if (selected && live && !live.panels.includes(selected.thing)) {
     // the same thing, found again in the new list (panels are re-read every time). One that is gone stays selected:
     // windows close while the HUD reloads (the scoreboard) and come back
@@ -5314,6 +5309,7 @@ function inGameRow() {
   $('textsbtn').title = local ? 'The test game\'s sample timer and speed texts: each on or off' : 'Only in the test game (Test server): the sample timer and speed texts';
   if (!local) { $('textchips').hidden = true; $('textsbtn').setAttribute('aria-expanded', 'false'); }
   if (!on && (keepScores || keepChat)) {
+    if (keepChat && live) call('cmd', '', 'schemereload_chat 0').catch(() => {});
     keepScores = keepChat = false;
     $('scores').setAttribute('aria-pressed', 'false');
     $('keepchat').setAttribute('aria-pressed', 'false');
@@ -5644,12 +5640,13 @@ if (host) {
     $('scores').setAttribute('aria-pressed', keepScores);
     call('cmd', '', keepScores ? '+showscores' : '-showscores');
   };
-  $('keepchat').onclick = async () => {
+  // held open by the plugin, looking as while typing (no keys pressed, the game not brought forward, the cursor left
+  // where it is), through every reload (see the plugin's schemereload_chat)
+  $('keepchat').onclick = () => {
     if (!live) return status('Start the game first.');
     keepChat = !keepChat;
     $('keepchat').setAttribute('aria-pressed', keepChat);
-    // Esc closes the chat; pressed with it closed it would open the game's menu instead
-    if (keepChat !== !!chatOpen()) { chatSent = Date.now(); await call('key', keepChat ? await chatKeyScan() : '01').catch(() => {}); }
+    call('cmd', '', `schemereload_chat ${keepChat ? 1 : 0}`);
   };
   $('texts').onclick = e => { const b = e.target.closest('button'); if (b) toggleText(+b.dataset.bit); };
   $('textchips').onclick = e => { const b = e.target.closest('button'); if (b) toggleText(+b.dataset.bit); };

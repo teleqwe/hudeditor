@@ -1472,6 +1472,53 @@ static void LoadingReload()
 		LoadingBroke();
 }
 
+//-----------------------------------------------------------------------------
+// The chat held open for the editor (In-game Toggles: Chat): looking as it does while typing, but not typing. The chat
+// key runs StartMessageMode, which puts the mouse cursor on the chat (vgui SetCursorPos) and works only with the game
+// in front, so the editor had to bring the game forward and press the key again after every reload, and the cursor
+// jumped each time. CBaseHudChat draws itself open while it takes mouse input (FadeChatHistory: its background and
+// the typing line's and Filters button's alpha), so that is switched on, and the typing line shown, every tick while
+// it's held (a reload switches them off), through IPanel: no cursor move, no keys, nothing brought to the front.
+//-----------------------------------------------------------------------------
+static bool g_bChatHold, g_bChatHeld, g_bChatBroken;
+static void ChatHoldStep()
+{
+	VPANEL chat = FindNamed( TopPanel(), "HudChat", 0 );
+	if ( !chat )
+		return;
+	VPANEL line = FindNamed( chat, "ChatInputLine", 0 );
+	if ( g_bChatHold )
+	{
+		if ( !g_pVPanel->IsMouseInputEnabled( chat ) )
+			g_pVPanel->SetMouseInputEnabled( chat, true );
+		if ( line && !g_pVPanel->IsVisible( line ) )
+			g_pVPanel->SetVisible( line, true );
+		g_bChatHeld = true;
+	}
+	else if ( g_bChatHeld )
+	{
+		g_bChatHeld = false;
+		if ( !g_pVPanel->IsKeyBoardInputEnabled( chat ) ) // (typed in for real since: left to the chat itself)
+		{
+			g_pVPanel->SetMouseInputEnabled( chat, false );
+			if ( line )
+				g_pVPanel->SetVisible( line, false );
+		}
+	}
+}
+static void ChatBroke()
+{
+	g_bChatBroken = true;
+	g_bChatHold = g_bChatHeld = false;
+	Warning( "[schemereload] holding the chat open crashed; switched off until restart\n" );
+}
+CON_COMMAND( schemereload_chat, "schemereload_chat 1|0: holds the chat shown open (as while typing, without typing), or lets it go" )
+{
+	g_bChatHold = args.ArgC() > 1 && atoi( args.Arg( 1 ) ) != 0;
+	if ( !g_bChatBroken && !SR_SafeCall( ChatHoldStep ) )
+		ChatBroke();
+}
+
 CON_COMMAND( schemereload_loading, "schemereload_loading show|vac|hide: holds the loading screen open (vac: as on VAC-secured servers), or closes it" )
 {
 	if ( args.ArgC() < 2 || g_bLoadingBroken )
@@ -1718,6 +1765,8 @@ static void TimerTick()
 	SR_SafeCall( RunCommandFile );
 	if ( g_nLoading && !g_bLoadingBroken && !SR_SafeCall( LoadingWatch ) )
 		LoadingBroke();
+	if ( ( g_bChatHold || g_bChatHeld ) && !g_bChatBroken && !SR_SafeCall( ChatHoldStep ) )
+		ChatBroke();
 	Centre();
 	if ( !g_bDumpBroken && g_pEngineServer && !SR_SafeCall( DumpPanels ) )
 	{
