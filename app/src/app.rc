@@ -39,8 +39,8 @@ V_AUTOSELECT_CT RCDATA "../defaults/ui/classes/autoselect_ct.res"
 V_AUTOSELECT_T RCDATA "../defaults/ui/classes/autoselect_t.res"
 // the version (file properties); keep it the same as APP_VERSION in main.cpp
 1 VERSIONINFO
-FILEVERSION 0,9,0,0
-PRODUCTVERSION 0,9,0,0
+FILEVERSION 0,9,1,0
+PRODUCTVERSION 0,9,1,0
 FILEFLAGSMASK 0x3F
 FILEFLAGS 0x2
 FILEOS 0x40004
@@ -51,9 +51,9 @@ BEGIN
 		BLOCK "040904B0"
 		BEGIN
 			VALUE "FileDescription", "Tele HUD Editor"
-			VALUE "FileVersion", "0.9.0-beta"
+			VALUE "FileVersion", "0.9.1-beta"
 			VALUE "ProductName", "Tele HUD Editor"
-			VALUE "ProductVersion", "0.9.0-beta"
+			VALUE "ProductVersion", "0.9.1-beta"
 			VALUE "LegalCopyright", "Copyright (c) 2026 tele4. MIT License."
 			VALUE "OriginalFilename", "CSSHudEditor.exe"
 		END

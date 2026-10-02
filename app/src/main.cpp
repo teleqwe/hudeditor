@@ -37,7 +37,7 @@ static wstring g_game;        // ...\Counter-Strike Source\cstrike
 static wstring g_custom;      // g_game\custom, or the --selftest folder
 static wstring g_hudPath;     // the HUD being edited
 #define APP_NAME L"Tele HUD Editor" // the window's title, with the version (also in app.rc)
-#define APP_VERSION L"0.9.0 beta"     // (also in app.rc)
+#define APP_VERSION L"0.9.1 beta"     // (also in app.rc)
 static wstring g_unsaved;     // saved versions of the files changed since the last save (see KeepSaved)
 static wstring g_settings;    // recent HUD folders, most recent first
 static wstring g_steamExe;
