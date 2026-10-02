@@ -152,19 +152,23 @@
   .category-button:hover { background: var(--raised); border-color: transparent; color: var(--text); }
   .category-button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--base); font-weight: 550; }
   .category-button:disabled { opacity: .35; background: transparent; border-color: transparent; }
-  .section-stack { min-width: 0; overflow: auto; padding: 6px 17px 24px; }
+  .section-stack { min-width: 0; overflow: auto; padding: 2px 8px 24px; } /* (its sections are panels with their own sides) */
   .sidebar-footer { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 16px; background: var(--surface); border-top: 1px solid var(--line); }
   .sidebar-footer .state { color: var(--muted); font-size: 11px; }
   .sidebar-footer .btns { display: flex; gap: 6px; }
   .sidebar-footer button { padding: 5px 8px; }
 
   /* sections: a quiet heading over flat rows (in the list, a click on the heading folds it) */
-  .card > .sub, .sub, #list > h3, .card.fonts .divider { display: flex; align-items: center; gap: 6px; margin: 18px 0 2px; padding: 0; font-size: 12px; font-weight: 500; color: var(--muted); }
-  .section-stack > .card:first-child > .sub, .section-stack > .card.fonts:first-child .divider:first-child { margin-top: 12px; }
+  .card > .sub, .sub, #list > h3 { display: flex; align-items: center; gap: 6px; margin: 18px 0 2px; padding: 0; font-size: 12px; font-weight: 500; color: var(--muted); }
   .card > .sub.tri { cursor: pointer; user-select: none; }
-  .card > .sub > .renamed-wrap, .card.fonts .divider > .renamed-wrap { flex: 1; }
+  .card > .sub > .renamed-wrap { flex: 1; }
   .card.folded > :not(.sub) { display: none !important; } /* (over a part's own display, as In-game Toggles' grid) */
-  .card.fonts .divider .addfont { margin: 0; font-weight: 400; }
+  .card > .sub .addfont { margin: 0; font-weight: 400; }
+  /* a selection's sections: each a panel of its own, its title in a strip along its top, so it's clear where one ends */
+  .section-stack > .card { margin: 10px 0 0; padding: 0 10px 2px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+  .section-stack > .card > .sub { margin: 0 -10px; padding: 10px; border-bottom: 1px solid var(--line); border-radius: 7px 7px 0 0;
+    background: var(--raised); font-size: 12.5px; font-weight: 600; color: var(--text); }
+  .section-stack > .card > .sub + :is(.row, .fold) { border-top: 0; }
   details > summary { list-style: none; cursor: pointer; }
   summary::-webkit-details-marker { display: none; }
   summary::before, .tri::before { content: ''; display: inline-block; flex: none; width: 0; height: 0; margin-right: 8px; vertical-align: 1px;
@@ -4613,19 +4617,14 @@ function partsFold() {
   return d;
 }
 
-// Every font section of a selection in one card, each under a line with its title.
-function fontsCard(sections) {
-  const c = el('section', { className: 'card fonts' });
-  for (const [title, rows] of sections) {
-    const line = el('div', { className: 'divider' });
-    line.append(renameable(title));
-    keysTip(line, rows);
-    c.append(line, ...rows);
-  }
-  // Add font, at the right of the first line: into the schemes these fonts are in
-  const files = [...new Set([...c.querySelectorAll('[data-file]')].map(d => d.dataset.file))];
-  if (files.length) c.firstElementChild.append(el('button', { className: 'mini addfont', textContent: '+ Add font', title: 'Add a .ttf or .otf font file to the HUD', onclick: () => addFontFile(files) }));
-  return c;
+// A selection's font sections, each a panel of its own like the other categories' (they were one card, each under a
+// line: it wasn't clear where one ended).
+function fontsCards(sections) {
+  const cards = sections.map(([title, rows]) => card(title, rows, false));
+  // + Add font, at the right of the first one's title: into the schemes these fonts are in
+  const files = [...new Set(cards.flatMap(c => [...c.querySelectorAll('[data-file]')].map(d => d.dataset.file)))];
+  if (files.length && cards[0].querySelector('.sub')) cards[0].querySelector('.sub').append(el('button', { className: 'mini addfont', textContent: '+ Add font', title: 'Add a .ttf or .otf font file to the HUD', onclick: () => addFontFile(files) }));
+  return cards;
 }
 
 function renderList() {
@@ -4702,8 +4701,8 @@ function renderList() {
     if (also.length) stack.append(card(`Line up ${also.length + 1} parts`, lineUpRows(), false));
     if (selected.thing.key === 'loadingdialog') stack.append(card('', loadingHoldRows(), false)); // (on every tab: which box)
     const mine = sections.filter(s => s[2] === shown).map(([t, r]) => [sectionTitle(t), r]);
-    // every font in one card, each part's set under a line with its name
-    if (mine.length) stack.append(...(shown === 'font' ? [fontsCard(mine)] : mine.map(([t, r]) => card(t, r, false))));
+    // each section a panel of its own (fonts: + Add font on the first)
+    if (mine.length) stack.append(...(shown === 'font' ? fontsCards(mine) : mine.map(([t, r]) => card(t, r, false))));
     else stack.append(el('p', { className: 'meta', textContent: 'Nothing to edit here yet.' }));
     layout.append(nav, stack);
     list.append(layout);
