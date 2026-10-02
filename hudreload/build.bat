@@ -36,7 +36,8 @@ cl %CFLAGS% %DEFS% %INC% /Fo"%OUT%\\" ^
  "%T1%\checksum_crc.cpp" "%T1%\checksum_md5.cpp" "%T1%\byteswap.cpp" "%T1%\processor_detect.cpp" ^
  || exit /b 1
 
-link /nologo /DLL /OUT:"%OUT%\schemereload.dll" "%OUT%\*.obj" ^
+rem (the map: which function a crash dump's schemereload.dll+offset is in, see dev\dmp.py)
+link /nologo /DLL /MAP:"%OUT%\schemereload.map" /OUT:"%OUT%\schemereload.dll" "%OUT%\*.obj" ^
  "%SDK%\lib\public\x64\tier0.lib" "%SDK%\lib\public\x64\vstdlib.lib" ^
  user32.lib advapi32.lib shell32.lib ws2_32.lib || exit /b 1
 
