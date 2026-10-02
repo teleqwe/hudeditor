@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>HUD Editor</title>
+<title>Tele HUD Editor</title>
 <style>
   /* Graphite Rose: charcoal surfaces, pink kept for the chosen tab, the main action, what's selected and focus */
   :root { --base: #111013; --surface: #19171b; --raised: #252127; --field: #0e0d10; --text: #e6dfe4; --muted: #a99ba4; --line: #423941;
@@ -45,11 +45,11 @@
 
   /* the title strip: the HUD and saving */
   .app-header { grid-column: 1 / -1; display: flex; align-items: center; gap: 18px; min-width: 0; padding: 11px 18px; background: var(--surface); border-bottom: 1px solid var(--line); }
-  .app-name { font-size: 14px; font-weight: 600; white-space: nowrap; }
-  .app-version { margin-left: 6px; padding: 1px 6px; border: 1px solid var(--line); border-radius: 9px; font-size: 11px; font-weight: 400; color: var(--muted, #9aa0aa); }
-  #hudbtn { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 2px 0 2px 18px; border: 0; border-left: 1px solid var(--line); border-radius: 0; background: none; color: var(--muted); }
-  #hudbtn::after { content: '⌄'; margin-left: 8px; }
-  #hudbtn:hover { color: var(--text); }
+  /* the HUD being edited (the app's name and version are in the window's title): a click lists the others */
+  #hudbtn { flex: 0 1 auto; min-width: 140px; max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 6px 30px 6px 11px;
+    font-weight: 600; background: var(--field) var(--chevron) no-repeat right 11px center / 9px 6px; }
+  #hudbtn::before { content: 'HUD'; margin-right: 9px; padding-right: 9px; border-right: 1px solid var(--line); font-size: 11px; font-weight: 500; letter-spacing: .06em; color: var(--muted); }
+  #hudbtn:hover { border-color: var(--accent); background-color: var(--soft); }
   .app-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
   #restartmark { padding: 4px 10px; border-color: var(--accent); color: var(--accent); font-size: 15px; line-height: 1.2; }
   .app-actions .sep { width: 1px; height: 24px; margin: 0 6px; background: var(--line); }
@@ -304,9 +304,10 @@
   #picker .hud.primary { color: var(--text); background: var(--soft); border-color: var(--accent); font-weight: 400; }
   #picker .hud .meta { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* where a HUD's folder or archive is dropped (anywhere on the editor works too) */
-  #picker .hud.drop { padding: 16px 12px; text-align: center; border-style: dashed; }
-  #picker .hud.drop .meta { white-space: normal; }
-  body.dragging #picker .hud.drop { border-color: var(--accent); background: var(--soft); }
+  #picker .drop { margin: 6px 0; padding: 14px 12px; text-align: center; border: 1px dashed var(--line); border-radius: var(--radius); }
+  #picker .drop .meta { display: block; }
+  #picker .drop .dropbtns { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 10px; }
+  body.dragging #picker .drop { border-color: var(--accent); background: var(--soft); }
   .mvpthumb { width: 44px; height: 44px; display: grid; place-items: center; font-size: 32px; line-height: 1; color: #f2c230; border: 1px solid var(--line); border-radius: 6px; }
   .mvpthumb canvas { max-width: 40px; max-height: 40px; }
   #picker .hudrow { display: flex; gap: 6px; align-items: center; margin: 6px 0; }
@@ -327,8 +328,7 @@
 </head>
 <body>
 <header class="app-header">
-  <span class="app-name">CS:S HUD Editor <span class="app-version" title="A beta: back up a HUD you care about before editing it">0.9.0 beta</span></span>
-  <button id="hudbtn" title="Pick which HUD to edit">No HUD open</button>
+  <button id="hudbtn" title="The HUD you're editing: click to pick another, rename one, or add one">No HUD open</button>
   <div class="app-actions">
     <button id="capture" hidden>Capture game</button>
     <button id="launch" hidden>Launch game</button>
@@ -405,7 +405,8 @@
   <h2>Which HUD do you want to edit?</h2>
   <p class="meta">The HUDs in your custom folder (cstrike/custom). Changes show in game straight away. They are kept when you click Done or Save HUD.</p>
   <div id="hudlist"></div>
-  <button id="importhud" class="hud drop">Add a HUD: drop it here<span class="meta">Its folder, or the .zip, .rar or .7z as downloaded. A copy goes in your custom folder. (Or click to pick the archive.)</span></button>
+  <div id="importhud" class="drop">Add a HUD: drop it here<span class="meta">Its folder, or the .zip, .rar or .7z as downloaded. A copy goes in your custom folder.</span>
+    <div class="dropbtns"><button id="pickfolder">Choose a folder...</button><button id="pickarchive">Choose a .zip, .rar or .7z...</button></div></div>
   <input type="file" id="importfile" accept=".zip,.rar,.7z" hidden>
   <div id="importlist"></div>
   <button id="newhud" class="hud">Start a new HUD<span class="meta">From the default look, in your custom folder</span></button>
@@ -5383,24 +5384,29 @@ async function openHud(path) {
 // (cstrike, custom, my_custom_stuff...) give way to the archive's name, without the tag GameBanana adds to it.
 const DULL_NAMES = /^(cstrike|custom|hud|huds|default|my_custom_stuff|mycustomstuff|resource|scripts|files|upload)$/i;
 // folder: a HUD's folder dropped on the editor, copied in the same way (the exe gets its path from the File; the folder
-// itself is left as it is). One that's in the custom folder already is just opened.
+// itself is left as it is); 'pick': one chosen in Windows' folder picker (Choose a folder..., file null). One that's in
+// the custom folder already is just opened.
 async function importHud(file, folder = false) {
   const box = $('importlist'), msg = (text, err = false) => box.replaceChildren(el('p', { className: `meta${err ? ' err' : ''}`, textContent: text }));
   if (!folder && !/\.(zip|rar|7z)$/i.test(file.name)) return msg(`${file.name} isn't a .zip, .rar or .7z. An installer (.exe) isn't a HUD folder: run it yourself, then drop the folder it made here.`, true);
-  msg(folder ? `Copying ${file.name}...` : `Unpacking ${file.name}...`);
+  if (file) msg(folder ? `Copying ${file.name}...` : `Unpacking ${file.name}...`);
   let found;
-  try { found = (folder ? await call('importfolder', '', '', [file]) : await call('unpack', file.name, await base64(new Uint8Array(await file.arrayBuffer())))).split('\n').filter(Boolean).map(l => l.split('\t')); }
-  catch (err) { return msg(err.message, true); }
+  try {
+    found = (folder === 'pick' ? await call('importfolder', 'pick') : folder ? await call('importfolder', '', '', [file])
+      : await call('unpack', file.name, await base64(new Uint8Array(await file.arrayBuffer())))).split('\n').filter(Boolean).map(l => l.split('\t'));
+  } catch (err) { return err.message === 'cancelled' ? undefined : msg(err.message, true); }
+  // (a folder's name, from the exe: a picked one's is known only there)
+  const name = (found.find(([k]) => k === 'name') || [])[1] || (file ? file.name : 'The folder');
   const there = found.find(([k]) => k === 'incustom');
   if (there) {
     box.replaceChildren();
     await openHud(there[1]); // (it may not open: unsaved changes kept, or it failed and said why)
-    if (sameFolder(hudPath, there[1])) status(`${file.name} is in your custom folder already: it's open now.`);
+    if (sameFolder(hudPath, there[1])) status(`${name} is in your custom folder already: it's open now.`);
     return;
   }
   const huds = found.filter(([k]) => k === 'hud').map(([, rel]) => rel), other = found.filter(([k]) => k === 'other').map(([, rel]) => rel.replace(/\\/g, '/'));
   // (names that say nothing, the archive's too, as cstrike_e649a.rar: "Imported HUD", and the name is asked for)
-  const dull = n => !n || DULL_NAMES.test(n.trim().replace(/\s+/g, '_')), raw = (folder ? file.name : file.name.replace(/\.[^.]+$/, '')).replace(/_[0-9a-f]{5}$/i, '').replace(/[_]+/g, ' ').trim();
+  const dull = n => !n || DULL_NAMES.test(n.trim().replace(/\s+/g, '_')), raw = (folder ? name : name.replace(/\.[^.]+$/, '')).replace(/_[0-9a-f]{5}$/i, '').replace(/[_]+/g, ' ').trim();
   const stem = dull(raw) ? 'Imported HUD' : raw, says = rel => !dull(rel.split('\\').pop()) || !dull(raw);
   const taken = new Set((await call('huds')).split('\n').map(l => (l.split('\t')[0] || '').toLowerCase()));
   const unique = n => { let m = n, i = 2; while (taken.has(m.toLowerCase())) m = `${n} ${i++}`; return m; };
@@ -5420,8 +5426,8 @@ async function importHud(file, folder = false) {
     } catch (err) { msg(err.message, true); }
   };
   if (huds.length === 1 && says(huds[0])) return put(huds[0], nameFor(huds[0]));
-  box.replaceChildren(el('p', { className: 'meta', textContent: huds.length > 1 ? `${file.name} has ${huds.length} HUDs in it (versions of it, most likely). Import the one you want, or each under its own name:`
-    : `Nothing in ${file.name} says what the HUD is called: give it a name.` }));
+  box.replaceChildren(el('p', { className: 'meta', textContent: huds.length > 1 ? `${name} has ${huds.length} HUDs in it (versions of it, most likely). Import the one you want, or each under its own name:`
+    : `Nothing in ${name} says what the HUD is called: give it a name.` }));
   for (const rel of huds) {
     const row = el('div', { className: 'pick' }), name = el('input', { value: nameFor(rel), maxLength: 60 });
     name.setAttribute('aria-label', 'Name for this HUD');
@@ -5483,7 +5489,8 @@ async function onHostEvent(ev) {
 if (host) {
   $('hudbtn').onclick = () => showPicker(true);
   $('pickclose').onclick = () => { $('picker').hidden = true; };
-  $('importhud').onclick = () => { $('importfile').value = ''; $('importfile').click(); };
+  $('pickarchive').onclick = () => { $('importfile').value = ''; $('importfile').click(); };
+  $('pickfolder').onclick = () => importHud(null, 'pick');
   $('importfile').onchange = () => { const f = $('importfile').files[0]; if (f) importHud(f); };
   $('newhud').onclick = () => { $('newform').hidden = false; $('newerr').textContent = ''; $('newname').focus(); };
   $('newform').onsubmit = async e => {
@@ -5986,7 +5993,7 @@ if (host && location.hash === '#hosttest') (async () => {
       // the editor only lists the custom folder; a HUD folder dropped from there is opened, not copied
       const listed = (await call('huds')).split('\n').filter(l => l && !l.startsWith('\t')).map(l => l.split('\t'));
       check(listed.length === 1 && listed[0][1] === path && listed[0][2] === 'custom', 'the HUD list is the HUDs in the custom folder');
-      check(await call('importfolder', path) === `incustom\t${path}`, 'a HUD folder dropped from the custom folder is opened, not copied');
+      check(await call('importfolder', path) === `name\tmyhud\nincustom\t${path}`, 'a HUD folder dropped from the custom folder is opened, not copied');
     }
     for (const [id, hud] of Object.entries(HUD)) for (const [, keys] of hud.colours || [])
       for (const k of keys.split('|')) if (!['Yellowish', 'Caution'].includes(k)) check(resolve(tables(F(hud.scheme || C)), k), `${hud.scheme || C} has ${k}`);

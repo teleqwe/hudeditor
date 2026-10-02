@@ -36,7 +36,8 @@ static ComPtr<ICoreWebView2> g_web;
 static wstring g_game;        // ...\Counter-Strike Source\cstrike
 static wstring g_custom;      // g_game\custom, or the --selftest folder
 static wstring g_hudPath;     // the HUD being edited
-#define APP_VERSION L"0.9.0 beta" // (also in app.rc and the page's header)
+#define APP_NAME L"Tele HUD Editor" // the window's title, with the version (also in app.rc)
+#define APP_VERSION L"0.9.0 beta"     // (also in app.rc)
 static wstring g_unsaved;     // saved versions of the files changed since the last save (see KeepSaved)
 static wstring g_settings;    // recent HUD folders, most recent first
 static wstring g_steamExe;
@@ -573,6 +574,24 @@ static bool Nested( wstring a, wstring b )
 }
 // The paths of the files the page sent with its message (a folder dropped on it), see add_WebMessageReceived
 static std::vector< wstring > g_dropped;
+// Choose a folder... in the picker: Windows' folder picker ("" if cancelled); the folder is imported like a dropped one
+static wstring PickFolder()
+{
+	ComPtr< IFileOpenDialog > dlg;
+	if ( FAILED( CoCreateInstance( CLSID_FileOpenDialog, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS( &dlg ) ) ) )
+		return wstring();
+	DWORD opts;
+	dlg->GetOptions( &opts );
+	dlg->SetOptions( opts | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM );
+	dlg->SetTitle( L"Choose the HUD's folder (a copy goes in your custom folder)" );
+	ComPtr< IShellItem > item;
+	wchar_t *path = NULL;
+	if ( FAILED( dlg->Show( g_hwnd ) ) || FAILED( dlg->GetResult( &item ) ) || FAILED( item->GetDisplayName( SIGDN_FILESYSPATH, &path ) ) )
+		return wstring();
+	wstring out = path;
+	CoTaskMemFree( path );
+	return out;
+}
 static bool Untar( const wstring &archive, const wstring &dir )
 {
 	wchar_t sys[MAX_PATH];
@@ -934,21 +953,24 @@ static void OnMessage( const wstring &msg )
 	}
 	else if ( op == L"unpack" || op == L"importfolder" ) // unpack: arg = an archive's name, body = the archive in base64.
 	{ // importfolder: a folder dropped on the page, its path from the File sent with the message (never from the page's
-	  // text; arg in --selftest), copied in. Answer: "hud\t<folder in it>" per HUD in it ("" for its top), then up to 20
-	  // "other\t<file>" for what's beside them; for a HUD folder already in custom, "incustom\t<its path>"
-		bool folder = op == L"importfolder";
-		wstring from = !folder ? L"" : !g_dropped.empty() ? g_dropped[0] : g_selftestOut.empty() ? L"" : arg;
+	  // text; arg in --selftest), or arg "pick": chosen in Windows' folder picker; copied in. Answer: for a folder,
+	  // "name\t<its name>" first; "hud\t<folder in it>" per HUD in it ("" for its top), then up to 20 "other\t<file>"
+	  // for what's beside them; for a HUD folder already in custom, "incustom\t<its path>". "cancelled": picker closed
+		bool folder = op == L"importfolder", pick = folder && arg == L"pick";
+		wstring from = !folder ? L"" : pick ? PickFolder() : !g_dropped.empty() ? g_dropped[0] : g_selftestOut.empty() ? L"" : arg;
 		while ( from.size() > 3 && ( from.back() == L'\\' || from.back() == L'/' ) )
 			from.pop_back();
 		wstring name = folder ? NameOf( from ) : NameOf( arg ), dir = ImportDir(), x = dir + L"\\x", file = dir + L"\\" + name;
 		std::error_code ec;
 		std::vector< wstring > huds;
-		if ( g_custom.empty() )
+		if ( pick && from.empty() )
+			fail( L"cancelled" );
+		else if ( g_custom.empty() )
 			fail( noGame );
 		else if ( folder && !IsDir( from ) )
 			fail( L"Drop the HUD's folder here, or its .zip, .rar or .7z." );
 		else if ( folder && InCustom( from ) && IsHud( from ) )
-			out = L"incustom\t" + from;
+			out = L"name\t" + name + L"\nincustom\t" + from;
 		else if ( folder && ( from.size() <= 3 || !_wcsicmp( from.c_str(), g_custom.c_str() ) || !_wcsicmp( from.c_str(), g_game.c_str() ) ) )
 			fail( L"That's a whole drive or the game's own folder: drop one HUD's folder." );
 		else if ( folder && Nested( from, dir.substr( 0, dir.rfind( L'\\' ) ) ) )
@@ -965,6 +987,8 @@ static void OnMessage( const wstring &msg )
 			fail( name + L" has no HUD in it: no folder with resource or scripts inside." );
 		else
 		{
+			if ( folder )
+				out += L"name\t" + name + L"\n";
 			for ( auto &h : huds )
 				out += L"hud\t" + h + L"\n";
 			int n = 0;
@@ -1336,7 +1360,7 @@ static void Fit()
 static HRESULT OnController( HRESULT hr, ICoreWebView2Controller *ctl )
 {
 	if ( FAILED( hr ) || !ctl )
-		return MessageBoxW( g_hwnd, L"Couldn't start the WebView2 browser view.", L"CS:S HUD Editor", MB_ICONERROR ), PostQuitMessage( 1 ), S_OK;
+		return MessageBoxW( g_hwnd, L"Couldn't start the WebView2 browser view.", APP_NAME, MB_ICONERROR ), PostQuitMessage( 1 ), S_OK;
 	g_ctl = ctl;
 	g_ctl->get_CoreWebView2( &g_web );
 	ComPtr< ICoreWebView2Controller2 > ctl2; // no white flash before the page draws
@@ -1397,7 +1421,7 @@ static HRESULT OnEnvironment( HRESULT hr, ICoreWebView2Environment *env )
 {
 	if ( FAILED( hr ) || !env )
 	{
-		if ( MessageBoxW( g_hwnd, L"This needs the Microsoft Edge WebView2 Runtime (built into Windows 11).\n\nOpen the download page?", L"CS:S HUD Editor", MB_ICONERROR | MB_YESNO ) == IDYES )
+		if ( MessageBoxW( g_hwnd, L"This needs the Microsoft Edge WebView2 Runtime (built into Windows 11).\n\nOpen the download page?", APP_NAME, MB_ICONERROR | MB_YESNO ) == IDYES )
 			ShellExecuteW( NULL, L"open", L"https://developer.microsoft.com/microsoft-edge/webview2/", NULL, NULL, SW_SHOWNORMAL );
 		PostQuitMessage( 1 );
 		return S_OK;
@@ -1499,14 +1523,17 @@ int WINAPI wWinMain( HINSTANCE inst, HINSTANCE, LPWSTR, int show )
 		FindGame();
 	Revert(); // left by an editor that didn't close normally
 
-	WNDCLASSW wc{};
+	WNDCLASSEXW wc{ sizeof( wc ) };
 	wc.lpfnWndProc = WndProc;
 	wc.hInstance = inst;
 	wc.hCursor = LoadCursor( NULL, IDC_ARROW );
 	wc.hbrBackground = CreateSolidBrush( RGB( 0x11, 0x10, 0x13 ) ); // the page's background (--base)
 	wc.lpszClassName = L"CSSHudEditor";
-	RegisterClassW( &wc );
-	g_hwnd = CreateWindowW( wc.lpszClassName, L"CS:S HUD Editor " APP_VERSION, WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, 1500, 900, NULL, NULL, inst, NULL );
+	// the app's icon (app.ico), at the sizes Windows draws the window's big and small icons
+	wc.hIcon = (HICON)LoadImageW( inst, MAKEINTRESOURCEW( 1 ), IMAGE_ICON, GetSystemMetrics( SM_CXICON ), GetSystemMetrics( SM_CYICON ), 0 );
+	wc.hIconSm = (HICON)LoadImageW( inst, MAKEINTRESOURCEW( 1 ), IMAGE_ICON, GetSystemMetrics( SM_CXSMICON ), GetSystemMetrics( SM_CYSMICON ), 0 );
+	RegisterClassExW( &wc );
+	g_hwnd = CreateWindowW( wc.lpszClassName, APP_NAME L" " APP_VERSION, WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, 1500, 900, NULL, NULL, inst, NULL );
 	// the title bar in the page's colours: dark (Windows 10 20H1+), then its surface, edge and text colours (Windows 11)
 	BOOL dark = TRUE;
 	COLORREF caption = RGB( 0x19, 0x17, 0x1b ), edge = RGB( 0x42, 0x39, 0x41 ), title = RGB( 0xe6, 0xdf, 0xe4 );
