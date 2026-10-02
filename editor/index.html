@@ -26,6 +26,9 @@
   button[aria-pressed="true"] { border-color: var(--accent); background: var(--soft); }
   button.ghost { background: transparent; border-style: dashed; color: var(--muted); }
   button.ghost:hover { color: var(--text); }
+  /* a one-off action that's been done (a font split into resolutions, a check-up fix): no border, a tick */
+  button.done, button.done:hover, button.done:disabled { opacity: 1; border-color: transparent; background: transparent; color: var(--text); cursor: default; }
+  button.done::before { content: "✓"; margin-right: 6px; color: var(--accent); font-weight: 700; }
   button.mini { margin-left: 8px; padding: 1px 7px; font-size: 11px; }
   button.mini + button.mini { margin-left: 4px; }
   input, select { min-width: 0; background: var(--field); border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 8px; }
@@ -1668,7 +1671,7 @@ function checkupRows() {
   if (!checkup) return [run, noteRow('Looks for fonts the game can\'t find, missing files and pictures, blocks written twice, and the game\'s fonts and colours an old HUD leaves out.')];
   const rows = checkup.map(([text, fix]) => {
     const r = el('div', { className: 'row note meta', textContent: text });
-    if (fix) { const b = el('button', { className: 'mini', textContent: fix[0] }); b.onclick = () => { fix[1](); b.disabled = true; }; r.append(' ', b); }
+    if (fix) { const b = el('button', { className: 'mini', textContent: fix[0] }); b.onclick = () => { fix[1](); b.disabled = true; b.classList.add('done'); }; r.append(' ', b); }
     r.dataset.q = text.toLowerCase();
     return r;
   });
@@ -3725,6 +3728,11 @@ function splitText(cur, font, H) {
   const others = [...fontVariants({ parsed: cur.parsed, bases: [] }, font)].filter(([, q]) => !coversLetters(q)).map(([k, q]) => [k, Object.entries(q)]);
   return setBlock(cur, ['Fonts'], font, [...entries, ...others]);
 }
+// split already: an entry for each of the ranges (its button then says so, ✓ and no border)
+const isSplit = (f, font) => {
+  const ys = new Set([...fontVariants(f, font).values()].map(q => (q.yres || '').trim().replace(/\s+/g, ' ')));
+  return SPLIT_RANGES.every(([a, b]) => ys.has(`${a} ${b}`));
+};
 function splitFonts(list) {
   const H = live ? live.H : 1080, group = Symbol();
   for (const file of new Set(list.map(([f]) => f))) {
@@ -3818,9 +3826,10 @@ function fontRows(file, font) {
     : fixedFont(file, font) ? 'Pixels, the same at every resolution (menus don\'t scale it)' : `Scales with resolution: ${Math.round(entryPx(p, H, false, fontBase(file, font)))} px at ${H}p`;
   // one entry per resolution (see splitText), with a caution when screen sizes share one size in pixels
   const text = !SYMBOL_FACES.has((p.name || '').toLowerCase()) && !(+(p.symbol || 0) > 0), shared = text ? sharedHeights(f, font) : [];
-  const split = el('div', { className: 'row action' });
-  split.append(el('button', { className: shared.length ? '' : 'ghost', textContent: 'Split into resolutions', onclick: () => splitFonts([[file, font]]),
-    title: 'Gives every resolution its own size, scaled from how it looks now' }));
+  const split = el('div', { className: 'row action' }), done = text && isSplit(f, font);
+  split.append(el('button', { className: done ? 'done' : shared.length ? '' : 'ghost', textContent: 'Split into resolutions', disabled: done, onclick: () => splitFonts([[file, font]]),
+    title: done ? 'Done: every resolution has its own size. Pick a resolution (Game, at the top) to adjust one; Ctrl+Z undoes the split.'
+      : 'Gives every resolution its own size, scaled from how it looks now' }));
   split.dataset.q = 'split resolutions yres screen size';
   return [
     pickRow('Face', p.name || '', () => fontFaces, val => put('name', val), { faces: true, id: id('name'), note: vars.size > 1 ? `Entry "${v}", for ${H}p screens` : '', dflt: dv('name') }),
@@ -5947,6 +5956,7 @@ async function parserCheck() {
     check(before === '768/900, 1440/4K' && sv.get('600').tall === '10' && sv.get('1080').tall === '18' && sv.get('1080').yres === '901 1080' && sv.get('1440').tall === '24'
       && sv.get('2160').tall === '36' && sv.get('5').range === '0x0400 0x04FF' && !sv.has('1') && !sharedHeights(sp, 'T').length && activeVariant(sv, 900) === '900',
       `Split into resolutions (${before} -> ${[...sv].map(([k, p]) => `${k}:${p.tall}`)})`);
+    check(!isSplit(tf, 'T') && isSplit(sp, 'T'), 'a split font is known as split (its button shows ✓, done)');
     // a menu dialog's font with one entry and no range (ConsoleText) is pixels everywhere, like the dialog: not one to
     // flag (the dialog doesn't scale either), but split by hand it scales from its pixels here (16 at 1440: 12 at 1080)
     const cs = ['Scheme', '{', '\tFonts', '\t{', '\t\tConsoleText', '\t\t{', '\t\t\t"1" { "name" "Lexend" "tall" "16" }', '\t\t}', '\t}', '}', ''].join('\n');
