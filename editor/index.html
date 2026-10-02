@@ -43,6 +43,7 @@
   /* the title strip: the HUD and saving */
   .app-header { grid-column: 1 / -1; display: flex; align-items: center; gap: 18px; min-width: 0; padding: 11px 18px; background: var(--surface); border-bottom: 1px solid var(--line); }
   .app-name { font-size: 14px; font-weight: 600; white-space: nowrap; }
+  .app-version { margin-left: 6px; padding: 1px 6px; border: 1px solid var(--line); border-radius: 9px; font-size: 11px; font-weight: 400; color: var(--muted, #9aa0aa); }
   #hudbtn { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 2px 0 2px 18px; border: 0; border-left: 1px solid var(--line); border-radius: 0; background: none; color: var(--muted); }
   #hudbtn::after { content: '⌄'; margin-left: 8px; }
   #hudbtn:hover { color: var(--text); }
@@ -312,7 +313,7 @@
 </head>
 <body>
 <header class="app-header">
-  <span class="app-name">CS:S HUD Editor</span>
+  <span class="app-name">CS:S HUD Editor <span class="app-version" title="A beta: back up a HUD you care about before editing it">0.9.0 beta</span></span>
   <button id="hudbtn" title="Pick which HUD to edit">No HUD open</button>
   <div class="app-actions">
     <button id="capture" hidden>Capture game</button>
@@ -503,7 +504,10 @@ const WINDOW_COLOURS = {
     ['Text', 'Label.TextColor', 'Shared by in-game windows and the buy menu'], ['Borders', 'Border.Bright|Border.Dark', '']],
   [S]: [['Window background', 'Frame.BgColor', ''], ['Window background, not focused', 'Frame.OutOfFocusBgColor', ''],
     ['Title', 'FrameTitleBar.TextColor', ''], ['Title bar', 'FrameTitleBar.BgColor', ''], ['Text', 'Label.TextColor', ''], ['Borders', 'Border.Bright|Border.Dark', ''],
-    ['Tooltip text', 'Tooltip.TextColor', 'Seen in game: tooltips took the text field colours instead (Text field: Text and Background)'], ['Tooltip background', 'Tooltip.BgColor', 'The same: set the text field Background']],
+    // (checked 2026-10-02: a plain start shows tooltips in these; in the editor's game a reload gives the box the text
+    // fields' colours until the game restarts)
+    ['Tooltip text', 'Tooltip.TextColor', 'What players see. Shows after a game restart (⟳): until then the editor\'s game shows tooltips in the text field colours'],
+    ['Tooltip background', 'Tooltip.BgColor', 'What players see. Shows after a game restart (⟳)']],
 };
 const EXTRA = {
   gamemenu: [['Menu text', 'MainMenu.TextColor', 'Resume Game, Find Servers, Options...'], ['Menu text (mouse over)', 'MainMenu.ArmedTextColor', ''],
@@ -2656,8 +2660,8 @@ const DESCRIBE = {
   'richtext.bgcolor': 'Background of scrolling text boxes',
   'richtext.selectedtextcolor': 'Text you have highlighted with the mouse',
   'richtext.selectedbgcolor': 'Highlight behind text you have selected',
-  'textentry.textcolor': 'Text in boxes you can type in, drop-down lists (their text and arrow) and tooltips',
-  'textentry.bgcolor': 'Background of boxes you can type in, and of tooltips',
+  'textentry.textcolor': 'Text in boxes you can type in, and drop-down lists (their text and arrow)',
+  'textentry.bgcolor': 'Background of boxes you can type in',
   'textentry.cursorcolor': 'The blinking typing cursor',
   'textentry.selectedtextcolor': 'Text you have highlighted in a typing box',
   'textentry.selectedbgcolor': 'Highlight behind selected typing-box text',
