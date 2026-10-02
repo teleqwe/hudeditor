@@ -53,14 +53,13 @@
   .app-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
   /* ⚠: changes the game shows only after a restart (a click lists them); Discard: back to the HUD as last saved */
   #restartmark { padding: 4px 9px; font-size: 14px; }
-  #discard:disabled { visibility: hidden; }
+  #discard:disabled { display: none; } /* (gone, not a gap: the buttons beside it close up) */
+  #explore { margin-left: -10px; } /* (beside the HUD button: its folder) */
   .app-actions .sep { width: 1px; height: 24px; margin: 0 6px; background: var(--line); }
 
   /* the game: test tools over it (when open), messages under it */
   .preview-area { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
-  .toolsbtn[aria-expanded="true"] { border-color: var(--accent); background: var(--soft); }
-  :root { --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23e6dfe4' stroke-width='1.3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); } /* the top bar's drop-down arrow (Grid, Test tools) */
-  .toolsbtn::after { content: ''; display: inline-block; width: 9px; height: 6px; margin-left: 8px; vertical-align: 2px; background: var(--chevron) no-repeat center / 9px 6px; }
+  :root { --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23e6dfe4' stroke-width='1.3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); } /* the top bar's drop-down arrow (HUD, Game, Grid) */
   .zoombtn { padding: 4px 10px; border-color: var(--accent); color: var(--accent); font-size: 12px; }
   /* fonts that don't scale between some screen sizes: a yellow caution by Game resolution, and what it says */
   #res { width: 190px; text-overflow: ellipsis; }
@@ -114,13 +113,14 @@
   .box.sel { opacity: 1; border: calc(2px / var(--z)) solid var(--accent); background: rgba(232, 162, 199, .14); }
   .box.sel span { color: var(--accent); }
   .box.hover span, .box.sel span { display: block; }
-  .box.guide { opacity: 1; top: 0; bottom: 0; width: 0; border: none; border-left: calc(1px / var(--z)) dashed rgba(232, 162, 199, .75); }
 
   /* the sidebar: search and parts, the selection's header, a rail of categories beside one category's settings */
   aside { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--base); border-left: 1px solid var(--line); }
-  .sidebar-top { flex: none; padding: 14px 16px; background: var(--surface); border-bottom: 1px solid var(--line); }
+  .sidebar-top { flex: none; display: grid; gap: 10px; padding: 14px 16px; background: var(--surface); border-bottom: 1px solid var(--line); }
   #search { width: 100%; padding: 8px 10px; }
-  .parts { margin-top: 12px; }
+  #parts:empty { display: none; }
+  .ingame { display: flex; gap: 8px; }
+  .ingame button { flex: 1; }
   .parts > summary { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; color: var(--muted); }
   .parts > summary::before { display: none; }
   .parts > summary::after { content: '⌄'; }
@@ -342,6 +342,7 @@
 <body>
 <header class="app-header">
   <button id="hudbtn" title="The HUD you're editing: click to pick another, rename one, or add one">No HUD open</button>
+  <button id="explore" title="Open the HUD's folder">Folder</button>
   <div class="app-actions">
     <button id="capture" hidden>Capture game</button>
     <button id="launch" hidden>Launch game</button>
@@ -351,22 +352,17 @@
     <select id="grid" class="gridbtn" aria-label="Grid" title="Dragged parts land on a grid this many units apart (a unit is the screen height / 480)"><option value="0">Grid: off</option><option value="2">Grid: 2</option><option value="4">Grid: 4</option><option value="5">Grid: 5</option><option value="8">Grid: 8</option><option value="10">Grid: 10</option><option value="16">Grid: 16</option><option value="20">Grid: 20</option></select>
     <span class="sep" aria-hidden="true"></span>
     <button id="testserver" title="Offline game with a frozen bot and bhop/surf-style timer texts on screen">Test server</button>
-    <button id="toolsbtn" class="toolsbtn" aria-expanded="false" title="Scoreboard and the sample texts on the test server">Test tools</button>
     <span class="sep" aria-hidden="true"></span>
-    <button id="explore" title="Open the HUD's folder">Folder</button>
     <button id="discard" class="ghost" disabled title="Put the HUD back to how it was last saved: every unsaved change goes">Discard changes</button>
     <button id="restartmark" class="caution" hidden aria-haspopup="dialog">⚠</button>
     <button id="save" class="primary" disabled>Save HUD</button>
   </div>
 </header>
 <section class="preview-area">
+  <!-- Test tools: sample texts and test values for the test game. Not on the top bar any more (10-02, the user's ask):
+       the dev harness opens it with showTools(true) -->
   <div id="tools" hidden role="dialog" aria-label="Test tools">
-    <div class="thead"><span>Test tools</span><button id="toolsclose" class="ghost" title="Close (Test tools opens them again)">✕</button></div>
-    <div class="tline">
-      <span class="glabel">Keep open</span>
-      <button id="scores" aria-pressed="false" title="Keep the scoreboard open to edit it. Click again (or press Tab in the game) to close it.">Scoreboard</button>
-      <button id="keepchat" aria-pressed="false" title="Keep the chat open (typing) to edit it: opened again after a change reloads the HUD. Click again to close it.">Chat</button>
-    </div>
+    <div class="thead"><span>Test tools</span><button id="toolsclose" class="ghost" title="Close">✕</button></div>
     <div class="tline meta" id="notlocal">Sample text and test values show here in the test game (Test server).</div>
     <div class="tline" id="texts" hidden>
       <span class="glabel">Sample text</span>
@@ -392,10 +388,6 @@
       <button data-cmd="schemereload_showpanel hide" title="Hides the round-end and killer panels">Hide panels</button>
       <button data-cmd='bot_prefix ""; bot_kick; bot_join_team T; bot_quota 1; mp_roundtime 9; mp_restartgame 1; schemereload_testvalue mvps -1' title="Back to one frozen bot, a 9:00 round and no test MVPs">Reset</button>
     </div>
-    <div class="tline">
-      <span class="glabel">Guides</span>
-      <button id="guide43" aria-pressed="false" title="Dashed lines where a 4:3 screen (1024x768, 1280x960...) ends: parts outside them are off screen there">4:3 edges</button>
-    </div>
   </div>
   <main id="preview">
     <div id="stage" class="schematic">
@@ -407,8 +399,14 @@
   <footer class="preview-footer"><div class="msg"><span id="status">Starting...</span><span id="hint">Click a part of the game to edit it (again: the one under it); Ctrl+click adds more. The wheel zooms.</span></div><span id="gamestate"></span></footer>
 </section>
 <aside>
-  <div class="sidebar-top">
-    <input type="search" id="search" placeholder="Find a HUD part or setting…" aria-label="Find a HUD part or setting">
+  <div class="sidebar-top" id="top">
+    <!-- in a map: the scoreboard and the chat held open to edit them (see inGameRow) -->
+    <div id="ingame" class="ingame" hidden>
+      <button id="scores" aria-pressed="false" title="Keep the scoreboard open to edit it. Click again (or press Tab in the game) to close it.">Toggle scoreboard</button>
+      <button id="keepchat" aria-pressed="false" title="Keep the chat open (typing) to edit it: opened again after a change reloads the HUD. Click again to close it.">Toggle chat</button>
+    </div>
+    <!-- (search: off the screen, 10-02; the dev harness still types in it, ut.setKey) -->
+    <input type="search" id="search" hidden placeholder="Find a HUD part or setting…" aria-label="Find a HUD part or setting">
     <div id="parts"></div>
   </div>
   <div id="list"></div>
@@ -1177,8 +1175,6 @@ const prettify = n => n.replace(/^Hud/, '').replace(/([a-z])([A-Z])/g, '$1 $2').
 // ---------- selection ----------
 let selected = null; // { thing: panel-like, info, control: panel|null }
 let also = []; // more parts Ctrl+clicked with it (see lineUp)
-let guide43 = false; // Test tools: 4:3 screen edges over the preview
-
 // A window's own .res file, where single controls get their own colours and positions.
 // The buy menu reads its .res once, when the game makes it (the plugin reads the team, class and MOTD ones again on a
 // reload)
@@ -4526,6 +4522,7 @@ function render() {
   // emptying the list scrolls it to the top; keep the reader's place (select() scrolls up itself)
   const top = scroller().scrollTop;
   renderList();
+  topBar();
   scroller().scrollTop = top;
   if (fpop && !document.contains(fpop.owner)) closeFontPop(); // its row has gone
   if (cpop && !document.contains(cpop.owner)) closePicker();
@@ -4827,12 +4824,6 @@ function drawBoxes() {
     Object.assign(d.style, { left: `${b.r.x / W * 100}%`, top: `${b.r.y / H * 100}%`, width: `${b.r.w / W * 100}%`, height: `${b.r.h / H * 100}%` });
     d.append(el('span', { textContent: b.label || b.info.name }));
     host.append(d);
-  }
-  // where a 4:3 screen's picture ends: HUD positions are in units of the screen's height, so a 4:3 screen is the middle
-  if (guide43 && W / H > 4 / 3 + 0.01) for (const x of [(W - H * 4 / 3) / 2, (W + H * 4 / 3) / 2]) {
-    const g = el('div', { className: 'box guide' });
-    g.style.left = `${x / W * 100}%`;
-    host.append(g);
   }
   const hover = el('div', { className: 'box hover', id: 'hoverbox', hidden: true });
   hover.append(el('span'));
@@ -5177,6 +5168,7 @@ async function poll() {
   if (!live) loadingHeld = null; // (a game that has gone holds nothing open)
   if (live) launching = false; // (it came up)
   testTools();
+  inGameRow();
   // the game quit without the capture noticing (a quick quit): the next game gets a new capture
   if (!live && captured) captureEnded();
   // a game that has gone reads everything afresh when it starts
@@ -5262,13 +5254,13 @@ async function toggleText(bit) {
   await call('cmd', '', `schemereload_testtext ${texts}`);
 }
 
-// The scoreboard and sample text toggles fold under the Test server button; starting a test game opens them.
-function showTools(on) { $('tools').hidden = !on; $('toolsbtn').setAttribute('aria-expanded', on); if (on) placeTools(); }
-// The pop-out goes where it was last dragged to (this PC), at first under its button; always whole inside the window
+// The sample text toggles and test values (Test tools): a pop-out the dev harness opens (showTools(true)), not on the top bar
+function showTools(on) { $('tools').hidden = !on; if (on) placeTools(); }
+// The pop-out goes where it was last dragged to (this PC), at first the preview's top right; always whole inside the window
 function placeTools(at = null) {
   const t = $('tools');
   try { at = at || JSON.parse(localStorage.getItem('toolsPos') || 'null'); } catch {}
-  if (!at) { const b = $('toolsbtn').getBoundingClientRect(); at = { x: b.right - t.offsetWidth, y: b.bottom + 6 }; }
+  if (!at) { const b = $('preview').getBoundingClientRect(); at = { x: b.right - t.offsetWidth - 10, y: b.top + 10 }; }
   const x = Math.max(0, Math.min(at.x, innerWidth - t.offsetWidth)), y = Math.max(0, Math.min(at.y, innerHeight - t.offsetHeight));
   Object.assign(t.style, { left: `${x}px`, top: `${y}px` });
   return { x, y };
@@ -5290,10 +5282,24 @@ function testTools() {
   $('notlocal').hidden = local;
   if (!$('tools').hidden) placeTools(); // taller now: still whole in the window
 }
+// In a map: Toggle scoreboard and Toggle chat at the top of the sidebar (held open, see poll); out of one, they go and
+// let go of what they held
+const inMap = () => !!live && live.panels.some(p => p.module === 'ClientDLL' && HUD[p.name]);
+function inGameRow() {
+  const on = inMap();
+  $('ingame').hidden = !on;
+  if (!on && (keepScores || keepChat)) {
+    keepScores = keepChat = false;
+    $('scores').setAttribute('aria-pressed', 'false');
+    $('keepchat').setAttribute('aria-pressed', 'false');
+  }
+  topBar();
+}
+// the sidebar's top strip only while it holds something (the toggles, On screen now over a selection)
+const topBar = () => { $('top').hidden = $('ingame').hidden && !$('parts').childElementCount; };
 
 async function testServer() {
   if (!live) { status('Start the game first.'); return; }
-  showTools(true);
   status('Starting an offline test game on de_dust2...');
   await call('cmd', '', `schemereload_testtext ${texts}; ${TEST_SETUP}`);
   // once the team menu (or MOTD) shows up, join CT and close the menus
@@ -5598,14 +5604,12 @@ if (host) {
     if (e.ctrlKey && !e.shiftKey && e.code === 'KeyZ' && !typing) { e.preventDefault(); undo(); }
   });
   $('explore').onclick = () => call('explore');
-  $('guide43').onclick = () => { guide43 = !guide43; $('guide43').setAttribute('aria-pressed', guide43); drawBoxes(); };
   for (const b of $('values').querySelectorAll('button')) b.onclick = () => {
     if (!live) return status('Start the test server first.');
     call('cmd', '', b.dataset.cmd);
     status(`Test value: ${b.textContent}${b.title ? ` (${b.title.replace(/^./, c => c.toLowerCase())})` : ''}.`);
   };
   $('testserver').onclick = testServer;
-  $('toolsbtn').onclick = () => showTools($('tools').hidden);
   $('toolsclose').onclick = () => showTools(false);
   $('tools').querySelector('.thead').onmousedown = dragTools;
   addEventListener('resize', () => { if (!$('tools').hidden) placeTools(); });
