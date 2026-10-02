@@ -482,6 +482,12 @@ static wstring Launch()
 		return err;
 	MountHud();
 	DeleteFileW( ( g_game + L"\\addons\\schemereload_panels.txt" ).c_str() );
+	// the game's console log (-condebug) only ever grows (35 MB by 2026-10-02): past 8 MB it starts again, the last one
+	// kept as console.old.log
+	wstring log = g_game + L"\\console.log";
+	WIN32_FILE_ATTRIBUTE_DATA a;
+	if ( GetFileAttributesExW( log.c_str(), GetFileExInfoStandard, &a ) && ( (unsigned long long)a.nFileSizeHigh << 32 | a.nFileSizeLow ) > 8ull << 20 )
+		MoveFileExW( log.c_str(), ( g_game + L"\\console.old.log" ).c_str(), MOVEFILE_REPLACE_EXISTING );
 	ShellExecuteW( NULL, L"open", g_steamExe.c_str(), L"-applaunch 240 -insecure -windowed -noborder -novid -condebug", NULL, SW_SHOWNORMAL );
 	return wstring();
 }
@@ -971,6 +977,57 @@ static void OnMessage( const wstring &msg )
 		else
 		{
 			RememberHud( to );
+			out = to;
+		}
+	}
+	else if ( op == L"rename" ) // arg = a HUD folder, body = its new name (in the same folder): answers the new path; kept in
+	{                           // its place in the recent list. Fails while the game has its font files open.
+		wstring to = arg.substr( 0, arg.rfind( L'\\' ) + 1 ) + body, stem = body.substr( 0, body.find( L'.' ) );
+		string pending;
+		std::error_code ec;
+		// (a folder holding the game, or the game's own: cstrike has resource and scripts too)
+		auto holds = [&]( const wstring &dir ) { return !dir.empty() && dir.size() >= arg.size() && !_wcsnicmp( dir.c_str(), arg.c_str(), arg.size() )
+			&& ( dir.size() == arg.size() || dir[arg.size()] == L'\\' ); };
+		static const wchar_t *s_reserved[] = { L"CON", L"PRN", L"AUX", L"NUL", L"COM1", L"COM2", L"COM3", L"COM4", L"LPT1", L"LPT2", L"LPT3" };
+		bool reserved = false;
+		for ( auto r : s_reserved )
+			reserved |= !_wcsicmp( stem.c_str(), r );
+		if ( !IsHud( arg ) )
+			fail( L"That isn't a HUD folder any more." );
+		else if ( holds( g_game ) || holds( g_custom ) )
+			fail( L"That's the game's own folder, not a HUD." );
+		else if ( !PlainName( body ) || reserved )
+			fail( L"Use a plain folder name (no \\ / : * ? \" < > |, and not one Windows keeps for itself such as CON)." );
+		else if ( _wcsicmp( to.c_str(), arg.c_str() ) && IsDir( to ) )
+			fail( L"There's already a folder called " + body + L" there: give it another name." );
+		else if ( ReadAll( g_unsaved + L"\\hud.txt", pending ) && !_wcsicmp( Widen( pending ).c_str(), arg.c_str() ) )
+			fail( L"It has unsaved changes: save or discard them first." );
+		else if ( std::filesystem::rename( arg, to, ec ), ec )
+			fail( GameRunning() && ( ec.value() == ERROR_SHARING_VIOLATION || ec.value() == ERROR_ACCESS_DENIED )
+				? L"The game has files of it open (its fonts): it can be renamed once the game has quit."
+				: L"Couldn't rename it: " + Widen( ec.message(), CP_ACP ) + L" (is a file of it open in another program?)" );
+		else
+		{
+			// the recent list: the new path where the old one was
+			string data;
+			if ( ReadAll( g_settings, data ) )
+			{
+				wstring all = Decode( data ), now;
+				for ( size_t a = 0, b; a < all.size(); a = b + 1 )
+				{
+					b = all.find( L'\n', a );
+					if ( b == wstring::npos )
+						b = all.size();
+					wstring line = all.substr( a, b - a );
+					if ( !line.empty() && line.back() == L'\r' )
+						line.pop_back();
+					if ( !line.empty() )
+						now += ( _wcsicmp( line.c_str(), arg.c_str() ) ? line : to ) + L"\n";
+				}
+				WriteAll( g_settings, Utf8( now ) );
+			}
+			if ( !_wcsicmp( g_hudPath.c_str(), arg.c_str() ) )
+				g_hudPath = to, MountHud();
 			out = to;
 		}
 	}

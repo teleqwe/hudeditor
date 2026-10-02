@@ -292,6 +292,11 @@
   #picker .hud { display: block; width: 100%; margin: 6px 0; padding: 9px 12px; text-align: left; }
   #picker .hud.primary { color: var(--text); background: var(--soft); border-color: var(--accent); font-weight: 400; }
   #picker .hud .meta { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mvpthumb { width: 44px; height: 44px; display: grid; place-items: center; font-size: 32px; line-height: 1; color: #f2c230; border: 1px solid var(--line); border-radius: 6px; }
+  .mvpthumb canvas { max-width: 40px; max-height: 40px; }
+  #picker .hudrow { display: flex; gap: 6px; align-items: center; margin: 6px 0; }
+  #picker .hudrow .hud { flex: 1; min-width: 0; margin: 0; }
+  #picker .hudrow input { flex: 1; min-width: 0; }
   #newform { display: flex; gap: 8px; margin: 6px 0; }
   #newform input { flex: 1; }
   /* an archive with several HUDs in it: each with a name to give it */
@@ -351,10 +356,11 @@
       <button data-cmd="schemereload_testvalue roundtime 15" title="A round timer over 10:00, as surf and bhop servers have (starts the round again)">15:00 timer</button>
       <button data-cmd='bot_stop 1; bot_join_team any; bot_prefix "[WWWWWWWWWWWWWWWW]"; bot_quota 24' title="Bots with long names in both teams">Full scoreboard</button>
       <button data-cmd="bot_kill" title="Kills every bot: a line each in the kill feed">Kill feed</button>
+      <button data-cmd="schemereload_testvalue mvps 3" title="Three MVP stars beside your name on the scoreboard">3 MVPs</button>
       <button data-cmd="schemereload_showpanel win" title="The round-end panel, as for a CT win with you as MVP">Round end</button>
       <button data-cmd="schemereload_showpanel freeze" title="The killer panel, as if the bot had killed you">Killer panel</button>
       <button data-cmd="schemereload_showpanel hide" title="Hides the round-end and killer panels">Hide panels</button>
-      <button data-cmd='bot_prefix ""; bot_kick; bot_join_team T; bot_quota 1; mp_roundtime 9; mp_restartgame 1' title="Back to one frozen bot and a 9:00 round">Reset</button>
+      <button data-cmd='bot_prefix ""; bot_kick; bot_join_team T; bot_quota 1; mp_roundtime 9; mp_restartgame 1; schemereload_testvalue mvps -1' title="Back to one frozen bot, a 9:00 round and no test MVPs">Reset</button>
     </div>
     <div class="tline">
       <span class="glabel">Guides</span>
@@ -1808,26 +1814,31 @@ function evenTiming(frames, cap) {
 }
 // Writes the picture as <dir>/<name>.vtf/.vmt (power-of-two sizes up to max, smaller for long animations) and returns
 // its ImagePanel "image" (relative to materials/vgui), width/height, and the proxy lines that animate it (or '').
-async function importPicture(file, name, dir = PICTURES, max = 512) {
+// (no name: named after what's in it, and used again if the HUD has it already)
+async function importPicture(file, name = null, dir = PICTURES, max = 512) {
+  const reuse = !name;
+  name = name || await pictureName(file);
   const frames = await pictureFrames(file), first = frames[0].image, { times, ms } = evenTiming(frames, 120), n = times.reduce((a, b) => a + b, 0);
   const iw = first.displayWidth || first.naturalWidth || first.width, ih = first.displayHeight || first.naturalHeight || first.height;
   const pow2 = n => 2 ** Math.round(Math.log2(Math.max(4, n)));
   let w = Math.min(max, pow2(iw)), h = Math.min(max, pow2(ih));
   while (w * h * 4 * n > 8 << 20 && w * h > 256) w = Math.max(16, w / 2), h = Math.max(16, h / 2);
+  const path = `${dir}/${name}`, material = path.replace(/^materials\//, '');
+  // (already in the HUD under this name: the same picture, used again)
+  const have = reuse && (await Promise.all(['vtf', 'vmt'].map(x => call('exists', `${path}.${x}`).catch(() => '0')))).every(x => x === '1');
   const cv = el('canvas', { width: w, height: h }), g = cv.getContext('2d', { willReadFrequently: true }), pixels = [];
   g.imageSmoothingQuality = 'high';
   frames.forEach(({ image }, i) => {
-    g.clearRect(0, 0, w, h); g.drawImage(image, 0, 0, w, h);
-    const px = g.getImageData(0, 0, w, h).data;
+    if (!have) { g.clearRect(0, 0, w, h); g.drawImage(image, 0, 0, w, h); }
+    const px = have ? null : g.getImageData(0, 0, w, h).data;
     for (let k = 0; k < times[i]; k++) pixels.push(px);
     image.close?.();
   });
-  const path = `${dir}/${name}`, material = path.replace(/^materials\//, '');
   const fps = Math.max(1, Math.min(60, Math.round(1000 / ms)));
   const proxies = pixels.length > 1 ? `\t"Proxies"\n\t{\n\t\t"AnimatedTexture"\n\t\t{\n\t\t\t"animatedtexturevar"\t"$basetexture"\n`
     + `\t\t\t"animatedtextureframenumvar"\t"$frame"\n\t\t\t"animatedtextureframerate"\t"${fps}"\n\t\t}\n\t}\n` : '';
-  await call('writebin', `${path}.vtf`, await base64(pictureVtf(pixels, w, h)));
-  await call('write', `${path}.vmt`, `"UnlitGeneric"\n{\n\t"$basetexture"\t"${material}"\n\t"$translucent"\t"1"\n\t"$vertexcolor"\t"1"\n\t"$vertexalpha"\t"1"\n`
+  if (!have) await call('writebin', `${path}.vtf`, await base64(pictureVtf(pixels, w, h)));
+  if (!have) await call('write', `${path}.vmt`, `"UnlitGeneric"\n{\n\t"$basetexture"\t"${material}"\n\t"$translucent"\t"1"\n\t"$vertexcolor"\t"1"\n\t"$vertexalpha"\t"1"\n`
     + `\t"$ignorez"\t"1"\n\t"$no_fullbright"\t"1"\n\t"$nolod"\t"1"\n${proxies}}\n`);
   return { image: material.replace(/^vgui\//, ''), material, aspect: iw / ih, frames: frames.length, proxies };
 }
@@ -1846,18 +1857,50 @@ async function setMvpStar(file) {
     await call('cmd', '', 'mat_reloadmaterial scoreboard_mvp; mat_reloadmaterial win_panel_mvpstar').catch(() => {});
     setDirty(true);
     status(pic ? 'MVP star changed. Click Done or Save HUD to keep it.' : 'The game\'s MVP star is back.');
+    render(); // (the star shown in its rows)
   } catch (err) { status(`Couldn't use that picture: ${err.message}`); }
 }
+// The star in use, drawn in box: the HUD's own picture (its first frame, from the VTF the editor wrote, BGRA8888) or,
+// left as it is, the game's (a gold star)
+async function mvpThumb(box) {
+  try {
+    const tex = /"\$basetexture"\s*"(hud\/hudeditor_mvp_[ab])"/i.exec(await readHud(`materials/${MVP_STARS[0]}.vmt`) || '')?.[1];
+    if (!tex) return;
+    const bytes = async n => Uint8Array.from(atob(await call('readbin', `materials/${tex}.vtf`, String(n))), c => c.charCodeAt(0));
+    const v = new DataView((await bytes(80)).buffer), w = v.getUint16(16, true), h = v.getUint16(18, true);
+    if (v.getUint32(52, true) !== 12) return;
+    const px = (await bytes(80 + w * h * 4)).subarray(80), img = new ImageData(w, h);
+    for (let i = 0; i < w * h * 4; i += 4) img.data[i] = px[i + 2], img.data[i + 1] = px[i + 1], img.data[i + 2] = px[i], img.data[i + 3] = px[i + 3];
+    const c = el('canvas', { width: w, height: h });
+    c.getContext('2d').putImageData(img, 0, 0);
+    box.replaceChildren(c);
+    box.title = 'Your MVP star';
+  } catch {}
+}
+// The MVP star's rows (its own card in the list, and the scoreboard's): the star in use, your own picture or the game's
+// back, and on the test game, seeing it (three test MVPs on the scoreboard, the round-end panel)
 function mvpRows() {
   const pick = el('input', { type: 'file', accept: 'image/png,image/jpeg,image/gif,image/webp', hidden: true });
   pick.onchange = () => { if (pick.files[0]) setMvpStar(pick.files[0]); pick.value = ''; };
-  const r = el('div', { className: 'row action' });
-  r.append(pick, el('button', { textContent: 'Change picture...', title: 'PNG, JPG, GIF (animated too) or WebP, square works best', onclick: () => pick.click() }),
+  const r = el('div', { className: 'row action' }), thumb = el('div', { className: 'mvpthumb', textContent: '★', title: 'The game\'s MVP star' });
+  mvpThumb(thumb);
+  r.append(pick, thumb, el('button', { textContent: 'Upload your own picture...', title: 'PNG, JPG, GIF (animated too) or WebP: square works best', onclick: () => pick.click() }),
     el('button', { className: 'ghost', textContent: 'The game\'s star', onclick: () => setMvpStar(null) }));
-  r.dataset.q = 'mvp star picture icon flower';
-  return [r, noteRow('Beside the names of players with MVPs, and on the round-end panel.')];
+  r.dataset.q = 'mvp star picture icon flower upload image';
+  const local = !!live && live.local, see = el('div', { className: 'row action' });
+  see.append(el('button', { textContent: 'See it on the scoreboard', disabled: !local, title: 'Gives you three test MVPs and opens the scoreboard', onclick: () => {
+      call('cmd', '', 'schemereload_testvalue mvps 3');
+      if (!keepScores) $('scores').click();
+    } }),
+    el('button', { textContent: 'See it on the round-end panel', disabled: !local, title: 'The round-end panel, as for a CT win with you as MVP', onclick: () => call('cmd', '', 'schemereload_showpanel win') }));
+  see.dataset.q = r.dataset.q;
+  return [r, see, noteRow(local ? 'Beside the names of players with MVPs on the scoreboard, and on the round-end panel. Square pictures work best; a GIF plays.'
+    : 'Beside the names of players with MVPs on the scoreboard, and on the round-end panel. Start the test game (Test server) to see it on both.')];
 }
-const pictureName = () => `${(hudName || 'hud').toLowerCase().replace(/[^a-z0-9]+/g, '_')}_${Date.now().toString(36)}`;
+// A picture is named after what's in it (the start of its file's SHA-256): the same picture imported again is the same
+// file, written once (Sakura Hop's banner was five 4 MB copies, one per window)
+const pictureName = async file => `hudeditor_${[...new Uint8Array(await crypto.subtle.digest('SHA-256', await file.arrayBuffer()))]
+  .slice(0, 5).map(b => b.toString(16).padStart(2, '0')).join('')}`;
 async function addToHud(kind, file, lay = F(L)) {
   if (!lay) return;
   const inWindow = lay !== F(L), win = inWindow && selected;
@@ -1873,7 +1916,7 @@ async function addToHud(kind, file, lay = F(L)) {
   try {
     if (kind === 'pic') {
       status('Making the picture...');
-      const pic = await importPicture(file, pictureName()), h = 60, w = Math.max(4, Math.round(h * pic.aspect));
+      const pic = await importPicture(file), h = 60, w = Math.max(4, Math.round(h * pic.aspect));
       body = [['ControlName', 'ImagePanel'], ['fieldName', name], ...at(w, h), ['zpos', '1'], ['image', pic.image], ['scaleImage', '1'], ['drawcolor', '255 255 255 255']];
     } else if (kind === 'text') {
       body = [['ControlName', 'Label'], ['fieldName', name], ...at(200, 30), ['zpos', '2'], ['labelText', 'Text'], ['font', 'Default'],
@@ -1905,7 +1948,7 @@ function customRows(id, lay = F(L)) {
   const p = layoutProps(lay, id), rows = [], inWindow = lay !== F(L), kind = (p.controlname || '').toLowerCase();
   if (inWindow && kind === 'imagepanel') rows.push(colorRow('Tint', 'For this picture only', p.drawcolor || '255 255 255 255', v => save(lay, 'drawcolor', v, id), ['drawcolor'], null, `${lay.name}/${id}`));
   if (kind === 'editablepanel') {
-    rows.push(colorRow('Edge line', 'A 1-unit line round the box (clear: none)', edgeColour(p.border) || '0 0 0 0', v => setEdge(lay, id, v), ['border'], null, `${lay.name}/${id}`));
+    rows.push(colorRow('Edge line', 'A 1-unit line round the box (clear: none)', edgeColour(p.border, resScheme(lay)) || '0 0 0 0', v => setEdge(lay, id, v), ['border'], null, `${lay.name}/${id}`));
     if (inWindow) rows.push(checkRow('Rounded corners', p.paintbackgroundtype === '2', on => save(lay, 'PaintBackgroundType', on ? '2' : '0', id), `${lay.name}/${id}|rounded`));
   }
   // (own ↺ ids: a window that can't be clicked lists several added parts in one selection, see addedSections)
@@ -1917,7 +1960,7 @@ function customRows(id, lay = F(L)) {
     const pick = el('input', { type: 'file', accept: 'image/png,image/jpeg,image/gif,image/webp', hidden: true });
     pick.onchange = async () => {
       if (!pick.files[0]) return;
-      try { status('Making the picture...'); const old = p.image; save(lay, 'image', (await importPicture(pick.files[0], pictureName())).image, id); dropPicture(old); }
+      try { status('Making the picture...'); const old = p.image; save(lay, 'image', (await importPicture(pick.files[0])).image, id); dropPicture(old); }
       catch (err) { status(`Couldn't use that picture: ${err.message}`); }
     };
     const r = el('div', { className: 'row action' });
@@ -1935,7 +1978,8 @@ function removeAdded(lay, id) {
   const p = layoutProps(lay, id), inWindow = lay !== F(L), group = Symbol();
   for (const f of [lay, loadingTwin(lay)])
     if (f && Object.keys(layoutProps(f, id)).length) commit(f, `${f.name}/${id}/remove`, () => dropBlock(f, [], id), group);
-  if (/^HudEditorEdge_/i.test(p.border || '') && F(C)) commit(F(C), `${C}/${p.border}/remove`, () => dropBlock(F(C), ['Borders'], p.border), group);
+  const sf = F(resScheme(lay));
+  if (/^HudEditorEdge_/i.test(p.border || '') && sf) commit(sf, `${sf.name}/${p.border}/remove`, () => dropBlock(sf, ['Borders'], p.border), group);
   dropPicture(p.image);
   const was = selected && (inWindow ? selected.res === lay && (ownBlock(selected) || {}).block?.toLowerCase() === id.toLowerCase() : selected.info.id === id);
   if (was) select(inWindow ? { ...selected, control: null, node: null } : null);
@@ -1972,15 +2016,18 @@ function addedList(lay = F(L)) {
 }
 // A box's edge line is a border of its own in ClientScheme (HudEditorEdge_<box>), 1 unit on each side.
 const EDGE = id => `HudEditorEdge_${id.replace(/^hudeditor_/i, '')}`;
-function edgeColour(border) {
-  const f = F(C);
+// The scheme a window's controls draw with, where its parts' edge lines go: the loading box and the server browser use
+// the menus' (SourceScheme), the chat its own, the rest ClientScheme. (An edge in another scheme is never found.)
+const resScheme = lay => lay === F(L) ? C : lay.name === LOADING_VAC ? S : (shareRes().find(([p]) => p === lay.name) || [])[2] || C;
+function edgeColour(border, file = C) {
+  const f = F(file);
   if (!f || !border || !/^HudEditorEdge_/i.test(border)) return null;
   const e = [...f.bases, f.parsed].flatMap(p => p.entries).find(e => e.path.length >= 3 && samePath(e.path.slice(1, 3), ['Borders', border]) && e.key.toLowerCase() === 'color');
   return e ? e.value : null;
 }
 function setEdge(lay, id, rgba) {
   const name = EDGE(lay === F(L) ? id : `${lay.name.split('/').pop().replace(/\.res$/i, '')}_${id}`), side = s => [s, [['1', [['color', rgba], ['offset', '0 0']]]]];
-  save(F(C), name, [['inset', '0 0 0 0'], ['backgroundtype', '0'], side('Left'), side('Right'), side('Top'), side('Bottom')], ['Borders']);
+  save(F(resScheme(lay)), name, [['inset', '0 0 0 0'], ['backgroundtype', '0'], side('Left'), side('Right'), side('Top'), side('Bottom')], ['Borders']);
   if ((layoutProps(lay, id).border || '') !== name) save(lay, 'border', name, id);
 }
 // windows whose own .res is read again on a change (the scoreboard itself, the others through the plugin)
@@ -3997,26 +4044,57 @@ async function backgroundVtf(imgs, w, h, dxt = false, progress = () => {}) {
   v.setUint32(20, 0x4 | 0x8 | 0x100 | 0x200, true); // clamp S and T, no mipmaps, no LOD
   v.setUint16(24, imgs.length, true), v.setFloat32(48, 1, true), v.setUint32(52, dxt ? 13 : 3, true); // frames, bumpmap scale, DXT1 or BGR888
   out[56] = 1, v.setInt32(57, -1, true), v.setUint16(63, 1, true); // one mip level, no low-res image, depth 1
-  let o = 80;
-  for (const [n, img] of imgs.entries()) {
+  const draw = img => {
     const [iw, ih] = picSize(img), k = Math.min(iw / w, ih / h); // 1: pixel for pixel (whole pixels in, so no blur)
     g.imageSmoothingQuality = 'high';
     g.fillStyle = '#000';
     g.fillRect(0, 0, w, h); // black behind see-through pictures
     g.drawImage(img, Math.floor((iw - w * k) / 2), Math.floor((ih - h * k) / 2), w * k, h * k, 0, 0, w, h);
-    const px = g.getImageData(0, 0, w, h).data;
-    if (dxt) {
-      for (let i = 0; i < px.length; i += 4) {
-        let r = Math.imul(i >> 2 ^ 0x9e3779b9, 0x85ebca6b); r = Math.imul(r ^ r >>> 13, 0xc2b2ae35);
-        const d = (((r ^ r >>> 16) >>> 0) / 2 ** 32 - 0.5) * 4;
-        px[i] += d, px[i + 1] += d, px[i + 2] += d;
-      }
-      dxt1(px, w, h, out, o), o += size;
-    }
+    return g.getImageData(0, 0, w, h).data;
+  };
+  // an animation's frames are DXT1'd in workers, a frame each, on the cores (on one it took 1-2 s a frame at 1080p);
+  // inline if workers can't run, and in the page's headless self-check (#test), whose clock stops for them
+  if (dxt && imgs.length > 1 && location.hash !== '#test') {
+    let pool = [], next = 0, done = 0;
+    try {
+      pool = dxtPool();
+      await new Promise((res, rej) => {
+        // (a failure giving a worker its next frame, in its message handler, ends it too: inline, or the error shown)
+        const feed = wk => { try {
+          if (next >= imgs.length) return;
+          const n = next++, px = draw(imgs[n]);
+          wk.onmessage = e => { out.set(e.data, 80 + n * size); progress(++done); if (done === imgs.length) res(); else feed(wk); };
+          wk.onerror = wk.onmessageerror = e => rej(new Error(e.message || 'a worker stopped'));
+          wk.postMessage({ px, w, h }, [px.buffer]);
+        } catch (err) { rej(err); } };
+        pool.forEach(feed);
+      });
+      return out;
+    } catch {} finally { pool.forEach(wk => wk.terminate()); }
+  }
+  let o = 80;
+  for (const [n, img] of imgs.entries()) {
+    const px = draw(img);
+    if (dxt) grain(px), dxt1(px, w, h, out, o), o += size;
     else for (let i = 0; i < px.length; i += 4, o += 3) out[o] = px[i + 2], out[o + 1] = px[i + 1], out[o + 2] = px[i];
     if (imgs.length > 1) { progress(n + 1); await sleep(0); }
   }
   return out;
+}
+// The grain under DXT1 (see above): +-2 levels, the same for a pixel in every frame
+function grain(px) {
+  for (let i = 0; i < px.length; i += 4) {
+    let r = Math.imul(i >> 2 ^ 0x9e3779b9, 0x85ebca6b); r = Math.imul(r ^ r >>> 13, 0xc2b2ae35);
+    const d = (((r ^ r >>> 16) >>> 0) / 2 ** 32 - 0.5) * 4;
+    px[i] += d, px[i + 1] += d, px[i + 2] += d;
+  }
+}
+// Workers that DXT1 a frame: { px, w, h } in (grain added there), its blocks back. Every core but one, at most 8.
+let dxtUrl = null;
+function dxtPool() {
+  dxtUrl = dxtUrl || URL.createObjectURL(new Blob([`let FIT = null;\n${grain}\n${dxt1}\nonmessage = e => { const { px, w, h } = e.data; grain(px); `
+    + 'const out = new Uint8Array(w * h / 2); dxt1(px, w, h, out, 0); postMessage(out, [out.buffer]); };'], { type: 'text/javascript' }));
+  return Array.from({ length: Math.max(1, Math.min(8, (navigator.hardwareConcurrency || 2) - 1)) }, () => new Worker(dxtUrl));
 }
 // DXT1 (BC1): each 4x4 block is two 5:6:5 colours and, per pixel, one of them or a mix a third or two thirds of the
 // way. The two: the block's spread along its main direction (power iteration), then least squares on the picks; and
@@ -4543,10 +4621,15 @@ function renderList() {
         : 'Put every setting here back to how it was when the HUD was opened', onclick: () => {
         const undos = rows.filter(r => !part || r.dataset.own).flatMap(r => [...r.querySelectorAll('.undo:not(.off)')]);
         const back = win ? windowFiles(selected).filter(f => f.opened != null && f.text !== f.opened) : [];
-        if (!undos.length && !back.length) return status('Nothing here has changed since the HUD was opened.');
+        // a part hidden since the HUD was opened is shown again: hiding keeps its place aside (see moveOff), which no ↺
+        // puts back; first, so a lit ↺ of its place below still puts the place as it was opened
+        const own = part && ownBlock(selected), rf = own && selected.res;
+        const unhide = !!rf && rf.opened != null && partHidden(rf, own.block) && !partHidden({ parsed: parse(rf.opened), bases: [] }, own.block);
+        if (!undos.length && !back.length && !unhide) return status('Nothing here has changed since the HUD was opened.');
         // one Ctrl+Z for all of it: every write until it's done (some ↺ write later, or in a group of their own)
         const group = resetGroup = burstGroup();
         setTimeout(() => writing.then(() => { if (resetGroup === group) resetGroup = null; }), 1500);
+        if (unhide) setPartHidden(rf, own.block, false);
         for (const u of undos) u.onclick();
         // (after the settings above are written, so the files end as they were opened)
         if (back.length) {
@@ -4606,6 +4689,7 @@ function renderList() {
   const loading = el('div', { className: 'row action' });
   loading.append(el('button', { textContent: 'Edit the loading screen', title: 'The box that shows while a map loads: the game holds it open while you edit it', onclick: () => select(LOADING_SEL()) }));
   list.append(card('Loading screen', [loading, noteRow('The box that shows while a map loads. The game holds it open while it\'s picked here.')]));
+  list.append(card('MVP star', mvpRows())); // (your own picture as the star: on the scoreboard and the round-end panel)
   list.append(card('HUD check-up', checkupRows()));
   // parts that only show now and then (kill feed, pickup history, weapon selection...), so they can be hidden too
   if (live && F(L)) {
@@ -5145,22 +5229,61 @@ async function restartGame(between = null) {
 }
 
 // ---------- HUD picker ----------
-async function showPicker(canCancel) {
-  $('importlist').replaceChildren(); // (an import's message from last time)
+async function showPicker(canCancel, keepImport = false) {
+  if (!keepImport) $('importlist').replaceChildren(); // (an import's message from last time)
   const lines = (await call('huds')).split('\n');
   const current = lines.pop().split('\t')[2] || '';
   const huds = lines.filter(Boolean).map(l => l.split('\t'));
   const box = $('hudlist');
   box.innerHTML = '';
   for (const [name, path, where] of huds) {
-    const b = el('button', { className: 'hud' + (path.toLowerCase() === current.toLowerCase() ? ' primary' : ''), textContent: name });
+    // (mine: the HUD open in the editor; at startup the exe's current one isn't open in it yet)
+    const mine = !!hudName && path.toLowerCase() === current.toLowerCase(), row = el('div', { className: 'hudrow' });
+    const b = el('button', { className: 'hud' + (mine ? ' primary' : ''), textContent: name });
     b.append(el('span', { className: 'meta', textContent: `${where === 'custom' ? 'In your custom folder' : 'Recent'} · ${path}` }));
     b.onclick = () => openHud(path);
-    box.append(b);
+    row.append(b, el('button', { className: 'ghost', textContent: 'Rename', title: `Give ${name} another name (its folder's, where it is)`, onclick: () => renameRow(row, name, path, mine, canCancel) }));
+    box.append(row);
   }
   if (!huds.length) box.append(el('p', { className: 'meta', textContent: 'No HUDs found yet. Import one you downloaded, browse for yours, or start a new one.' }));
   $('pickclose').hidden = !canCancel;
   $('picker').hidden = false;
+}
+
+// Renaming a HUD (its folder, where it is): its row in the list becomes a box to type the name in. The open one is saved
+// first if it has changes; one the game has loaded (its fonts open) waits for a restart of the game.
+function renameRow(row, name, path, mine, canCancel) {
+  // (the list again, keeping an import's rows below it; not if it was closed meanwhile, as during a game restart)
+  const input = el('input', { value: name, maxLength: 60 }), back = () => { if (!$('picker').hidden) showPicker(canCancel, true); };
+  input.setAttribute('aria-label', `New name for ${name}`);
+  let said = null, busy = false;
+  const say = (text, err = false) => { said?.remove(); row.after(said = el('p', { className: `meta${err ? ' err' : ''}`, textContent: text })); };
+  const go = async () => {
+    const to = input.value.trim();
+    if (!to || to === name) return back();
+    if (busy) return; // (Enter and the button, or a second click while it works)
+    busy = true;
+    try { await renameTo(to); } finally { busy = false; }
+  };
+  const renameTo = async to => {
+    if (mine && dirty) {
+      if (!confirm(`Save the changes to ${hudName} first? A HUD with unsaved changes can't be renamed.`)) return;
+      if (!(await saveHud())) return;
+    }
+    const rename = async () => { await call('rename', path, to); if (mine) hudName = to, $('hudbtn').textContent = to; status(`${name} is now called ${to}.`); };
+    try { await rename(); back(); }
+    catch (err) {
+      if (!live || !/game has files/.test(err.message)) return say(err.message, true);
+      if (restarting) return say('The game is restarting: try again once it\'s back.', true);
+      if (!confirm(`${err.message}\n\nRestart the game to rename it now?`)) return;
+      await restartGame(async () => { try { await rename(); } catch (e) { status(`Couldn't rename it: ${e.message}`); } });
+      back();
+    }
+  };
+  input.onkeydown = e => { if (e.key === 'Enter') go(); else if (e.key === 'Escape') back(); };
+  row.replaceChildren(input, el('button', { className: 'primary', textContent: 'Rename', onclick: go }), el('button', { textContent: 'Cancel', onclick: back }));
+  input.focus();
+  input.select();
 }
 
 async function openHud(path) {
@@ -5203,10 +5326,12 @@ async function importHud(file) {
   try { found = (await call('unpack', file.name, await base64(new Uint8Array(await file.arrayBuffer())))).split('\n').filter(Boolean).map(l => l.split('\t')); }
   catch (err) { return msg(err.message, true); }
   const huds = found.filter(([k]) => k === 'hud').map(([, rel]) => rel), other = found.filter(([k]) => k === 'other').map(([, rel]) => rel.replace(/\\/g, '/'));
-  const stem = file.name.replace(/\.[^.]+$/, '').replace(/_[0-9a-f]{5}$/i, '').replace(/[_]+/g, ' ').trim() || 'Imported HUD';
+  // (names that say nothing, the archive's too, as cstrike_e649a.rar: "Imported HUD", and the name is asked for)
+  const dull = n => !n || DULL_NAMES.test(n.trim().replace(/\s+/g, '_')), raw = file.name.replace(/\.[^.]+$/, '').replace(/_[0-9a-f]{5}$/i, '').replace(/[_]+/g, ' ').trim();
+  const stem = dull(raw) ? 'Imported HUD' : raw, says = rel => !dull(rel.split('\\').pop()) || !dull(raw);
   const taken = new Set((await call('huds')).split('\n').map(l => (l.split('\t')[0] || '').toLowerCase()));
   const unique = n => { let m = n, i = 2; while (taken.has(m.toLowerCase())) m = `${n} ${i++}`; return m; };
-  const nameFor = rel => { const last = rel.split('\\').pop(); return unique(!last || DULL_NAMES.test(last) ? (huds.length > 1 && last ? `${stem} ${last}` : stem) : last); };
+  const nameFor = rel => { const last = rel.split('\\').pop(); return unique(dull(last) ? (huds.length > 1 && last ? `${stem} ${last}` : stem) : last); };
   // files beside the HUD that a player is told to copy elsewhere (a cfg for cstrike/cfg)
   const cfgs = other.filter(p => /\.cfg$/i.test(p));
   const cfgNote = cfgs.length ? ` The archive also has ${cfgs.join(', ')}, which isn't part of the HUD folder: if its instructions say so, copy it into cstrike/cfg yourself.` : '';
@@ -5220,12 +5345,13 @@ async function importHud(file) {
       status(`Imported ${hudName} into your custom folder.${cfgNote} Its main menu buttons show once the game restarts (the ⟳ by Save HUD).`);
     } catch (err) { msg(err.message, true); }
   };
-  if (huds.length === 1) return put(huds[0], nameFor(huds[0]));
-  box.replaceChildren(el('p', { className: 'meta', textContent: `${file.name} has ${huds.length} HUDs in it (versions of it, most likely). Import the one you want, or each under its own name:` }));
+  if (huds.length === 1 && says(huds[0])) return put(huds[0], nameFor(huds[0]));
+  box.replaceChildren(el('p', { className: 'meta', textContent: huds.length > 1 ? `${file.name} has ${huds.length} HUDs in it (versions of it, most likely). Import the one you want, or each under its own name:`
+    : `Nothing in ${file.name} says what the HUD is called: give it a name.` }));
   for (const rel of huds) {
     const row = el('div', { className: 'pick' }), name = el('input', { value: nameFor(rel), maxLength: 60 });
     name.setAttribute('aria-label', 'Name for this HUD');
-    row.append(name, el('button', { className: 'primary', textContent: 'Import', onclick: () => put(rel, name.value) }), el('span', { className: 'meta', textContent: `In the archive: ${rel.slice(1).replace(/\\/g, '/')}` }));
+    row.append(name, el('button', { className: 'primary', textContent: 'Import', onclick: () => put(rel, name.value) }), el('span', { className: 'meta', textContent: `In the archive: ${rel ? rel.slice(1).replace(/\\/g, '/') : 'all of it'}` }));
     box.append(row);
   }
   if (cfgNote) box.append(el('p', { className: 'meta', textContent: cfgNote.trim() }));
@@ -5515,6 +5641,8 @@ async function parserCheck() {
       check(k.hudeditor_box1 === 'border/Lines you added' && k.hudeditor_box2 === 'bg/Parts you added', `colours by kind: a thin box of yours is a line (${JSON.stringify(k)})`);
     } finally { files = keep; }
   }
+  check(resScheme({ name: UI_RES.loadingdialog }) === S && resScheme({ name: LOADING_VAC }) === S && resScheme({ name: SB_PAGES[0] }) === S
+    && resScheme({ name: UI_RES.hudchat }) === CH && resScheme({ name: UI_RES.scores }) === C, 'an added box\'s edge line goes into the scheme its window draws with');
   check(Math.round(contrast('255 255 255 255', '0 0 0 255')) === 21 && contrast('200 240 245', '64 200 210') < 3 && contrast('200 240 245', '8 24 32') > 3,
     'colours by kind: readability is the contrast of the two colours (white on black 21 to 1, pale text on bright cyan under 3)');
   // ...through a name of no kind (held on to, so the kind's colour past it is written in), and one whose own colour stays
@@ -5857,6 +5985,23 @@ if (host && location.hash === '#hosttest') (async () => {
       const back = Uint8Array.from(atob(await call('readbin', 'materials/console/hudeditor_piece_test.vtf', '')), c => c.charCodeAt(0));
       check(back.length === 40 && back.every((b, i) => b === i * 3), `a big file goes to the host in pieces (${back.length} bytes back)`);
     }
+    {
+      // the same picture imported twice is one file (named after what's in it); another picture gets its own
+      const png = async colour => { const c = el('canvas', { width: 8, height: 8 }), g = c.getContext('2d'); g.fillStyle = colour; g.fillRect(0, 0, 8, 8);
+        return new File([await new Promise(r => c.toBlob(r, 'image/png'))], 'pic.png', { type: 'image/png' }); };
+      const a = await importPicture(await png('#f00')), vtf = `materials/vgui/${a.image}.vtf`;
+      await call('writebin', vtf, btoa('marker')); // (a second import that wrote it again would wipe this)
+      const b = await importPicture(await png('#f00')), c = await importPicture(await png('#00f'));
+      check(a.image === b.image && a.image !== c.image && atob(await call('readbin', vtf, '')) === 'marker', `a picture imported again is the same file, not written again (${a.image}, ${b.image}, ${c.image})`);
+    }
+    {
+      // renaming a HUD: its folder, in place; not over another, not to a name Windows keeps, a case-only change works
+      const a = await call('new', 'Rename A'), b = await call('new', 'Rename B'), fails = async (p, n) => { try { await call('rename', p, n); return false; } catch { return true; } };
+      const taken = await fails(a, 'Rename B'), con = await fails(a, 'CON'), to = await call('rename', a, 'Renamed A'), cased = await call('rename', to, 'renamed a');
+      const listed = (await call('huds')).split('\n').map(l => l.split('\t')[0]);
+      check(taken && con && /Renamed A$/.test(to) && /renamed a$/.test(cased) && listed.includes('renamed a') && !listed.includes('Rename A') && listed.includes('Rename B') && b,
+        `a HUD is renamed in place, not over another or to CON, and a change of case works (${listed.filter(Boolean)})`);
+    }
     save(F(C), 'Panel.FgColor', '9 9 9 255');
     const spec = await uiFile('resource/UI/spectator.res');
     const specSel = { res: spec, info: { id: 'specgui', kind: 'window' }, thing: { key: 'specgui' } }, eyeNames = () => showHideRows(specSel).map(r => r.querySelector('.rename').textContent);
@@ -5883,7 +6028,7 @@ if (host && location.hash === '#hosttest') (async () => {
     const sbCounts = sbSections.map(([, rows]) => rows.length);
     // (player rows: where they start and their colours, then each team's columns: 7 places and widths, and the list's)
     const sbCols = sbSections[2][1].filter(r => r.dataset.head === 'Columns').length;
-    check(sbCounts[0] === 2 && sbCounts[1] === 6 && sbCounts[2] === 9 + 34 && sbCols === 34 && sbCounts[3] === 2 && sbCounts[4] >= 8, `scoreboard: background, text colours, player rows (and where they start, and their columns), MVP star and fonts in one place (${sbCounts}; ${sbCols} column rows)`);
+    check(sbCounts[0] === 2 && sbCounts[1] === 6 && sbCounts[2] === 9 + 34 && sbCols === 34 && sbCounts[3] === 3 && sbCounts[4] >= 8, `scoreboard: background, text colours, player rows (and where they start, and their columns), MVP star and fonts in one place (${sbCounts}; ${sbCols} column rows)`);
     const menuFonts = fontsOf({ info: { kind: 'window', id: 'gamemenu', file: S }, thing: { key: 'gamemenu' } }).map(([f, n]) => `${f}:${n}`).join();
     const btnFonts = fontsOf({ info: { kind: 'window', id: 'info', file: C }, thing: { key: 'info' }, control: { cls: 'Button' } });
     check(menuFonts === `${S}:MenuLarge,${C}:ClientTitleFont` && btnFonts.length === 1 && btnFonts[0][1] === 'Default' && fontNames(C).length > 50

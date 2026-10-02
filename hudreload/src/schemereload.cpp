@@ -1769,11 +1769,68 @@ static int *EntityInt( int index, const char *prop, edict_t **out )
 	*out = e;
 	return ent ? (int *)( (char *)ent + off ) : NULL;
 }
-CON_COMMAND( schemereload_testvalue, "schemereload_testvalue health|armor|money|clip <n> | roundtime <minutes>: sets it for the listen server's own player" )
+// The scoreboard's MVP stars: the player resource's m_iMVPs (cs_player_manager), an array with an element per player
+// ("001" for the listen server's own), which the game sets again from the player's own count every tenth of a second.
+// A test count is held there every frame (see GameFrame); -1 lets it go.
+static int g_nTestMVPs = -1, g_nMVPIndex, g_nMVPOffset = -1, g_nMVPWrites;
+static int ArrayElementOffset( SendTable *t, const char *array, const char *element, int depth = 0 )
+{
+	for ( int i = 0; t && depth < 8 && i < t->GetNumProps(); ++i )
+	{
+		SendProp *p = t->GetProp( i );
+		if ( p->GetType() != DPT_DataTable || !p->GetDataTable() )
+			continue;
+		if ( !Q_stricmp( p->GetName(), array ) )
+		{
+			int o = PropOffset( p->GetDataTable(), element );
+			return o >= 0 ? p->GetOffset() + o : -1;
+		}
+		int o = ArrayElementOffset( p->GetDataTable(), array, element, depth + 1 );
+		if ( o >= 0 )
+			return p->GetOffset() + o;
+	}
+	return -1;
+}
+static void HoldMVPs()
+{
+	static int s_index;
+	edict_t *e = s_index ? g_pEngineServer->PEntityOfEntIndex( s_index ) : NULL;
+	if ( !e || e->IsFree() || Q_stricmp( e->GetClassName(), "cs_player_manager" ) )
+	{
+		e = NULL;
+		for ( int i = 1; i < MAX_EDICTS && !e; ++i )
+		{
+			edict_t *x = g_pEngineServer->PEntityOfEntIndex( i );
+			if ( x && !x->IsFree() && x->GetNetworkable() && !Q_stricmp( x->GetClassName(), "cs_player_manager" ) )
+				e = x, s_index = i;
+		}
+	}
+	IServerNetworkable *n = e ? e->GetNetworkable() : NULL;
+	ServerClass *sc = n ? n->GetServerClass() : NULL;
+	int off = g_nMVPOffset = sc ? ArrayElementOffset( sc->m_pTable, "m_iMVPs", "001" ) : -1;
+	g_nMVPIndex = e ? s_index : 0;
+	void *ent = off >= 0 && e->GetUnknown() ? e->GetUnknown()->GetBaseEntity() : NULL;
+	int *v = ent ? (int *)( (char *)ent + off ) : NULL;
+	if ( v && *v != g_nTestMVPs )
+	{
+		*v = g_nTestMVPs;
+		++g_nMVPWrites; // (a count the game set back from the player's own)
+		e->m_fStateFlags |= FL_EDICT_CHANGED | FL_FULL_EDICT_CHANGED;
+	}
+}
+
+CON_COMMAND( schemereload_testvalue, "schemereload_testvalue health|armor|money|clip|mvps <n> | roundtime <minutes>: sets it for the listen server's own player (mvps -1: the real count again)" )
 {
 	if ( args.ArgC() < 3 )
 		return;
 	const char *what = args.Arg( 1 );
+	if ( !Q_stricmp( what, "mvps" ) )
+	{
+		g_nTestMVPs = atoi( args.Arg( 2 ) );
+		if ( g_nTestMVPs >= 0 && g_pEngineServer && SR_SafeCall( HoldMVPs ) )
+			Msg( "[schemereload] test MVPs %d: player resource #%d, offset %d, written %d time(s) so far\n", g_nTestMVPs, g_nMVPIndex, g_nMVPOffset, g_nMVPWrites );
+		return;
+	}
 	if ( !Q_stricmp( what, "roundtime" ) )
 	{
 		if ( ConVar *rt = g_pCVar->FindVar( "mp_roundtime" ) )
@@ -1895,14 +1952,12 @@ static void MountFirst( const char *dir )
 	g_pFS->AddSearchPath( dir, "MOD", PATH_ADD_TO_HEAD );
 }
 
-CON_COMMAND( schemereload_mount, "schemereload_mount <folder>: search this folder before all others for game files (the HUD being edited)" )
+static void MountHud( const char *folder )
 {
 	static char s_mounted[MAX_PATH];
 	static bool s_added; // wasn't a search path before, so it goes again when another folder takes its place
-	if ( args.ArgC() < 2 )
-		return;
 	char dir[MAX_PATH];
-	V_strncpy( dir, args[1], sizeof( dir ) );
+	V_strncpy( dir, folder, sizeof( dir ) );
 	V_FixSlashes( dir );
 	V_AppendSlash( dir, sizeof( dir ) );
 	if ( s_added && V_stricmp( s_mounted, dir ) )
@@ -1917,6 +1972,38 @@ CON_COMMAND( schemereload_mount, "schemereload_mount <folder>: search this folde
 	V_strncpy( s_mounted, dir, sizeof( s_mounted ) );
 	g_bReloadOnMap = true;
 	Msg( "[schemereload] searching %s first\n", dir );
+}
+CON_COMMAND( schemereload_mount, "schemereload_mount <folder>: search this folder before all others for game files (the HUD being edited)" )
+{
+	if ( args.ArgC() > 1 )
+		MountHud( args[1] );
+}
+
+// The HUD the editor asks for in the command file it writes before it starts the game (see RunCommandFile), mounted as
+// the plugin loads: GameUI reads the main menu's buttons (GameMenu.res) once, as it starts, before the file's first
+// run, so a HUD outside the custom folder never showed its own. The file still runs as usual afterwards.
+static void MountFromCommandFile()
+{
+	char path[1024];
+	g_pEngineServer->GetGameDir( path, sizeof( path ) );
+	Q_strncat( path, "/addons/schemereload_cmd.txt", sizeof( path ) );
+	FILE *f = fopen( path, "rb" );
+	if ( !f )
+		return;
+	static char cmd[8192];
+	size_t n = fread( cmd, 1, sizeof( cmd ) - 1, f );
+	fclose( f );
+	cmd[n] = 0;
+	// (the newest: the file gathers every command the editor sent while the game was down, a HUD opened after another)
+	const char *key = "schemereload_mount \"", *at = NULL;
+	for ( const char *p = V_strstr( cmd, key ); p; p = V_strstr( p + 1, key ) )
+		at = p;
+	const char *from = at ? at + V_strlen( key ) : NULL, *end = from ? strchr( from, '"' ) : NULL;
+	if ( !end )
+		return;
+	char dir[MAX_PATH];
+	V_strncpy( dir, from, MIN( (int)sizeof( dir ), (int)( end - from ) + 1 ) );
+	MountHud( dir );
 }
 
 static void PrintStatus()
@@ -1980,7 +2067,7 @@ public:
 	virtual void Pause() {}
 	virtual void UnPause() {}
 	virtual const char *GetPluginDescription() { return "schemereload - live SourceScheme/ClientScheme reloading"; }
-	virtual void LevelInit( char const *pMapName ) { g_bLevelActive = true; }
+	virtual void LevelInit( char const *pMapName ) { g_bLevelActive = true; g_nTestMVPs = -1; } // (a test count is for this map)
 	virtual void ServerActivate( edict_t *pEdictList, int edictCount, int clientMax ) {}
 	virtual void GameFrame( bool simulating );
 	virtual void LevelShutdown() { g_bLevelActive = false; }
@@ -2039,6 +2126,7 @@ bool CSchemeReloadPlugin::Load( CreateInterfaceFn interfaceFactory, CreateInterf
 	V_FixSlashes( sounds );
 	if ( g_pFS->IsDirectory( sounds ) )
 		MountFirst( sounds );
+	MountFromCommandFile();
 
 	if ( !SR_StartTimer( TimerTick, 300 ) )
 		Warning( "[schemereload] couldn't start the file watcher timer; use scheme_reload manually\n" );
@@ -2064,6 +2152,12 @@ void CSchemeReloadPlugin::GameFrame( bool simulating )
 	double now = Plat_FloatTime();
 	if ( g_Reshow.Count() && !g_bStepBroken[STEP_PANELS] )
 		RunStep( STEP_PANELS, Reshow );
+	static bool s_mvpBroken;
+	if ( g_nTestMVPs >= 0 && g_pEngineServer && !s_mvpBroken && !SR_SafeCall( HoldMVPs ) )
+	{
+		s_mvpBroken = true;
+		Warning( "[schemereload] crashed while holding the test MVP count - switched off until restart\n" );
+	}
 	if ( simulating && !s_textBroken && now >= s_nextText )
 	{
 		s_nextText = now + 0.1;
