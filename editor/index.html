@@ -52,7 +52,7 @@
   .app-actions .sep { width: 1px; height: 24px; margin: 0 6px; background: var(--line); }
 
   /* the game: test tools over it (when open), messages under it */
-  .preview-area { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+  .preview-area { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
   .toolsbtn[aria-expanded="true"] { border-color: var(--accent); background: var(--soft); }
   :root { --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23e6dfe4' stroke-width='1.3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); } /* the top bar's drop-down arrow (Grid, Test tools) */
   .toolsbtn::after { content: ''; display: inline-block; width: 9px; height: 6px; margin-left: 8px; vertical-align: 2px; background: var(--chevron) no-repeat center / 9px 6px; }
@@ -70,9 +70,16 @@
   .gridbtn { appearance: none; padding: 6px 27px 6px 11px; color: var(--text); cursor: pointer;
     background: var(--field) var(--chevron) no-repeat right 11px center / 9px 6px; }
   .gridbtn:hover { border-color: var(--accent); background-color: var(--soft); }
-  #tools { display: grid; gap: 9px; padding: 12px 15px; background: var(--surface); border-bottom: 1px solid var(--line); }
-  #tools .tline { display: flex; gap: 7px; flex-wrap: wrap; align-items: center; }
-  .glabel { min-width: 76px; font-size: 12px; color: var(--muted); }
+  /* a small pop-out (it doesn't push the preview down), dragged by its title anywhere in the window */
+  #tools { position: fixed; z-index: 5; width: min(300px, calc(100vw - 16px)); max-height: calc(100vh - 16px); overflow: auto; display: grid; gap: 7px; padding: 0 9px 9px;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 14px 36px rgb(0 0 0 / .5); }
+  #tools .thead { position: sticky; top: 0; display: flex; align-items: center; justify-content: space-between; margin: 0 -9px; padding: 3px 3px 3px 9px;
+    background: var(--surface); border-bottom: 1px solid var(--line); font-size: 12px; font-weight: 600; cursor: move; user-select: none; }
+  #tools .thead button { padding: 1px 7px; font-size: 12px; }
+  #tools .tline { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+  #tools .tline button { padding: 3px 8px; font-size: 12px; }
+  #tools .meta { font-size: 11px; }
+  .glabel { flex-basis: 100%; font-size: 11px; color: var(--muted); }
   #texts button { padding: 3px 10px; border-radius: 12px; font-size: 12px; }
   #texts button[aria-pressed="false"] { opacity: .5; text-decoration: line-through; }
   #preview { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 8px; background: #0a090b; container-type: size; overflow: hidden; }
@@ -332,13 +339,14 @@
   </div>
 </header>
 <section class="preview-area">
-  <div id="tools" hidden>
+  <div id="tools" hidden role="dialog" aria-label="Test tools">
+    <div class="thead"><span>Test tools</span><button id="toolsclose" class="ghost" title="Close (Test tools opens them again)">✕</button></div>
     <div class="tline">
       <span class="glabel">Keep open</span>
       <button id="scores" aria-pressed="false" title="Keep the scoreboard open to edit it. Click again (or press Tab in the game) to close it.">Scoreboard</button>
       <button id="keepchat" aria-pressed="false" title="Keep the chat open (typing) to edit it: opened again after a change reloads the HUD. Click again to close it.">Chat</button>
     </div>
-    <div class="tline meta" id="notlocal">Sample text and test values work in the test game (Test server), not on other servers.</div>
+    <div class="tline meta" id="notlocal">Sample text and test values show here in the test game (Test server).</div>
     <div class="tline" id="texts" hidden>
       <span class="glabel">Sample text</span>
       <button data-bit="1" title="Timer box (font HudHintText) and right-side text (HudHintTextSmall)">Timer</button>
@@ -1080,7 +1088,9 @@ const CONTAINERS = new Set(['staticpanel', 'staticclientdllpanel', 'counterstrik
 
 function parsePanels(raw) {
   const [head, ...lines] = raw.trim().split('\n');
-  const [, W, H, local] = head.split('\t'); // local: the game runs the server itself (the test game), see testTools
+  // local: the game runs the server itself (the test game), see testTools; loadHud: the HUD the plugin mounted as it
+  // loaded, whose main menu buttons the game has
+  const [, W, H, local, loadHud] = head.split('\t');
   const stack = [], panels = [];
   for (const l of lines) {
     const [d, module, name, x, y, w, h, cls, scheme, keys] = l.split('\t');
@@ -1095,7 +1105,7 @@ function parsePanels(raw) {
   for (const p of panels) p.thing = thingOf(p);
   // the loading box held open (see holdLoading): the main menu under it isn't drawn (a load hides it), but stays listed
   const loading = panels.some(p => p.thing === p && p.key === 'loadingdialog');
-  return { W: +W, H: +H, local: local === '1', panels: loading ? panels.filter(p => !(p.thing && /^gamemenu(button2?)?$/.test(p.thing.key))) : panels };
+  return { W: +W, H: +H, local: local === '1', loadHud: loadHud || '', panels: loading ? panels.filter(p => !(p.thing && /^gamemenu(button2?)?$/.test(p.thing.key))) : panels };
 }
 
 // The HUD part or window a panel belongs to: the nearest ancestor-or-self sitting directly in a container.
@@ -1464,18 +1474,18 @@ async function runCheckup() {
   const hudFonts = (await call('hudfonts').catch(() => '')).split('\n').filter(Boolean).map(l => { const [family, path = ''] = l.split('\t'); return { family, path }; });
   const listedPaths = new Set(FONT_FILES.flatMap(([file]) => F(file) ? fontFileEntries(F(file)).map(e => e.value.replace(/\\/g, '/').toLowerCase()) : []));
   const isListed = h => listedPaths.has(h.path.toLowerCase());
-  // the game reads custom folders in name order: a HUD there before this one wins for every file both have (the
-  // editor puts this one first while it runs, but not for the menus read as the game starts, nor when playing)
+  // the game reads custom folders in name order: a HUD there before this one wins for every file both have when playing
+  // (the editor's game puts this one first and leaves the other HUDs out, so the preview doesn't show it)
   const huds = (await call('huds').catch(() => '')).split('\n').map(l => l.split('\t'));
   const here = (huds.find(l => l[1] === 'current') || [])[2] || '', dir = p => p.toLowerCase().replace(/[\\/][^\\/]+$/, ''), base = p => p.split(/[\\/]/).pop();
   const before = /[\\/]custom[\\/][^\\/]+$/i.test(here) ? [...new Set(huds.filter(l => l[1] && l[1] !== 'current' && dir(l[1]) === dir(here)).map(l => base(l[1])))]
     .filter(n => n.toLowerCase() < base(here).toLowerCase()) : [];
   const beforePaths = [...new Set(huds.filter(l => l[1] && l[1] !== 'current' && dir(l[1]) === dir(here) && before.includes(base(l[1]))).map(l => l[1]))];
-  if (before.length) add(`${list(before)} ${before.length > 1 ? 'come' : 'comes'} before ${base(here)} in the custom folder, so the game uses ${before.length > 1 ? 'their' : 'its'} files first: its main menu, and everything when you play. Move ${before.length > 1 ? 'them' : 'it'} out of custom to use this HUD.`,
+  if (before.length) add(`${list(before)} ${before.length > 1 ? 'come' : 'comes'} before ${base(here)} in the custom folder, so when you play, the game uses ${before.length > 1 ? 'their' : 'its'} files first (the editor's game leaves ${before.length > 1 ? 'them' : 'it'} out, so the preview doesn't show this). Move ${before.length > 1 ? 'them' : 'it'} out of custom to use this HUD.`,
     [`Move ${before.length > 1 ? 'them' : 'it'} to the Desktop`, () => moveOut(beforePaths)]);
   // ones after it fill in what it doesn't have (a HUD without a team menu shows theirs)
   const afterPaths = /[\\/]custom[\\/][^\\/]+$/i.test(here) ? [...new Set(huds.filter(l => l[1] && l[1] !== 'current' && dir(l[1]) === dir(here) && base(l[1]).toLowerCase() > base(here).toLowerCase()).map(l => l[1]))] : [];
-  if (afterPaths.length) add(`${list(afterPaths.map(base))} ${afterPaths.length > 1 ? 'are' : 'is'} in the custom folder too: any file ${base(here)} doesn't have (a window it leaves as the game's, a picture) comes from ${afterPaths.length > 1 ? 'them' : 'it'} instead.`,
+  if (afterPaths.length) add(`${list(afterPaths.map(base))} ${afterPaths.length > 1 ? 'are' : 'is'} in the custom folder too: when you play, any file ${base(here)} doesn't have (a window it leaves as the game's, a picture) comes from ${afterPaths.length > 1 ? 'them' : 'it'} instead. The editor's game leaves ${afterPaths.length > 1 ? 'them' : 'it'} out, so the preview doesn't show this.`,
     [`Move ${afterPaths.length > 1 ? 'them' : 'it'} to the Desktop`, () => moveOut(afterPaths)]);
   const games = {};
   for (const [file] of FONT_FILES) games[file] = await call('vanilla', PATHS[file].split('/').pop()).then(parse).catch(() => null);
@@ -2899,6 +2909,7 @@ function kindWrites(kind, target, every = false, all = colourValues()) {
 // Written once the picker rests (a drag is one Ctrl+Z, see commit), the window files it reaches read in first; each file
 // once, all of them one Ctrl+Z.
 function setKind(kind, target, every = false, then = null) {
+  if (!every) kindsPicked.add(kind); // (a colour picked, not ↺)
   clearTimeout(kindTimers[kind]);
   waiting.add(`kind ${kind}`); // (the list isn't redrawn from the old colours meanwhile)
   kindTimers[kind] = setTimeout(async () => {
@@ -2925,10 +2936,14 @@ const luminance = c => { const [r, g, b] = toRgba(c).slice(0, 3).map(v => (v /= 
 const contrast = (a, b) => { const [x, y] = [luminance(a), luminance(b)].sort((m, n) => n - m); return (x + 0.05) / (y + 0.05); };
 // Text drawn on a kind's fills that would be hard to read (under 3:1): the fills buttons under the mouse, selected rows
 // and the team menu's buttons use are Highlights, so a bright highlight under pale text is the usual one
+// Only once a colour of the pair has been picked here (this session): the game's own white on orange selected rows is
+// 2.1 to 1, and a warning on a HUD nobody has touched yet only puzzles
+const kindsPicked = new Set();
 function readability(all) {
   const top = k => topColour(all.filter(p => p.kind === k && shows(p) && kindOn(p)).map(p => p.value))[0]?.[0];
   const text = top('text');
   return !text ? [] : [['bg', 'the backgrounds'], ['button', 'buttons'], ['hilite', 'highlighted buttons and selected rows']]
+    .filter(([k]) => kindsPicked.has(k) || kindsPicked.has('text'))
     .map(([k, what]) => [what, top(k) && contrast(text, top(k))]).filter(([, r]) => r && r < 3);
 }
 const WHERE = [[C, 'In game'], [S, 'Menus'], [CH, 'Chat']];
@@ -5091,11 +5106,15 @@ async function poll() {
   $('launch').hidden = !!live;
   $('gamestate').textContent = !live ? 'Waiting for the game' : `${loadingUp() ? 'Loading screen' : menuUp() ? 'Main menu' : live.local ? 'Test game' : 'In a game'} · ${live.W}×${live.H}`;
   if (!live) loadingHeld = null; // (a game that has gone holds nothing open)
+  if (live) launching = false; // (it came up)
   testTools();
   // the game quit without the capture noticing (a quick quit): the next game gets a new capture
   if (!live && captured) captureEnded();
   // a game that has gone reads everything afresh when it starts
   if (!live && restartFor.size) { restartFor.clear(); needRestart(); }
+  // which HUD the game started with is known once the plugin answers (a HUD opened before that is checked again here)
+  const loadHud = live ? live.loadHud : null;
+  if (loadHud !== menuSeen) { menuSeen = loadHud; if (live) menuMark(); }
   // the scoreboard closes when the HUD reloads: open it again while it's being kept open
   if (keepScores && live && !live.panels.some(p => p.key === 'scores') && Date.now() - scoresSent > 1500) { scoresSent = Date.now(); call('cmd', '', '+showscores'); }
   // the same for the chat (a reload takes it out of typing): the player's chat key opens it again
@@ -5154,6 +5173,7 @@ if (host) {
 function captureEnded() { // the game window closed
   if (frames) host.releaseBuffer(frames);
   frames = null; captured = false; autoTried = false;
+  if (!restarting) emptyText('The game has closed.', 'Launch game (at the top) starts it again with this HUD, or pick another HUD.');
   $('video').hidden = true; $('empty').hidden = false; $('stage').classList.add('schematic'); drawBoxes();
 }
 
@@ -5174,12 +5194,32 @@ async function toggleText(bit) {
 }
 
 // The scoreboard and sample text toggles fold under the Test server button; starting a test game opens them.
-function showTools(on) { $('tools').hidden = !on; $('toolsbtn').setAttribute('aria-expanded', on); }
+function showTools(on) { $('tools').hidden = !on; $('toolsbtn').setAttribute('aria-expanded', on); if (on) placeTools(); }
+// The pop-out goes where it was last dragged to (this PC), at first under its button; always whole inside the window
+function placeTools(at = null) {
+  const t = $('tools');
+  try { at = at || JSON.parse(localStorage.getItem('toolsPos') || 'null'); } catch {}
+  if (!at) { const b = $('toolsbtn').getBoundingClientRect(); at = { x: b.right - t.offsetWidth, y: b.bottom + 6 }; }
+  const x = Math.max(0, Math.min(at.x, innerWidth - t.offsetWidth)), y = Math.max(0, Math.min(at.y, innerHeight - t.offsetHeight));
+  Object.assign(t.style, { left: `${x}px`, top: `${y}px` });
+  return { x, y };
+}
+function dragTools(e) {
+  if (e.button !== 0 || e.target.closest('button')) return;
+  const t = $('tools'), r = t.getBoundingClientRect(), dx = e.clientX - r.left, dy = e.clientY - r.top;
+  let at = null;
+  const move = m => { at = placeTools({ x: m.clientX - dx, y: m.clientY - dy }); };
+  const up = () => { removeEventListener('mousemove', move); removeEventListener('mouseup', up); if (at) try { localStorage.setItem('toolsPos', JSON.stringify(at)); } catch {} };
+  addEventListener('mousemove', move);
+  addEventListener('mouseup', up);
+  e.preventDefault();
+}
 // Sample text and test values need the server to be this game's own (the test game): elsewhere a note says so.
 function testTools() {
   const local = !!live && live.local;
   $('texts').hidden = $('values').hidden = !local;
   $('notlocal').hidden = local;
+  if (!$('tools').hidden) placeTools(); // taller now: still whole in the window
 }
 
 async function testServer() {
@@ -5206,6 +5246,7 @@ async function restartGame(between = null) {
   if (restarting) return;
   restarting = true;
   $('restartmark').disabled = true;
+  emptyText('The game is restarting...', 'It shows up here again once it has loaded.');
   try {
     if (live) {
       status('Quitting the game...');
@@ -5218,6 +5259,7 @@ async function restartGame(between = null) {
       await sleep(15000);
     }
     // started, then checked: once more if it doesn't come up
+    gameHud = hudPath; // (it starts with the HUD open now)
     for (let tries = 0; !live && tries < 3; tries++) {
       try { await call('launch'); } catch (err) { if (!/already running/i.test(err.message)) throw err; }
       status('Starting the game again: the preview comes back once it has loaded.');
@@ -5274,7 +5316,7 @@ function renameRow(row, name, path, mine, canCancel) {
       if (!confirm(`Save the changes to ${hudName} first? A HUD with unsaved changes can't be renamed.`)) return;
       if (!(await saveHud())) return;
     }
-    const rename = async () => { await call('rename', path, to); if (mine) hudName = to, $('hudbtn').textContent = to; status(`${name} is now called ${to}.`); };
+    const rename = async () => { const now = await call('rename', path, to); if (mine) hudName = to, hudPath = now, $('hudbtn').textContent = to; status(`${name} is now called ${to}.`); };
     try { await rename(); back(); }
     catch (err) {
       if (!live || !/game has files/.test(err.message)) return say(err.message, true);
@@ -5294,6 +5336,7 @@ async function openHud(path) {
   if (dirty && !confirm(`Discard the unsaved changes to ${hudName}?`)) return;
   try {
     hudName = await call('open', path);
+    hudPath = path;
     try { const k = JSON.parse(localStorage.getItem('restartFor') || 'null'); if (k && k.hud === hudName && live) for (const w of k.what) restartFor.add(w); } catch {}
     needRestart();
     $('picker').hidden = true;
@@ -5303,6 +5346,7 @@ async function openHud(path) {
     undoSteps.length = 0;
     dropped.clear();
     for (const k in opened) delete opened[k]; // ↺ goes back to this HUD as opened
+    kindsPicked.clear();
     chatResOk = false;
     setDirty(false);
     await loadAll();
@@ -5310,6 +5354,8 @@ async function openHud(path) {
     // the game's name colours to this HUD's (or back to config.cfg's after discarding a HUD's new cfg)
     if (F(CVAR_CFG) || cvarStart) { cvarValues = null; await loadCvars(); applyCvars(F(CVAR_CFG) && F(CVAR_CFG).text); }
     status(live ? `Editing ${hudName}. Click anything in the preview to edit it.` : `Editing ${hudName}.`);
+    menuMark();
+    await launchForHud();
     // the HUD's own font faces first in the font name suggestions
     call('hudfonts').then(list => { fontFaces = [...new Set([...list.split('\n').filter(Boolean).map(l => l.split('\t')[0]), ...fontFaces])]; }).catch(() => {});
   } catch (err) {
@@ -5345,8 +5391,9 @@ async function importHud(file) {
       box.replaceChildren();
       await openHud(path);
       if (hudName !== name.trim()) return;
-      needRestart('the imported HUD\'s main menu buttons');
-      status(`Imported ${hudName} into your custom folder.${cfgNote} Its main menu buttons show once the game restarts (the ⟳ by Save HUD).`);
+      // (a game running with another HUD has that one's buttons: openHud put up the ⟳; one it starts now has these)
+      const later = restartFor.has(`${hudName}'s main menu buttons`) ? ' Its main menu buttons show once the game restarts (the ⟳ by Save HUD).' : '';
+      status(`Imported ${hudName} into your custom folder.${later}${cfgNote}`);
     } catch (err) { msg(err.message, true); }
   };
   if (huds.length === 1 && says(huds[0])) return put(huds[0], nameFor(huds[0]));
@@ -5436,6 +5483,9 @@ if (host) {
   };
   $('testserver').onclick = testServer;
   $('toolsbtn').onclick = () => showTools($('tools').hidden);
+  $('toolsclose').onclick = () => showTools(false);
+  $('tools').querySelector('.thead').onmousedown = dragTools;
+  addEventListener('resize', () => { if (!$('tools').hidden) placeTools(); });
   // held open like Tab does, as Tab can't be held down while clicking in the editor
   $('scores').onclick = () => {
     if (!live) return status('Start the game first.');
@@ -5453,7 +5503,7 @@ if (host) {
   $('texts').onclick = e => { const b = e.target.closest('button'); if (b) toggleText(+b.dataset.bit); };
   showTexts();
   $('capture').onclick = () => capture(false);
-  $('launch').onclick = async () => { try { await call('launch'); status('Starting the game...'); } catch (err) { status(err.message); } };
+  $('launch').onclick = () => launchForHud(true);
   $('search').oninput = () => render();
 }
 
@@ -5487,14 +5537,50 @@ document.addEventListener('keyup', e => {
 // a release the editor never saw (it went to the game) mustn't block the next press
 window.addEventListener('focus', () => keysDown.clear());
 
-async function start() {
-  $('empty').innerHTML = '<p><b>Starting Counter-Strike: Source...</b></p><p>The game window shows up here by itself once it has loaded.</p>';
+// The game is started once a HUD is picked, not before: it reads the main menu's buttons once, as it starts, and the
+// plugin mounts the HUD being edited as it loads, so the game starts with that HUD's own. Another HUD opened while it
+// runs shows its buttons after a restart (⟳). Which HUD the game started with: the plugin says (live.loadHud), else the
+// one this editor launched it with (gameHud). hudPath: the open HUD's folder. menuSeen: the loadHud last checked.
+let startState = '', launching = false, gameHud = null, hudPath = null, menuSeen = null;
+const sameFolder = (a, b) => [a, b].map(p => (p || '').replace(/\//g, '\\').replace(/\\+$/, '').toLowerCase()).reduce((x, y) => !!x && x === y);
+const emptyText = (head, more) => { const p = el('p'); p.append(el('b', { textContent: head })); $('empty').replaceChildren(p, el('p', { textContent: more })); };
+// the game started with another HUD than the open one: its buttons show after a restart; back on that one, none needed
+function menuMark() {
+  for (const w of [...restartFor]) if (/'s main menu buttons$/.test(w)) restartFor.delete(w);
+  const startedWith = (live && live.loadHud) || gameHud;
+  if (live && hudPath && startedWith && !sameFolder(startedWith, hudPath)) needRestart(`${hudName}'s main menu buttons`);
+  else needRestart();
+}
+// A HUD picked with no game running starts it (a game already running without the editor is left alone: Launch game,
+// once it's quit). byHand: the Launch game button.
+async function launchForHud(byHand = false) {
+  if (live || launching || restarting || (!byHand && (!hudPath || startState === 'foreign'))) return;
+  launching = true;
+  gameHud = hudPath;
+  emptyText('Starting Counter-Strike: Source...', 'The game window shows up here by itself once it has loaded.');
   try {
-    const state = await call('start');
+    await call('launch');
+    startState = 'launched';
+    status(hudName ? `Starting the game with ${hudName}...` : 'Starting the game...');
+  } catch (err) {
+    launching = false;
+    emptyText('The game didn\'t start.', err.message);
+    status(err.message);
+    $('launch').hidden = false;
+  }
+}
+async function start() {
+  try {
+    const state = startState = await call('start');
     if (state === 'foreign') {
       status('The game is already running without the editor. Quit it, then click Launch game.');
       $('launch').hidden = false;
-    } else status(state === 'running' ? 'Game already running.' : 'Starting the game...');
+    } else if (state === 'running') {
+      status('Game already running.');
+    } else {
+      emptyText('Pick a HUD to edit.', 'The game starts with it, and shows up here once it has loaded.');
+      status('Pick a HUD to edit: the game starts with it.');
+    }
   } catch (err) {
     status(err.message);
     $('launch').hidden = false;
@@ -5647,6 +5733,8 @@ async function parserCheck() {
   }
   check(resScheme({ name: UI_RES.loadingdialog }) === S && resScheme({ name: LOADING_VAC }) === S && resScheme({ name: SB_PAGES[0] }) === S
     && resScheme({ name: UI_RES.hudchat }) === CH && resScheme({ name: UI_RES.scores }) === C, 'an added box\'s edge line goes into the scheme its window draws with');
+  check(sameFolder('C:/Games/HUD A/', 'c:\\games\\hud a') && !sameFolder('C:/Games/HUD', 'C:/Games/HUD A') && !sameFolder('', '')
+    && parsePanels('screen\t1920\t1080\t0\tC:\\Users\\x\\testhud\\\n').loadHud === 'C:\\Users\\x\\testhud\\', 'the HUD the game started with, as the plugin says, matched to one opened');
   check(Math.round(contrast('255 255 255 255', '0 0 0 255')) === 21 && contrast('200 240 245', '64 200 210') < 3 && contrast('200 240 245', '8 24 32') > 3,
     'colours by kind: readability is the contrast of the two colours (white on black 21 to 1, pale text on bright cyan under 3)');
   // ...through a name of no kind (held on to, so the kind's colour past it is written in), and one whose own colour stays

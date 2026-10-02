@@ -114,6 +114,15 @@ extern "C" bool SR_CodeNames( const void *fn, int len, const char *text )
 	return false;
 }
 
+// Is there a file or folder at path (UTF-8, as the game's paths are)?
+extern "C" bool SR_Exists( const char *path )
+{
+	wchar_t w[1024];
+	if ( !MultiByteToWideChar( CP_UTF8, 0, path, -1, w, 1024 ) )
+		return false;
+	return GetFileAttributesW( w ) != INVALID_FILE_ATTRIBUTES;
+}
+
 // Runs fn and swallows a crash (access violation etc.) instead of taking the game down.
 extern "C" int SR_SafeCall( void ( *fn )() )
 {

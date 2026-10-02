@@ -857,8 +857,8 @@ static void OnMessage( const wstring &msg )
 	auto fail = [&]( const wstring &err ) { ok = false; out = err; };
 	const wstring noGame = L"Counter-Strike: Source wasn't found in your Steam libraries.";
 
-	if ( op == L"start" ) // on page load: "running", "launched", or why neither
-	{
+	if ( op == L"start" ) // on page load: "running", "foreign" (running without the plugin), "idle" (not running: the page
+	{                     // launches it once a HUD is picked, so it starts with that HUD's main menu), or why neither
 		auto recent = Recent();
 		if ( g_hudPath.empty() && !recent.empty() )
 			g_hudPath = recent[0];
@@ -866,10 +866,8 @@ static void OnMessage( const wstring &msg )
 			fail( noGame );
 		else if ( GameRunning() )
 			out = PluginLoaded() ? L"running" : L"foreign";
-		else if ( ( out = Launch() ).size() )
-			ok = false;
 		else
-			out = L"launched";
+			out = L"idle";
 	}
 	else if ( op == L"launch" )
 	{
@@ -1409,6 +1407,9 @@ static LRESULT CALLBACK WndProc( HWND h, UINT m, WPARAM w, LPARAM l )
 	case WM_DESTROY:
 		StopCapture();
 		Revert(); // unsaved changes (the page asked about them first)
+		// commands no game took (a HUD opened, the game never started): not for a game started from Steam later
+		if ( !g_game.empty() && !GameRunning() )
+			DeleteFileW( ( g_game + L"\\addons\\schemereload_cmd.txt" ).c_str() );
 		PostQuitMessage( g_exitCode );
 		return 0;
 	}

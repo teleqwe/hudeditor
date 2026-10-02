@@ -1483,10 +1483,11 @@ CON_COMMAND( schemereload_loading, "schemereload_loading show|vac|hide: holds th
 
 //-----------------------------------------------------------------------------
 // Visible panels, for the editor: addons/schemereload_panels.txt lists every visible panel
-// a few levels deep ("screen W H local", then "depth module name x y w h class scheme keys" per line). The HUD hides
+// a few levels deep ("screen W H local loadHud", then "depth module name x y w h class scheme keys" per line). The HUD hides
 // elements that aren't being drawn, so this is what is actually on screen.
 //-----------------------------------------------------------------------------
 static bool g_bDumpBroken;
+static char g_szLoadHud[MAX_PATH]; // the HUD mounted as the plugin loaded: the one whose main menu buttons the game has
 
 // Which of our files a panel's scheme came from ("-" if neither): the module alone can't tell, e.g. the centre print
 // is a client panel that uses SourceScheme.
@@ -1529,7 +1530,7 @@ static void DumpPanels()
 	int w, h;
 	g_pVPanel->GetSize( top, w, h );
 	// (local: 1 while this game runs the server itself, the test game or Create Server, where the test commands work)
-	out.Printf( "screen\t%d\t%d\t%d\n", w, h, g_bLevelActive ? 1 : 0 );
+	out.Printf( "screen\t%d\t%d\t%d\t%s\n", w, h, g_bLevelActive ? 1 : 0, g_szLoadHud ); // (the last: see MountFromCommandFile)
 	DumpTree( top, -1, 1, out );
 	if ( out.TellPut() == s_last.TellPut() && !memcmp( out.Base(), s_last.Base(), out.TellPut() ) )
 		return;
@@ -1952,6 +1953,44 @@ static void MountFirst( const char *dir )
 	g_pFS->AddSearchPath( dir, "MOD", PATH_ADD_TO_HEAD );
 }
 
+// While a HUD is edited, the other HUDs in the custom folder are out of the search paths: what the edited HUD leaves out
+// comes from the game, as for a player who has only it (a new HUD showed the last one's main menu buttons and
+// background). A custom folder with one of a HUD's own files in it counts as a HUD (all of it goes, models in it too);
+// the rest stays, sound, radar and weapon mods with resource/ or scripts/ too. A HUD packed as a .vpk isn't seen. They
+// are all back when the game restarts (the editor's game only: this plugin loads with -insecure).
+extern "C" bool SR_Exists( const char *path );
+static const char *const s_hudFiles[] = { "resource/ui", "resource/clientscheme.res", "resource/sourcescheme.res", "resource/gamemenu.res",
+	"resource/chatscheme.res", "scripts/hudlayout.res", "scripts/hudanimations.txt", "scripts/hudanimations_manifest.txt" };
+static void HideOtherHuds( const char *keep )
+{
+	static char s_paths[65536];
+	g_pFS->GetSearchPath( "GAME", false, s_paths, sizeof( s_paths ) );
+	char custom[MAX_PATH];
+	g_pEngineServer->GetGameDir( custom, sizeof( custom ) );
+	V_strncat( custom, "/custom/", sizeof( custom ) );
+	V_FixSlashes( custom );
+	for ( char *p = s_paths, *end; *p; p = *end ? end + 1 : end )
+	{
+		end = strchr( p, ';' );
+		if ( !end )
+			end = p + V_strlen( p );
+		char path[MAX_PATH], sub[MAX_PATH];
+		V_strncpy( path, p, MIN( (int)sizeof( path ), (int)( end - p ) + 1 ) );
+		V_FixSlashes( path );
+		V_AppendSlash( path, sizeof( path ) );
+		if ( Q_strnicmp( path, custom, V_strlen( custom ) ) || !V_stricmp( path, keep ) )
+			continue;
+		bool hud = false;
+		for ( const char *f : s_hudFiles )
+			V_snprintf( sub, sizeof( sub ), "%s%s", path, f ), hud |= SR_Exists( sub );
+		if ( !hud )
+			continue;
+		g_pFS->RemoveSearchPath( path, "GAME" );
+		g_pFS->RemoveSearchPath( path, "MOD" );
+		Msg( "[schemereload] left out while editing: %s\n", path );
+	}
+}
+
 static void MountHud( const char *folder )
 {
 	static char s_mounted[MAX_PATH];
@@ -1970,6 +2009,7 @@ static void MountHud( const char *folder )
 	s_added = !V_stristr( s_paths, dir ) || ( s_added && !V_stricmp( s_mounted, dir ) );
 	MountFirst( dir );
 	V_strncpy( s_mounted, dir, sizeof( s_mounted ) );
+	HideOtherHuds( dir );
 	g_bReloadOnMap = true;
 	Msg( "[schemereload] searching %s first\n", dir );
 }
@@ -2004,6 +2044,7 @@ static void MountFromCommandFile()
 	char dir[MAX_PATH];
 	V_strncpy( dir, from, MIN( (int)sizeof( dir ), (int)( end - from ) + 1 ) );
 	MountHud( dir );
+	V_strncpy( g_szLoadHud, dir, sizeof( g_szLoadHud ) );
 }
 
 static void PrintStatus()
