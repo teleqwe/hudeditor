@@ -990,6 +990,17 @@ function needRestart(what) {
   if (!on) closeRestartPop();
   else if (restartPop) showRestartPop(); // (the list as it is now)
 }
+// Font changes take memory the game never gives back (its glyph pages, ~25 MB a change at 1080p, measured 10-04): once it
+// has taken 2 GB more than the least the editor saw it use, the ⚠ lists it, and a restart frees it.
+const MEM_RESTART = 'memory the game has taken for font changes (a restart gives it back)';
+let memBase = null;
+async function memWatch() {
+  if (!live) { memBase = null; return; }
+  const mb = +(await call('gamemem').catch(() => 0));
+  if (!mb) return;
+  if (memBase === null || mb < memBase) memBase = mb;
+  if (mb - memBase > 2048 && !restartFor.has(MEM_RESTART)) needRestart(MEM_RESTART);
+}
 let restartPop = null;
 const closeRestartPop = () => { if (restartPop) { restartPop.remove(); restartPop = null; } };
 function showRestartPop() {
@@ -5753,6 +5764,7 @@ async function start() {
   showPicker(false);
   loadGame();
   setInterval(poll, 500);
+  setInterval(memWatch, 15000);
   call('fontfaces').then(list => { fontFaces.push(...list.split('\n').filter(Boolean)); }).catch(() => {});
 }
 
@@ -6388,6 +6400,7 @@ if (host && location.hash === '#hosttest') (async () => {
     check(await readHud('resource/nope.res') === null, 'missing file reads as null');
     check(await call('read', '../outside.txt').then(() => false, () => true), 'paths outside the HUD refused');
     check(await call('new', 'myhud').then(() => false, () => true), 'existing HUD not overwritten');
+    check(await call('gamemem').then(() => false, () => true), 'the game\'s memory: none without the game');
     await call('done', '', 'ok');
   } catch (err) {
     await call('done', '', err.message);

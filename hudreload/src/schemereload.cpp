@@ -576,7 +576,10 @@ static void StepFonts()
 	if ( g_nFonts || added )
 	{
 		g_pSchemeMgr->ReloadFonts();
-		// the fonts now use the new face, but text is drawn from glyphs cached from the old one; drop them
+		// the fonts now use the new face, but text is drawn from glyphs cached from the old one; drop them. (The game
+		// keeps the old glyph pages' memory: ~25 MB a call at 1080p, measured 10-04. ReloadFonts alone takes none, but then
+		// text keeps the old glyphs, scaled: no outline, italic overlapping; ClearTemporaryFontCache doesn't help either.
+		// The editor watches the game's memory and offers a restart, see gamemem.)
 		if ( g_pSurface )
 			g_pSurface->ResetFontCaches();
 	}

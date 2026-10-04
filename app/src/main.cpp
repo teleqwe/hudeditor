@@ -7,6 +7,7 @@
 #include <shobjidl.h>
 #include <shlwapi.h>
 #include <tlhelp32.h>
+#include <psapi.h>
 #include <wrl.h>
 #include <string>
 #include <vector>
@@ -1237,6 +1238,18 @@ static void OnMessage( const wstring &msg )
 			fail( L"unknown corner shape" );
 		else if ( ( out = WriteCorners( arg ) ).empty() )
 			fail( L"couldn't write the corner textures" );
+	}
+	else if ( op == L"gamemem" ) // the game's own memory in MB (private bytes): font changes take some it never gives back
+	{
+		DWORD pid = GamePid();
+		HANDLE h = pid ? OpenProcess( PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid ) : NULL;
+		PROCESS_MEMORY_COUNTERS_EX pm{ sizeof( pm ) };
+		if ( h && K32GetProcessMemoryInfo( h, (PROCESS_MEMORY_COUNTERS *)&pm, sizeof( pm ) ) )
+			out = std::to_wstring( (unsigned long long)( pm.PrivateUsage >> 20 ) );
+		else
+			fail( L"game not running" );
+		if ( h )
+			CloseHandle( h );
 	}
 	else if ( op == L"panels" ) // what the plugin says is on screen right now
 	{
