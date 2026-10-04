@@ -3501,9 +3501,14 @@ function resRows(f, block, defaults, schemeFile, ctl) {
     const align = v => (v || 'west').toLowerCase().replace(/^(north|south)(west|east)$/, '$1-$2');
     if (ctl === 'Label' || 'textalignment' in p) tag(selectRow('Text alignment', TEXT_ALIGN, align(p.textalignment), v => save(f, 'textAlignment', v, block), ['textAlignment'], `${f.name}/${block}/textalignment`, align(g.textalignment)), 'layout', 'Text');
   }
-  for (const [k, label] of POS) if (k in p || k.endsWith('pos')) rows.push(numRow(f, block, k, label, p[k]));
+  const fixed = FIXED_SIZE.has(`${f.name}|${block}`.toLowerCase());
+  for (const [k, label] of POS) if ((k in p || k.endsWith('pos')) && !(fixed && !k.endsWith('pos'))) rows.push(numRow(f, block, k, label, p[k]));
+  if (fixed) { const n = noteRow('Its size stays the game\'s: with any other the game crashed as the spectator bars showed (checked 2026-10-05).'); Object.assign(n.dataset, { cat: 'layout', head: 'Box size' }); rows.push(n); }
   return rows;
 }
+// Controls whose size the game can't take: the spectator bars' score numbers, wider or narrower than the game's 15,
+// closed the game (no crash report) two seconds after the bars showed, live and from a start alike (2026-10-05)
+const FIXED_SIZE = new Set(['resource/ui/spectator.res|ctscorevalue', 'resource/ui/spectator.res|terscorevalue']);
 
 // Fonts a HUD part draws with by default (HudLayout font keys, when set, win). From telehud's comments and the SDK.
 const HUD_FONTS = { HudHealth: ['HudNumbers'], HudArmor: ['HudNumbers'], HudAmmo: ['HudNumbers'], HudAccount: ['HudNumbers'], HudRoundTimer: ['HudNumbers'],
@@ -6216,6 +6221,14 @@ if (host && location.hash === '#hosttest') (async () => {
       check(p && p.textalignment === 'west' && p.defaultbgcolor_override === resolve(tables(F(C)), 'Button.BgColor') && fallbackText(f, t0) === null
         && lp && lp.roundedcorners === (layoutProps({ bases: F(L).bases, parsed: { entries: [] } }, 'HudAccount').roundedcorners ?? '15') && fallbackText(F(C), F(C).text + ' ') === null,
         `a key undone out of a window's or HudLayout block is first set to the game's fallback (${JSON.stringify(p)}, ${JSON.stringify(lp)})`);
+    }
+    {
+      // the spectator bars' score numbers get no size rows (any other size closed the game), their place still
+      const lines = ['"r"', '{', '"TERScoreValue"', '{', '"ControlName" "Label"', '"xpos" "r112"', '"ypos" "24"', '"wide" "15"', '"tall" "15"', '}', '}'];
+      const f = { name: 'resource/UI/spectator.res', path: 'resource/UI/spectator.res', text: lines.join(String.fromCharCode(10)), bases: [] };
+      f.parsed = parse(f.text);
+      const names = resRows(f, 'TERScoreValue', controlOf('Label')[2], C, 'Label').map(r => r.textContent);
+      check(!names.some(n => /^(Width|Height)/.test(n)) && names.some(n => /^X position/.test(n)), `the spectator score numbers have no size rows (${names.map(n => n.slice(0, 12))})`);
     }
     {
       // the Backdrop's opacity row (team select...): a percent written into BgColor with its R G B kept; ↺ puts the exact
