@@ -929,8 +929,10 @@ const gameNested = (file, path) => gameOf(file) ? nestedProps(gameOf(file), path
 // ---------- undo: each step is a file's text from before a change ----------
 const undoSteps = [];
 // Values HudLayout no longer sets stay in a running game, so they are first put back to what the game falls back to.
+// (a box's background: the scheme's Panel.BgColor, as boxRows shows it; seen 10-04: an undone box colour stayed in game)
 const LAYOUT_FALLBACK = { alpha: '255', roundedcorners: '15', texture1: 'vgui/hud/8x800corner1', texture2: 'vgui/hud/8x800corner2',
-  texture3: 'vgui/hud/8x800corner3', texture4: 'vgui/hud/8x800corner4' };
+  texture3: 'vgui/hud/8x800corner3', texture4: 'vgui/hud/8x800corner4',
+  bgcolor_override: () => (F(C) && resolve(tables(F(C)), 'Panel.BgColor')) || '0 0 0 0' };
 
 async function undo() {
   const steps = [undoSteps.pop()];
@@ -945,7 +947,8 @@ async function undo() {
         let reset = { ...f, text, parsed: before };
         for (const e of f.parsed.entries) {
           if (e.path.length !== 2 || before.entries.some(b => samePath(b.path, e.path) && b.key.toLowerCase() === e.key.toLowerCase())) continue;
-          const v = layoutProps({ bases: f.bases, parsed: { entries: [] } }, e.path[1])[e.key.toLowerCase()] ?? LAYOUT_FALLBACK[e.key.toLowerCase()];
+          const fb = LAYOUT_FALLBACK[e.key.toLowerCase()];
+          const v = layoutProps({ bases: f.bases, parsed: { entries: [] } }, e.path[1])[e.key.toLowerCase()] ?? (typeof fb === 'function' ? fb() : fb);
           if (v !== undefined) reset = { ...reset, text: setAt(reset, [e.path[1]], e.key, v) }, reset.parsed = parse(reset.text);
         }
         if (reset.text !== text) { await call('write', f.path, reset.text); await sleep(1200); } // let the game take it
