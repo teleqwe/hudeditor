@@ -548,7 +548,7 @@ const WINDOWS = { info: 'Server message (MOTD)', team: 'Team select', class_ct: 
   gamemenu: 'Main menu', gameconsole: 'Console', optionsdialog: 'Options', cserverbrowserdialog: 'Server browser', serverbrowser: 'Server browser',
   loadingdialog: 'Loading screen' };
 const WINDOW_COLOURS = {
-  [C]: [['Window background', 'Frame.BgColor', 'Also the spectator bars'], ['Backdrop', 'BgColor', 'The box of team and class select, the MOTD and the buy menu'], ['Title', 'FrameTitleBar.TextColor', ''],
+  [C]: [['Window background', 'Frame.BgColor', 'Also the spectator bars'], ['Backdrop', 'BgColor', 'Small frames on the scoreboard; the box of team and class select, the MOTD and the buy menu (there only its opacity counts)'], ['Title', 'FrameTitleBar.TextColor', ''],
     ['Text', 'Label.TextColor', 'Shared by in-game windows and the buy menu'], ['Borders', 'Border.Bright|Border.Dark', '']],
   [S]: [['Window background', 'Frame.BgColor', ''], ['Window background, not focused', 'Frame.OutOfFocusBgColor', ''],
     ['Title', 'FrameTitleBar.TextColor', ''], ['Title bar', 'FrameTitleBar.BgColor', ''], ['Text', 'Label.TextColor', ''], ['Borders', 'Border.Bright|Border.Dark', ''],
@@ -900,6 +900,7 @@ async function loadAll() {
     if (text != null) files.push({ name: path, path, text, parsed: parse(''), bases: [] });
   }
   logoOwn = F(CS_LOGO) && !logoClear(F(CS_LOGO).text) ? F(CS_LOGO).text : null;
+  logoStart = F(CS_LOGO) ? F(CS_LOGO).text : '';
   sbOpened = F(SB_SELECT) ? F(SB_SELECT).text : null;
   squareAll = (await readHud(CORNER_VMT(1)) || '').includes('vgui/white');
   render();
@@ -933,6 +934,45 @@ const undoSteps = [];
 const LAYOUT_FALLBACK = { alpha: '255', roundedcorners: '15', texture1: 'vgui/hud/8x800corner1', texture2: 'vgui/hud/8x800corner2',
   texture3: 'vgui/hud/8x800corner3', texture4: 'vgui/hud/8x800corner4',
   bgcolor_override: () => (F(C) && resolve(tables(F(C)), 'Panel.BgColor')) || '0 0 0 0' };
+// Windows' .res files the same way: the plugin gives the controls that exist their block again, and vgui's
+// ApplySettings only sets what a block has (seen 10-04: a button's own colour, undone, stayed in team and class select).
+// A control's own colour falls back to its type's scheme colour (CONTROLS), by the row that colour has there; a text
+// marked bright or dull to that one. ("visible", "enabled" and a label's "font" go back to their defaults by themselves.)
+const RES_OWN = { fgcolor_override: 'Text', bgcolor_override: 'Background', defaultfgcolor_override: 'Text', defaultbgcolor_override: 'Background',
+  armedfgcolor_override: 'Text (mouse over)', armedbgcolor_override: 'Background (mouse over)', depressedfgcolor_override: 'Text (clicked)',
+  depressedbgcolor_override: 'Background (clicked)' };
+const RES_FALLBACK = { fillcolor: '0 0 0 0', drawcolor: '255 255 255 255', textalignment: 'west' };
+// which files have them: HudLayout, and the .res files the game reads again while it runs (not the schemes, nor the
+// ones only read at a start: the main menu, the server browser, the buy menu)
+const keepsOld = f => f.name === L || (/\.res$/i.test(f.name) && !/scheme\.res$/i.test(f.name) && !RESTART_FILES.some(([re]) => re.test(f.path)));
+function fallbackOf(f, sub, key) {
+  const k = key.toLowerCase();
+  if (f.name === L) {
+    if (sub.length > 1) return undefined;
+    const fb = LAYOUT_FALLBACK[k];
+    return layoutProps({ bases: f.bases, parsed: { entries: [] } }, sub[0])[k] ?? (typeof fb === 'function' ? fb() : fb);
+  }
+  if (k in RES_FALLBACK) return RES_FALLBACK[k];
+  const p = nestedProps(f, sub), ctl = p.controlname && controlOf(p.controlname);
+  const label = k === 'fgcolor_override' && p.brighttext === '1' ? 'Bright text' : k === 'fgcolor_override' && p.dulltext === '1' ? 'Dim text' : RES_OWN[k];
+  const d = label && ctl && ctl[2].find(([l]) => l === label);
+  const sf = F(/basechat\.res$/i.test(f.name) ? CH : /^(resource\/ui\/|classes\/)/i.test(f.name) ? C : S);
+  return d && sf ? resolve(tables(sf), d[1]) || undefined : undefined;
+}
+// The text to write first, before f's text becomes next: next with each key it takes out set to what the game falls
+// back to (null when there's none to put back). A window's block that goes whole is a control the game takes away.
+function fallbackText(f, next) {
+  if (!keepsOld(f)) return null;
+  const after = parse(next), id = (path, key = '') => [...path, key].join('\u0001').toLowerCase();
+  const have = new Set(after.entries.map(b => id(b.path, b.key))), blocks = new Set(after.entries.map(b => id(b.path)));
+  let reset = { text: next, parsed: after };
+  for (const e of f.parsed.entries) {
+    if (e.path.length < 2 || have.has(id(e.path, e.key)) || (f.name !== L && !blocks.has(id(e.path)))) continue;
+    const v = fallbackOf(f, e.path.slice(1), e.key);
+    if (v !== undefined && v !== e.value) { reset.text = setAt(reset, e.path.slice(1), e.key, v); reset.parsed = parse(reset.text); }
+  }
+  return reset.text !== next ? reset.text : null;
+}
 
 async function undo() {
   const steps = [undoSteps.pop()];
@@ -943,16 +983,8 @@ async function undo() {
   for (const { f, text } of steps) writing = writing.then(async () => {
     const before = parse(text);
     try {
-      if (f.name === L) {
-        let reset = { ...f, text, parsed: before };
-        for (const e of f.parsed.entries) {
-          if (e.path.length !== 2 || before.entries.some(b => samePath(b.path, e.path) && b.key.toLowerCase() === e.key.toLowerCase())) continue;
-          const fb = LAYOUT_FALLBACK[e.key.toLowerCase()];
-          const v = layoutProps({ bases: f.bases, parsed: { entries: [] } }, e.path[1])[e.key.toLowerCase()] ?? (typeof fb === 'function' ? fb() : fb);
-          if (v !== undefined) reset = { ...reset, text: setAt(reset, [e.path[1]], e.key, v) }, reset.parsed = parse(reset.text);
-        }
-        if (reset.text !== text) { await call('write', f.path, reset.text); await sleep(1200); } // let the game take it
-      }
+      const first = fallbackText(f, text);
+      if (first) { setDirty(true); await call('write', f.path, first); await sleep(1200); } // let the game take it
       await call('write', f.path, text);
       Object.assign(f, { text, parsed: before });
       if (f.name === CVAR_CFG) applyCvars(text); // a cfg only runs at startup: give the game the values now
@@ -1140,7 +1172,11 @@ function commit(f, id, edit, group = null, force = false) {
       if (own) own.ids.add(id);
       else if (!sameRun) undoSteps.push({ f, id, ids: new Set([id]), text: f.text, group: g });
       if (undoSteps.length > 200) undoSteps.shift();
-      undoSteps[undoSteps.length - 1].at = now;
+      const step = undoSteps[undoSteps.length - 1];
+      step.at = now;
+      // (a key taken out, as ↺ Reset window does: first set to what the game falls back to, see fallbackText)
+      const first = fallbackText(f, next);
+      if (first) { setDirty(true); await call('write', f.path, first); await sleep(1200); step.at = Date.now(); }
       await call('write', f.path, next);
       Object.assign(f, { text: next, parsed: parse(next) });
       setDirty(true);
@@ -1334,6 +1370,9 @@ function missingRows(f) {
 // The Show/hide tab: every part of the selection with its eye. A HUD part: itself; with a file of its own (the chat,
 // the round-end panel) or a window: the parts WINDOW_PARTS names (grouped ones as one), then every other block in the
 // file, in its order (not the window's own block, nor its hidden system menu).
+// Parts with nothing to show: hidden in the game's file with no text, which the game never fills in (team select's
+// mapname shown showed nothing, 2026-10-05), so their eye would change nothing
+const NOTHING_TO_SHOW = new Set(['team/mapname']);
 function showHideRows(sel) {
   const { info } = sel, f = sel.res, rows = [];
   if (info.kind === 'hud' && !sel.control && canHide(info.id))
@@ -1346,6 +1385,7 @@ function showHideRows(sel) {
     const b = s.path[1], k = (b || '').toLowerCase();
     if (s.path.length !== 2 || grouped.has(k) || k === info.id.toLowerCase() || k === sel.thing.key || k === 'sysmenu') continue;
     if (CODE_MADE.has(k) && LOGO_WINDOWS.has(info.id)) continue; // (a block for these never reaches the game, see CS_LOGO)
+    if (NOTHING_TO_SHOW.has(`${info.id}/${k}`)) continue;
     const p = layoutProps(f, b);
     rows.push(showRow(f, b, /^hudeditor_(pic|text|box)\d+$/i.test(b) ? addedName(f, b) : b === SB_BOX ? 'Colour box behind the scoreboard'
       : /^hudeditor_cmd/i.test(b) ? `"${p.labeltext || ''}" button` : prettify(b)));
@@ -2242,19 +2282,31 @@ function setSbSelect(rgba) {
 // can have its own material of that name instead: see-through, it's gone for players too (but on sv_pure servers).
 const CS_LOGO = 'materials/vgui/gfx/vgui/cs_logo.vmt';
 const CS_LOGO_GAME = 'UnlitGeneric\n{\n\t"$translucent" 1\n\t"$basetexture" "vgui/gfx/vgui/cs_logo"\n\t"$vertexcolor" 1\n\t"$vertexalpha" 1\n\t"$no_fullbright" 1\n\t"$ignorez" 1\n}\n';
-const CS_LOGO_CLEAR = '// The CS logo in the corner of the in-game windows, see-through (HUD editor)\nUnlitGeneric\n{\n\t"$basetexture"\t"vgui/white"\n'
+const CS_LOGO_CLEAR = '// The CS logo in the corner of the in-game windows, see-through (HUD editor)\nUnlitGeneric\n{\n\t"$basetexture"\t"vgui/gfx/vgui/cs_logo"\n'
   + '\t"$alpha"\t"0"\n\t"$translucent"\t"1"\n\t"$vertexcolor"\t"1"\n\t"$vertexalpha"\t"1"\n}\n';
 const LOGO_WINDOWS = new Set(['team', 'class_ct', 'class_ter', 'info', 'buy_ct', 'buy_ter']);
+// Which of the window colours each in-game window shows (each changed and looked at, 2026-10-05): the rest change
+// nothing there (no in-game window draws a title; team select's texts all have their own colours), so they're left out.
+// Their box takes the Backdrop's opacity only (drawn black, NOTES): a percent there.
+const IN_GAME_SHOWS = { scores: ['Backdrop', 'Text'], team: ['Backdrop', 'Borders'], class_ct: ['Backdrop', 'Text', 'Borders'],
+  class_ter: ['Backdrop', 'Text', 'Borders'], info: ['Backdrop', 'Text', 'Borders'], buy_ct: ['Backdrop', 'Text', 'Borders'],
+  buy_ter: ['Backdrop', 'Text', 'Borders'], specgui: ['Window background', 'Text'], specmenu: ['Window background', 'Text'] };
+const BACKDROP_OPACITY = ['Backdrop opacity', 'BgColor', 'How solid the box behind this window is, in % (the game draws it black)', 'alpha'];
 // (their box and the logo, made in code: a block of one of these names in a HUD's file does nothing for players, so it
 // gets no eye; the plugin doesn't apply it either)
 const CODE_MADE = new Set(['topsolid', 'uppermiddlesolid', 'lowermiddlesolid', 'bottomsolid', 'topleftpanel', 'toprightpanel', 'bottomleftpanel',
   'bottomrightpanel', 'exclamationpanel']);
 const logoClear = text => /"?\$alpha"?\s+"?0+(\.0+)?"?(?=[\s}]|$)/i.test(text || '');
 let logoOwn = null; // the HUD's own logo material when it was opened (shown again instead of the game's)
+let logoStart = ''; // the logo material as the game last read it: when the HUD was opened, or the game restarted
 function logoRow() {
   const f = F(CS_LOGO);
   return eyeRow('CS logo (every in-game window)', !logoClear(f && f.text), on => {
     waiting.add(CS_LOGO); // (the list isn't redrawn with the old eye before it's written)
+    // a logo hidden the old way (a plain white picture at no opacity: editors before 10-05) comes back as a solid square
+    // until the game restarts, as the game keeps the picture it first drew it with (seen 10-05); hidden now, it keeps its
+    // own picture, so it comes back as it was
+    if (on && /vgui\/white/i.test(logoStart || '')) needRestart('the CS logo');
     commit(hudFile(CS_LOGO, CS_LOGO_GAME), 'cs logo', () => on ? logoOwn || CS_LOGO_GAME : CS_LOGO_CLEAR, burstGroup());
     writing.then(() => {
       waiting.delete(CS_LOGO);
@@ -2798,6 +2850,22 @@ function schemeRows(file, list, after = null) {
   return list.map(([label, keys, note = '', how = '']) => {
     const ks = keys.split('|'), value = resolve(t, ks[0]);
     if (!value) return null;
+    // the game takes only its opacity (a box it draws black): a percent, its R G B kept as they are. Its ↺ is the colour
+    // row's of the same setting (other windows show that one) and keeps the whole value, so it puts back the exact one.
+    if (how === 'alpha') {
+      const pct = v => String(Math.round(toRgba(v)[3] / 2.55)), now = () => resolve(tables(f), ks[0]) || value;
+      const write = v => { ks.forEach(k => save(f, k, v)); undo.update(toRgba(v).join(' ')); if (after) after(ks); };
+      const row = inputRow(label, pct(value), v => {
+        const c = toRgba(now()), a = Math.round(Math.min(100, Math.max(0, +v || 0)) * 2.55);
+        if (pct(now()) !== String(+v)) write(`${c.slice(0, 3).join(' ')} ${a}`); // (the same percent typed again: left as it is)
+      }, { type: 'number', min: 0, max: 100, step: 1, slider: 100, noUndo: true, title: note });
+      const input = row.querySelector('input[type=number]'), range = row.querySelector('input[type=range]');
+      const undo = undoArrow(`${file}|${label.replace(/ opacity$/, '')}|${ks.join('+')}`, toRgba(value).join(' '), v => `${pct(v)}%`,
+        v => { input.value = pct(v); if (range) range.value = pct(v); write(v); });
+      row.arrow.replaceWith(undo);
+      row.dataset.keys = ks.join(' + ');
+      return row;
+    }
     const row = colorRow(label, note || DESCRIBE[ks[0].toLowerCase()] || '', value, v => { ks.forEach(k => save(f, k, v)); if (after) after(ks); }, ks, gameColour(file, ks[0]), file);
     const shared = sharedWith(file, ks[0]);
     if (shared) row.querySelector('.meta').append(el('div', { className: 'shares', textContent: `Shared with: ${shared}` }));
@@ -4443,7 +4511,10 @@ function selectionSections(sel) {
       // menu windows paint their frame's background and edge; in-game ones (team select...) draw their own panels
       const frame = info.file === S;
       // the Borders colours only while some border still draws with them (see bordersUse)
-      add('colour', 'Colours: the window', schemeRows(info.file, WINDOW_COLOURS[info.file].filter(([, k]) => !k.startsWith('Border.') || bordersUse(info.file, k.split('|')))));
+      const shows = !frame && IN_GAME_SHOWS[info.id];
+      add('colour', 'Colours: the window', schemeRows(info.file, WINDOW_COLOURS[info.file]
+        .filter(([label, k]) => (!k.startsWith('Border.') || bordersUse(info.file, k.split('|'))) && (!shows || shows.includes(label)))
+        .map(r => r[0] === 'Backdrop' && LOGO_WINDOWS.has(info.id) ? BACKDROP_OPACITY : r)));
       if (frame) { const [colour, ...rest] = borderRows(S, 'FrameBorder'); add('border', 'Border: window edge (every window)', [colour, windowCornerRow(S), ...rest]); }
       add('other', `Fading (every ${frame ? 'menu' : 'in-game'} window)`, fadeRows(info.file));
     }
@@ -5381,6 +5452,7 @@ async function restartGame(between = null) {
     }
     // started, then checked: once more if it doesn't come up
     gameHud = hudPath; // (it starts with the HUD open now)
+    logoStart = F(CS_LOGO) ? F(CS_LOGO).text : '';
     for (let tries = 0; !live && tries < 3; tries++) {
       try { await call('launch'); } catch (err) { if (!/already running/i.test(err.message)) throw err; }
       status('Starting the game again: the preview comes back once it has loaded.');
@@ -6049,6 +6121,8 @@ async function parserCheck() {
       const r = logoRow();
       r.click(); logoOwn = 'own'; r.click();
       check(logoClear(wrote[0]) && wrote[1] === 'own' && !logoClear(CS_LOGO_GAME), 'the CS logo\'s eye writes a see-through material, and puts the HUD\'s own back');
+      // (hidden with the logo's own picture: a material first drawn with another picture keeps it until a restart, NOTES)
+      check(/vgui\/gfx\/vgui\/cs_logo/i.test(wrote[0]) && !/vgui\/white/i.test(wrote[0]), 'the CS logo is hidden with its own picture, not a white one');
     } finally { [files, commit, logoOwn] = keep; }
   }
   // the game's colour: Default in the colour's pop-out
@@ -6130,6 +6204,30 @@ if (host && location.hash === '#hosttest') (async () => {
     const path = await call('new', 'myhud');
     await openHud(path);
     check(hudName === 'myhud' && F(C) && F(S) && F(L) && F(L).defaultText && F(L).bases.length === 1 && F(CH).defaultText && F(CH).bases.length === 1, 'new HUD opens, with the game\'s HudLayout and ChatScheme');
+    {
+      // a key taken out of a window's block (Ctrl+Z, Reset window) is first set to what the game falls back to, as the
+      // game keeps what a block no longer says: a button's own background goes to Button.BgColor, an alignment to west;
+      // a HudLayout block that goes whole (a part placed by #base only) is put back with its base's corners
+      const lines = ['"r"', '{', '"terbutton"', '{', '"ControlName" "Button"', '"textAlignment" "east"', '"defaultBgColor_override" "1 2 3 255"', '}', '}'], nl = String.fromCharCode(10);
+      const t0 = lines.join(nl), f = { name: 'resource/UI/TeamMenu.res', path: 'resource/UI/TeamMenu.res', text: t0, parsed: parse(t0), bases: [] };
+      const first = fallbackText(f, lines.filter(l => !/alignment|override/i.test(l)).join(nl)), p = first && layoutProps({ parsed: parse(first), bases: [] }, 'terbutton');
+      const lt = ['"Resource/HudLayout.res"', '{', 'HudAccount', '{', '"RoundedCorners" "0"', '}', '}'].join(nl), lf = { ...F(L), text: lt, parsed: parse(lt) };
+      const lfirst = fallbackText(lf, ['"Resource/HudLayout.res"', '{', '}'].join(nl)), lp = lfirst && layoutProps({ parsed: parse(lfirst), bases: [] }, 'HudAccount');
+      check(p && p.textalignment === 'west' && p.defaultbgcolor_override === resolve(tables(F(C)), 'Button.BgColor') && fallbackText(f, t0) === null
+        && lp && lp.roundedcorners === (layoutProps({ bases: F(L).bases, parsed: { entries: [] } }, 'HudAccount').roundedcorners ?? '15') && fallbackText(F(C), F(C).text + ' ') === null,
+        `a key undone out of a window's or HudLayout block is first set to the game's fallback (${JSON.stringify(p)}, ${JSON.stringify(lp)})`);
+    }
+    {
+      // the Backdrop's opacity row (team select...): a percent written into BgColor with its R G B kept; ↺ puts the exact
+      // value back (not one rounded through the percent)
+      const before = toRgba(resolve(tables(F(C)), 'BgColor')), [row] = schemeRows(C, [BACKDROP_OPACITY]), input = row.querySelector('input[type=number]');
+      input.value = '30'; input.oninput(); await sleep(400); await writing;
+      const mid = toRgba(resolve(tables(F(C)), 'BgColor'));
+      row.querySelector('.undo').click(); await sleep(400); await writing;
+      const back = toRgba(resolve(tables(F(C)), 'BgColor'));
+      check(mid[3] === 77 && mid.slice(0, 3).join() === before.slice(0, 3).join() && back.join() === before.join() && row.dataset.keys === 'BgColor',
+        `Backdrop opacity writes a percent, keeps R G B, and its ↺ puts the exact value back (${before} -> ${mid} -> ${back})`);
+    }
     {
       // the editor only lists the custom folder; a HUD folder dropped from there is opened, not copied
       const listed = (await call('huds')).split('\n').filter(l => l && !l.startsWith('\t')).map(l => l.split('\t'));
