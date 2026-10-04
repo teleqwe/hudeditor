@@ -3698,10 +3698,17 @@ function toggleRow(label, on, onChange, note = '', id = null, dflt = null) {
 
 // Font entry settings besides name, size, weight and blur, as the game's scheme loader reads them: always shown, and
 // the rest, listed under + until the font has them. [key, label, kind, value when added, note]
-const FONT_FLAGS = [['outline', 'Outline'], ['dropshadow', 'Drop shadow'], ['additive', 'Additive (glow)', 'flag', '1', 'Hides outline and shadow'], ['antialias', 'Anti-aliasing']];
-const FONT_EXTRA = [['italic', 'Italic', 'flag', '1'], ['underline', 'Underline', 'flag', '1'], ['strikeout', 'Strike-through', 'flag', '1'],
-  ['scanlines', 'Scan lines', 'num', '2', 'Dark lines every this many pixels'], ['range', 'Characters', 'text', '0x0000 0x017F', 'Unicode range it covers'],
-  ['symbol', 'Symbol font', 'flag', '1', 'For icon fonts like Marlett'], ['rotary', 'Rotary', 'flag', '1', 'Drawn turned (game effect)'], ['custom', 'Custom', 'flag', '1', 'Game-specific drawing']];
+// What each does in game was checked on HUD numbers, window text, the chat, timer and speed texts (the visual sweep,
+// 10-04: SWEEP.md): underline and strike-through draw only without anti-aliasing (with it, only a mark in the spaces),
+// "rotary" is a line through the middle; Characters and Custom change nothing to see, so + doesn't offer them ('hide':
+// shown only when a font has them already, to be taken out).
+const FONT_FLAGS = [['outline', 'Outline', 'flag', '1', 'Turns Additive off'], ['dropshadow', 'Drop shadow', 'flag', '1', 'Turns Additive off'],
+  ['additive', 'Additive', 'flag', '1', 'Adds its light to what\'s behind (not a glow: Blur is)'], ['antialias', 'Anti-aliasing', 'flag', '1', 'Smooth edges']];
+const FONT_EXTRA = [['italic', 'Italic', 'flag', '1'], ['underline', 'Underline', 'flag', '1', 'Turns Anti-aliasing off: it only draws without'],
+  ['strikeout', 'Strike-through', 'flag', '1', 'Turns Anti-aliasing off: it only draws without'],
+  ['scanlines', 'Scan lines', 'num', '2', 'Dark lines every this many pixels (not with Additive)'], ['range', 'Characters', 'text', '0x0000 0x017F', 'Unicode range it covers (nothing changes to see)', 'hide'],
+  ['symbol', 'Symbol font', 'flag', '1', 'For icon fonts: letters become symbols'], ['rotary', 'Line through', 'flag', '1', 'Across the middle, smooth edges kept'],
+  ['custom', 'Custom', 'flag', '1', 'Does nothing in CS:S', 'hide']];
 
 // Fonts as they are at this screen height, copied to every other height's entry (the footer's All resolutions): the
 // same face, weight and effects, the size scaled by height. An entry for a range of heights is sized for the screen
@@ -3853,12 +3860,17 @@ function fontRows(file, font) {
   // the game's own font of that name, its entry for this screen height (null: the game hasn't this font)
   const gv = gameOf(file) && fontVariants(gameOf(file), font), gp = gv && gv.size ? gv.get(activeVariant(gv, H)) : null, dv = (key, d = null) => gp ? gp[key] ?? d : null;
   const flags = {};
+  // additive text adds light to what's behind it, so black outlines and shadows can't show: turn it off for them;
+  // underline and strike-through only draw without anti-aliasing (checked in game): turn that off for them
+  const needs = key => {
+    if ((key === 'outline' || key === 'dropshadow') && +(p.additive ?? 0) > 0) { flags.additive.set(false); put('additive', '0'); p.additive = '0'; }
+    if ((key === 'underline' || key === 'strikeout') && +(p.antialias ?? 0) > 0) { flags.antialias.set(false); put('antialias', '0'); p.antialias = '0'; }
+  };
   const rowFor = ([key, label, kind = 'flag', , note = '']) => kind !== 'flag'
     ? inputRow(label, p[key] ?? '', val => put(key, val), { ...(kind === 'num' ? { type: 'number', step: 1, min: 0 } : {}), title: note, undoId: id(key), dflt: dv(key) })
     : flags[key] = toggleRow(label, +p[key] > 0, on => {
       put(key, on ? '1' : '0');
-      // additive text adds light to what's behind it, so black outlines and shadows can't show: turn it off for them
-      if (on && (key === 'outline' || key === 'dropshadow') && +(p.additive ?? 0) > 0) { flags.additive.set(false); put('additive', '0'); }
+      if (on) needs(key);
       p[key] = on ? '1' : '0';
     }, note, id(key), gp ? +(gp[key] ?? 0) > 0 : null);
   // on/off settings as tick boxes in two columns (Effects); + lists what the font can also have and adds it (switched
@@ -3873,9 +3885,10 @@ function fontRows(file, font) {
   plus.setAttribute('aria-label', 'Add a font option');
   plus.setAttribute('aria-expanded', 'false');
   const menu = el('div', { className: 'chips', hidden: true });
-  const fill = () => menu.replaceChildren(...FONT_EXTRA.filter(([k]) => !(k in p)).map(x => el('button', { textContent: x[1], title: x[4] || '', onclick: () => {
+  const fill = () => menu.replaceChildren(...FONT_EXTRA.filter(x => !(x[0] in p) && x[5] !== 'hide').map(x => el('button', { textContent: x[1], title: x[4] || '', onclick: () => {
     p[x[0]] = x[3];
     put(x[0], x[3]);
+    if (isFlag(x)) needs(x[0]);
     const r = rowFor(x);
     if (isFlag(x)) opts.append(r); else { last.after(r); last = r; }
     fill();
@@ -6348,6 +6361,17 @@ if (host && location.hash === '#hosttest') (async () => {
     const cf = F(C), marlett = fontVariants(cf, 'Marlett'), dflt = fontVariants(cf, 'Default');
     check([...dflt.values()].every(p => p.name === 'Arial' && p.weight === '600') && [...marlett.values()].every(p => p.name === 'Marlett'),
       'every text font at once: Arial 600, the symbol font left alone');
+    {
+      // a font's +: Underline added turns anti-aliasing off (it only draws without, checked in game); Characters and
+      // Custom (nothing to see) aren't offered
+      const fr = fontRows(C, 'Default'), add = fr.find(r => r.classList.contains('addkey')), chips = () => [...add.querySelectorAll('.chips button')].map(b => b.textContent);
+      const fv = () => fontVariants(F(C), 'Default'), offered = chips(), aa0 = fv().get(activeVariant(fv(), 1080)).antialias;
+      [...add.querySelectorAll('.chips button')].find(b => b.textContent === 'Underline').click();
+      await sleep(400); await writing;
+      const e = fv().get(activeVariant(fv(), 1080));
+      check(!offered.includes('Characters') && !offered.includes('Custom') && offered.includes('Line through') && e.underline === '1' && e.antialias === '0',
+        `+ Underline turns anti-aliasing off (it was ${aa0}, now ${e.antialias}); + offers ${offered}`);
+    }
     await setCorners(F(L), 'HudHintKeyDisplay', true, false);
     await sleep(400);
     await writing;
