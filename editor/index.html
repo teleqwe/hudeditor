@@ -954,6 +954,9 @@ function fallbackOf(f, sub, key) {
   }
   if (k in RES_FALLBACK) return RES_FALLBACK[k];
   const p = nestedProps(f, sub), ctl = p.controlname && controlOf(p.controlname);
+  // a window's own background (the loading box's eye): the game's file's, else painted, as a Frame is (seen 10-05: the
+  // undone eye left the loading box without its background and title until it opened again)
+  if (k === 'paintbackground') return gameNested(f.name, sub).paintbackground ?? (/^(Frame|EditablePanel)$/i.test(p.controlname || '') ? '1' : undefined);
   const label = k === 'fgcolor_override' && p.brighttext === '1' ? 'Bright text' : k === 'fgcolor_override' && p.dulltext === '1' ? 'Dim text' : RES_OWN[k];
   const d = label && ctl && ctl[2].find(([l]) => l === label);
   const sf = F(/basechat\.res$/i.test(f.name) ? CH : /^(resource\/ui\/|classes\/)/i.test(f.name) ? C : S);

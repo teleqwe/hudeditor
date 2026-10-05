@@ -342,6 +342,11 @@ static KeyValues *FindPeer( KeyValues *start, const char *name )
 	return NULL;
 }
 
+static bool IsBorderSide( const char *n )
+{
+	return !Q_stricmp( n, "Left" ) || !Q_stricmp( n, "Right" ) || !Q_stricmp( n, "Top" ) || !Q_stricmp( n, "Bottom" );
+}
+
 // pruneFrom: the depth from which blocks missing from the file are removed too (a font's entries, a border's sides
 // and lines); above it they stay, since fonts and borders can't be deleted from a running game
 static int MergeInto( KeyValues *live, KeyValues *fresh, int pruneFrom = INT_MAX, int depth = 0 )
@@ -367,6 +372,16 @@ static int MergeInto( KeyValues *live, KeyValues *fresh, int pruneFrom = INT_MAX
 		next = k->GetNextKey();
 		if ( ( k->GetDataType() == KeyValues::TYPE_NONE && depth < pruneFrom ) || fresh->FindKey( k->GetName() ) )
 			continue;
+		// a border's side taken out is emptied, not removed: vgui's Border only re-reads the sides a block has, so a
+		// removed one kept its lines on screen (an undone border change stayed, seen 2026-10-05)
+		if ( k->GetDataType() == KeyValues::TYPE_NONE && depth == 1 && pruneFrom == 1 && IsBorderSide( k->GetName() ) )
+		{
+			if ( k->GetFirstSubKey() )
+				++changed;
+			while ( KeyValues *line = k->GetFirstSubKey() )
+				k->RemoveSubKey( line ), line->deleteThis();
+			continue;
+		}
 		live->RemoveSubKey( k );
 		k->deleteThis();
 		++changed;
