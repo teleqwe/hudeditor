@@ -1253,8 +1253,8 @@ function thingInfo(t) {
   if (hud) return { kind: 'hud', id: t.name, name: hud.name, hud };
   // a picture, text or box HudLayout adds (the editor's, or the HUD's own)
   { const c = customInfo(t.name); if (c) return c; }
-  // the main menu's logo: two buttons the menu makes (ClientScheme's Main.Title1 and Main.Title2). The second draws
-  // nothing in CS:S (its colour and place changed nothing, 2026-10-05): not offered
+  // the main menu's logo: two buttons the menu makes (ClientScheme's Main.Title1 and Main.Title2). The second (the faint
+  // "S O U R C E") isn't offered: its colour and place showed no change in the sweep (2026-10-05), to look at again
   if (t.key === 'gamemenubutton2') return null;
   if (t.key === 'gamemenubutton') return { kind: 'window', id: 'gamelogo', name: 'Logo', file: C, title: 1 };
   const win = WINDOWS[t.key];
@@ -2636,12 +2636,15 @@ const UNDO_SVG = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.2 5.5A
 // ↺ goes back to how it was when the HUD was opened. (The game's own value: a colour's pop-out has Default; the main
 // menu's list has The game's buttons. Other rows still get the game's value passed in, unused since 2026-10-01.)
 // quiet: a tick box's, never shown (ticking it again is its undo) but still put back by ↺ Reset part.
+// (while an ↺ puts a first value back, also from Reset window: a put back, not a pick, so nothing is added on the way,
+// e.g. the sides a border colour or thickness ticks when none is)
+let puttingBack = false;
 function undoArrow(id, now, show, put, quiet = false) {
   const first = opened[id] ??= now, w = el('span', { className: quiet ? 'arrows quiet' : 'arrows' });
   const b = el('button', { className: 'undo', type: 'button', innerHTML: UNDO_SVG });
   w.update = v => { b.classList.toggle('off', v === first); b.title = `${show(first)} → ${show(v)}\nClick to go back to ${show(first)}`; };
   // (inside a tick box's label: a click here isn't the tick's)
-  b.onclick = e => { e?.preventDefault(); e?.stopPropagation(); put(first); w.update(first); };
+  b.onclick = e => { e?.preventDefault(); e?.stopPropagation(); puttingBack = true; try { put(first); } finally { puttingBack = false; } w.update(first); };
   w.append(b);
   w.update(now);
   return w;
@@ -3458,14 +3461,21 @@ function borderRows(file, name) {
   }));
   sides.append(el('div', { textContent: 'Border sides' }), undo, opts);
   sides.dataset.q = 'border sides top left right bottom';
-  // a colour picked while no side is ticked would draw nowhere (found with CS2 New Hud's window edge): all four go on
+  // a colour or thickness picked while no side is ticked would draw nowhere (found with CS2 New Hud's window edge, and
+  // the game's own menu edge, which has no sides): all four go on
+  const allOn = what => {
+    if (puttingBack || SIDES.some(s => cur.on[s])) return;
+    for (const s of SIDES) boxes[s].checked = cur.on[s] = true;
+    undo.update(on()); status(`The border had no sides: all four are ticked now, so the ${what} shows. Untick the ones you don't want.`);
+  };
   const colour = v => {
     cur.colour = v;
-    if (!SIDES.some(s => cur.on[s]) && toRgba(v)[3] > 0) { for (const s of SIDES) boxes[s].checked = cur.on[s] = true; undo.update(on()); status('The border had no sides: all four are ticked now, so the colour shows. Untick the ones you don\'t want.'); }
+    if (toRgba(v)[3] > 0) allOn('colour');
     write();
   };
   const rows = [colorRow('Border colour', 'The ticked sides', cur.colour, colour, [name], game && game.colour, file),
-    inputRow('Thickness', String(cur.n), v => { cur.n = v; write(); }, { type: 'number', min: 1, max: 8, step: 1, title: 'pixels', undoId: `${file}/${name}/thickness`, dflt: game ? String(game.n) : null }),
+    // (allOn only for a new value: − at 1 and + at 8 change nothing)
+    inputRow('Thickness', String(cur.n), v => { if (+v !== +cur.n) allOn('thickness'); cur.n = v; write(); }, { type: 'number', min: 1, max: 8, step: 1, title: 'pixels', undoId: `${file}/${name}/thickness`, dflt: game ? String(game.n) : null }),
     sides];
   const notes = [cur.mixed && 'The HUD gives this border more than one colour; a change here makes every side this colour.',
     b && b.name.toLowerCase() !== name.toLowerCase() && `Now the same as ${b.name}; a change here gives this one its own.`,
@@ -4566,8 +4576,7 @@ function selectionSections(sel) {
       add('colour', 'Colours: the window', schemeRows(info.file, WINDOW_COLOURS[info.file]
         .filter(([label, k]) => (!k.startsWith('Border.') || bordersUse(info.file, k.split('|'))) && (!shows || shows.includes(label)))
         .map(r => r[0] === 'Backdrop' && LOGO_WINDOWS.has(info.id) ? BACKDROP_OPACITY : r)));
-      // (the window edge is always one line: a thickness changed nothing, 1 to 8 tried on the console, 2026-10-05)
-      if (frame) { const [colour, , ...rest] = borderRows(S, 'FrameBorder'); add('border', 'Border: window edge (every window)', [colour, windowCornerRow(S), ...rest]); }
+      if (frame) { const [colour, ...rest] = borderRows(S, 'FrameBorder'); add('border', 'Border: window edge (every window)', [colour, windowCornerRow(S), ...rest]); }
       add('other', `Fading (every ${frame ? 'menu' : 'in-game'} window)`, fadeRows(info.file));
     }
     if (EXTRA[info.id]) add('colour', `Colours: ${info.name.toLowerCase()}`, schemeRows(S, EXTRA[info.id]).concat(info.file === C ? schemeRows(C, EXTRA[info.id]) : []));
@@ -6320,6 +6329,23 @@ if (host && location.hash === '#hosttest') (async () => {
       const back = toRgba(resolve(tables(F(C)), 'BgColor'));
       check(mid[3] === 77 && mid.slice(0, 3).join() === before.slice(0, 3).join() && back.join() === before.join() && row.dataset.keys === 'BgColor',
         `Backdrop opacity writes a percent, keeps R G B, and its ↺ puts the exact value back (${before} -> ${mid} -> ${back})`);
+    }
+    {
+      // the menus' window edge has a Thickness row; the game's edge draws no lines (rounded corners only), so a thickness
+      // picked there ticks all four sides, as a colour does, or it would show nowhere
+      const saved = [], realSave = save;
+      try {
+        save = (f, k, v, b) => saved.push([k, typeof v === 'function' ? v() : v, b]);
+        const rows = borderRows(S, 'FrameBorder'), th = rows.find(r => r.dataset.q === 'thickness'), ticks = () => [...rows.find(r => r.dataset.q?.startsWith('border sides')).querySelectorAll('input')].map(c => c.checked);
+        const was = ticks(), input = th && th.querySelector('input[type=number]');
+        if (input) { input.value = '4'; input.oninput(); }
+        const body = saved.length ? saved[saved.length - 1][1] : [], inset = body.find(([k]) => k === 'inset'), picked = ticks();
+        // (put back with its ↺ after the sides were unticked, or − at 1: nothing ticked again)
+        for (const c of rows.find(r => r.dataset.q?.startsWith('border sides')).querySelectorAll('input')) { c.checked = false; c.onchange(); }
+        th?.querySelector('.undo').click(); th?.querySelector('button[title="Down"]').click();
+        check(th && !was.some(Boolean) && picked.every(Boolean) && inset && inset[1] === '4 4 4 4' && !ticks().some(Boolean) && input.value === '1',
+          `the window edge's Thickness ticks every side when none draws, not when put back (${was} -> ${picked} -> ${ticks()}, ${JSON.stringify(inset)})`);
+      } finally { save = realSave; }
     }
     {
       // the editor only lists the custom folder; a HUD folder dropped from there is opened, not copied
