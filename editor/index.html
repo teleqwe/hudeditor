@@ -483,8 +483,10 @@ const HUD = {
   HudAccount: { name: 'Money', colours: [NUMBERS, HIGHLIGHT, WARN], settings: [...INSIDE('9', '16', '100', '16'),
     ['+/− icon X', 'icon2_xpos', 'num', '9'], ['+/− icon Y', 'icon2_ypos', 'num', '-4'], ['+/− amount X', 'digit2_xpos', 'num', '100'], ['+/− amount Y', 'digit2_ypos', 'num', '-4']] },
   HudRoundTimer: { name: 'Round timer', colours: [NUMBERS, WARN], layoutColours: [['Low time flash', 'FlashColor', 'HudIcon_Red']], settings: INSIDE('8', '-4', '42', '-4') },
-  HudRadar: { name: 'Radar' },
-  HudLocation: { name: 'Location name' },
+  // (the radar is square: its width sizes it, a height changed nothing; the place name sits under it wherever its own
+  // block says, and fades with its own opacity; both seen 2026-10-05)
+  HudRadar: { name: 'Radar', square: true },
+  HudLocation: { name: 'Location name', noPos: true, fixed: 'It sits under the radar, where the game puts it: move the radar to move it. Its font is ChatFont.' },
   overview: { name: 'Map overview' },
   HudShoppingCart: { name: 'Buy zone icon', colours: [HIGHLIGHT], layoutColours: [['Icon', 'IconColor', 'HudIcon_Green']] },
   HudC4: { name: 'Bomb icon', colours: [HIGHLIGHT, WARN], layoutColours: [['Icon', 'IconColor', 'HudIcon_Green'], ['Flash', 'FlashColor', 'HudIcon_Red']] },
@@ -500,8 +502,11 @@ const HUD = {
     ['Slot background', 'SelectionBoxBg|SelectionEmptyBoxBg', ''], ['Highlighted slot', 'SelectionSelectedBoxBg', ''] ],
     // its own colour settings take the scheme colour once, at startup; named in HudLayout they're looked up again on a reload
     // ("SelectedBoxClor" is spelt that way in the game)
-    links: { NumberColor: 'SelectionNumberFg', TextColor: 'SelectionTextFg', BoxColor: 'SelectionBoxBg', EmptyBoxColor: 'SelectionEmptyBoxBg', SelectedBoxClor: 'SelectionSelectedBoxBg' }, rounded: true },
-  HudDeathNotice: { name: 'Kill feed', hit: ['r260', '12', '248', '100'], layoutColours: [['CT names', 'CTTextColor', 'CT_Blue'], ['T names', 'TerroristTextColor', 'T_Red']],
+    links: { NumberColor: 'SelectionNumberFg', TextColor: 'SelectionTextFg', BoxColor: 'SelectionBoxBg', EmptyBoxColor: 'SelectionEmptyBoxBg', SelectedBoxClor: 'SelectionSelectedBoxBg' }, rounded: true,
+    // (the game centres it across the screen: its X and width changed nothing, 2026-10-05)
+    lockX: true, noWide: true },
+  // (its names take the game's team colours: HudLayout's CTTextColor / TerroristTextColor changed nothing, 2026-10-05)
+  HudDeathNotice: { name: 'Kill feed', hit: ['r260', '12', '248', '100'], fixed: 'Its names are drawn in the team colours of Player name when aiming (CT_Blue, T_Red).',
     settings: [['Lines', 'MaxDeathNotices', 'num', '4', 'How many kills show at once'], ['Line height', 'LineHeight', 'num', '22'],
       ['Lines line up on the', 'RightJustify', [['1', 'Right'], ['0', 'Left']], '1', 'Side of the kill feed\'s area (move the area to move the feed)']], fontKeys: [['Names font', 'TextFont', 'Default']] },
   // the chat reads ChatScheme; its message colours (names in team colours, yellow server lines) are the game's own
@@ -517,7 +522,7 @@ const HUD = {
   // (noPos: the server plugin places it, so it has no position or size here and doesn't drag)
   HudMessage: { name: 'Large speed', noPos: true, fixed: 'Its colour and position come from the server plugin, not the HUD. Its font (below) can change. The record times in the top left are the same kind of text.', note: 'ShowHudText / game_text from server plugins and maps; font CenterPrintText',
     hit: [['c-60', '178', '120', '30'], ['4', '2', '230', '60']] },
-  TargetID: { name: 'Player name when aiming', quiet: true, colours: [['Counter-Terrorists', 'CT_Blue', 'Also kill feed names unless set there'], ['Terrorists', 'T_Red', 'Also kill feed names unless set there'], ['Hostages', 'Hostage_Yellow', ''] ] },
+  TargetID: { name: 'Player name when aiming', quiet: true, colours: [['Counter-Terrorists', 'CT_Blue', 'Also the kill feed\'s names'], ['Terrorists', 'T_Red', 'Also the kill feed\'s names'], ['Hostages', 'Hostage_Yellow', ''] ] },
   // radio menus, and SourceMod menus on bhop/surf servers (checkpoints, timer menus)
   // the game keeps its panel full width at x 0, so it only moves up and down
   HudMenu: { name: 'Radio and server menus', hit: ['0', 'c-100', '220', '200'], pos: true, lockX: true, colours: [
@@ -548,7 +553,7 @@ const WINDOWS = { info: 'Server message (MOTD)', team: 'Team select', class_ct: 
   gamemenu: 'Main menu', gameconsole: 'Console', optionsdialog: 'Options', cserverbrowserdialog: 'Server browser', serverbrowser: 'Server browser',
   loadingdialog: 'Loading screen' };
 const WINDOW_COLOURS = {
-  [C]: [['Window background', 'Frame.BgColor', 'Also the spectator bars'], ['Backdrop', 'BgColor', 'Small frames on the scoreboard; the box of team and class select, the MOTD and the buy menu (there only its opacity counts)'], ['Title', 'FrameTitleBar.TextColor', ''],
+  [C]: [['Window background', 'Frame.BgColor', ''], ['Backdrop', 'BgColor', 'Small frames on the scoreboard; the box of team and class select, the MOTD and the buy menu (there only its opacity counts)'], ['Title', 'FrameTitleBar.TextColor', ''],
     ['Text', 'Label.TextColor', 'Shared by in-game windows and the buy menu'], ['Borders', 'Border.Bright|Border.Dark', '']],
   [S]: [['Window background', 'Frame.BgColor', ''], ['Window background, not focused', 'Frame.OutOfFocusBgColor', ''],
     ['Title', 'FrameTitleBar.TextColor', ''], ['Title bar', 'FrameTitleBar.BgColor', ''], ['Text', 'Label.TextColor', ''], ['Borders', 'Border.Bright|Border.Dark', ''],
@@ -950,7 +955,13 @@ function fallbackOf(f, sub, key) {
   if (f.name === L) {
     if (sub.length > 1) return undefined;
     const fb = LAYOUT_FALLBACK[k];
-    return layoutProps({ bases: f.bases, parsed: { entries: [] } }, sub[0])[k] ?? (typeof fb === 'function' ? fb() : fb);
+    // a part's colour setting that names a scheme colour (the weapon selection's links): that name again, so the game
+    // looks the colour up once more (seen 10-05: an undone highlighted slot colour stayed until then)
+    const hud = HUD[Object.keys(HUD).find(id => id.toLowerCase() === sub[0].toLowerCase())], link = hud && hud.links && Object.entries(hud.links).find(([x]) => x.toLowerCase() === k);
+    // a part moved off by its eye, its place kept beside it (moveOff): that place (seen 10-05: an undone hide of the
+    // radio menu, which the game places itself, left it off screen)
+    const kept = layoutProps(f, sub[0])[`${k}_hudeditor`];
+    return layoutProps({ bases: f.bases, parsed: { entries: [] } }, sub[0])[k] ?? kept ?? (link ? link[1] : typeof fb === 'function' ? fb() : fb);
   }
   if (k in RES_FALLBACK) return RES_FALLBACK[k];
   const p = nestedProps(f, sub), ctl = p.controlname && controlOf(p.controlname);
@@ -972,7 +983,11 @@ function fallbackText(f, next) {
   for (const e of f.parsed.entries) {
     if (e.path.length < 2 || have.has(id(e.path, e.key)) || (f.name !== L && !blocks.has(id(e.path)))) continue;
     const v = fallbackOf(f, e.path.slice(1), e.key);
-    if (v !== undefined && v !== e.value) { reset.text = setAt(reset, e.path.slice(1), e.key, v); reset.parsed = parse(reset.text); }
+    // (a part's colour link kept even as it is: the scheme colour it names is put back in the same reload, which
+    // looks it up again; taken out at once, the game kept the old colour)
+    const hud = f.name === L && HUD[Object.keys(HUD).find(id => id.toLowerCase() === (e.path[1] || '').toLowerCase())];
+    const isLink = !!(hud && hud.links && Object.keys(hud.links).some(x => x.toLowerCase() === e.key.toLowerCase()));
+    if (v !== undefined && (v !== e.value || isLink)) { reset.text = setAt(reset, e.path.slice(1), e.key, v); reset.parsed = parse(reset.text); }
   }
   return reset.text !== next ? reset.text : null;
 }
@@ -982,6 +997,8 @@ async function undo() {
   if (!steps[0]) return status('Nothing to undo.');
   // one action over several files (a split) is undone in one go
   while (steps[0].group && undoSteps.length && undoSteps[undoSteps.length - 1].group === steps[0].group) steps.push(undoSteps.pop());
+  // (the schemes first: HudLayout's colour links are looked up as it reloads, so the colours they name are back by then)
+  steps.sort((a, b) => (a.f.name === L) - (b.f.name === L));
   await writing;
   for (const { f, text } of steps) writing = writing.then(async () => {
     const before = parse(text);
@@ -1185,6 +1202,8 @@ function commit(f, id, edit, group = null, force = false) {
       setDirty(true);
       const later = RESTART_FILES.find(([re]) => re.test(f.path));
       if (later) needRestart(later[1]);
+      // (class select's ClassInfo: copied to each class's page as the menu is made, see classPictureRows)
+      if (/ClassMenu_(CT|TER)\.res$/i.test(f.path) && /\bclassinfo\b/i.test(id)) needRestart('class pictures');
       status('Changed in game. Click Done or Save HUD to keep it.');
       drawBoxes();
     } catch (err) {
@@ -1234,8 +1253,10 @@ function thingInfo(t) {
   if (hud) return { kind: 'hud', id: t.name, name: hud.name, hud };
   // a picture, text or box HudLayout adds (the editor's, or the HUD's own)
   { const c = customInfo(t.name); if (c) return c; }
-  // the main menu's logo: two buttons the menu makes (ClientScheme's Main.Title1 and Main.Title2)
-  if (/^gamemenubutton2?$/.test(t.key)) return { kind: 'window', id: 'gamelogo', name: t.key.endsWith('2') ? 'Logo, second line' : 'Logo', file: C, title: t.key.endsWith('2') ? 2 : 1 };
+  // the main menu's logo: two buttons the menu makes (ClientScheme's Main.Title1 and Main.Title2). The second draws
+  // nothing in CS:S (its colour and place changed nothing, 2026-10-05): not offered
+  if (t.key === 'gamemenubutton2') return null;
+  if (t.key === 'gamemenubutton') return { kind: 'window', id: 'gamelogo', name: 'Logo', file: C, title: 1 };
   const win = WINDOWS[t.key];
   if (win || t.frame) return { kind: 'window', id: t.key, name: win || prettify(t.name), file: schemeOf(t) };
   return null;
@@ -1311,7 +1332,13 @@ const partHidden = (f, block) => `${hideHow(block)[0]}_hudeditor` in layoutProps
 // wait a moment before they're written, so a hide still waiting when "show" comes must not be read as done.
 function moveOff(f, block, key, off, hide) {
   const p = () => layoutProps(f, block), kept = `${key}_hudeditor`;
-  if (hide) { save(f, kept, () => kept in p() ? p()[kept] : p()[key] || '0', block); save(f, key, off, block); }
+  // a HUD part the game places itself (no such key in its files, the radio menu's y): where it is now, in units
+  // (480 high), so showing it puts it back there and not at 0
+  const here = () => {
+    const q = f.name === L && live && live.panels.find(x => x === x.thing && x.key === block.toLowerCase());
+    return q ? String(Math.round((key === 'ypos' ? q.y : q.x) * 480 / live.H)) : '0';
+  };
+  if (hide) { save(f, kept, () => kept in p() ? p()[kept] : p()[key] || here(), block); save(f, key, off, block); }
   else { save(f, key, () => kept in p() ? p()[kept] : p()[key] || '0', block); save(f, kept, null, block); }
 }
 function setPartHidden(f, block, hide) {
@@ -1438,10 +1465,12 @@ function classPictureRows(win) {
       if (!waiting.size && renderAfterSave) writing.then(() => { renderAfterSave = false; render(); });
     }, 250);
   };
-  // its place: ClassInfo's, which each class button copies for its page when the menu is made (window units)
+  // its place: ClassInfo's, which each class button copies for its page when the menu is made (window units): so it
+  // shows after a restart (live, and with the menu opened again, it didn't move, 2026-10-05)
   const menu = F(UI_RES[win]), place = menu && (partHidden(menu, 'ClassInfo')
     ? [noteRow('The picture and description are hidden (Show/hide): show them to move them.')]
     : ['xpos', 'ypos'].map(k => numRow(menu, 'ClassInfo', k, k === 'xpos' ? 'Picture: X' : 'Picture: Y', layoutProps(menu, 'ClassInfo')[k] || '0')));
+  if (place) place.push(noteRow('The picture\'s place and its eye show after a restart (the ⚠ by Save HUD): the game copies them to each class when it makes the menu.'));
   for (const r of place || []) r.dataset.head = 'Class picture';
   return [inputRow('Picture size', String(classPicturePct(win)), set, { type: 'number', min: 20, max: 150, step: 5, title: 'percent of the game\'s', undoId: `${win}/picture` }),
     ...(place || []),
@@ -2293,7 +2322,7 @@ const LOGO_WINDOWS = new Set(['team', 'class_ct', 'class_ter', 'info', 'buy_ct',
 // Their box takes the Backdrop's opacity only (drawn black, NOTES): a percent there.
 const IN_GAME_SHOWS = { scores: ['Backdrop', 'Text'], team: ['Backdrop', 'Borders'], class_ct: ['Backdrop', 'Text', 'Borders'],
   class_ter: ['Backdrop', 'Text', 'Borders'], info: ['Backdrop', 'Text', 'Borders'], buy_ct: ['Backdrop', 'Text', 'Borders'],
-  buy_ter: ['Backdrop', 'Text', 'Borders'], specgui: ['Window background', 'Text'], specmenu: ['Window background', 'Text'] };
+  buy_ter: ['Backdrop', 'Text', 'Borders'], specgui: ['Text'], specmenu: ['Text'] }; // (the spectator bars' grey is the game's: Window background didn't reach it, live or after a restart)
 const BACKDROP_OPACITY = ['Backdrop opacity', 'BgColor', 'How solid the box behind this window is, in % (the game draws it black)', 'alpha'];
 // (their box and the logo, made in code: a block of one of these names in a HUD's file does nothing for players, so it
 // gets no eye; the plugin doesn't apply it either)
@@ -3168,7 +3197,7 @@ function hudRows(id, hud) {
     Object.assign(rows[rows.length - 1].dataset, { cat: 'font', head: 'Fonts it uses' });
   }
   if (!hud.noPos) for (const [k, label] of [['xpos', 'X position'], ['ypos', 'Y position'], ['wide', 'Width'], ['tall', 'Height']])
-    if ((k in p || ((hud.pos || canHide(id)) && k.endsWith('pos'))) && !(hud.lockX && k === 'xpos')) rows.push(numRow(lay, id, k, label, p[k]));
+    if ((k in p || ((hud.pos || canHide(id)) && k.endsWith('pos'))) && !(hud.lockX && k === 'xpos') && !(hud.square && k === 'tall') && !(hud.noWide && k === 'wide')) rows.push(numRow(lay, id, k, label, p[k]));
   return rows;
 }
 
@@ -3196,16 +3225,26 @@ function hudSettingRows(id, hud) {
 // "xpos_hudeditor" (a key the game ignores). Values stay in a running game until set again, so showing a part
 // writes alpha 255 rather than removing the key.
 // (the chat too: it is fully opaque while typing whatever its alpha, checked in game)
-const SELF_FADING = new Set(['HudHintDisplay', 'HudHintKeyDisplay', 'HudWeaponSelection', 'HudMenu', 'HudHistoryResource', 'HudChat']);
-const isHidden = id => { const p = layoutProps(F(L), id); return SELF_FADING.has(id) ? 'xpos_hudeditor' in p : p.alpha !== undefined && +p.alpha === 0; };
+// (the radar too: it draws itself whatever HudLayout's alpha says; the round-end panel fades itself in, which an
+// alpha would lose to: both hidden off screen; seen 2026-10-05)
+const SELF_FADING = new Set(['HudHintDisplay', 'HudHintKeyDisplay', 'HudWeaponSelection', 'HudMenu', 'HudHistoryResource', 'HudChat', 'HudRadar', 'WinPanel_Round']);
+// (one moved off either way counts, and one an older editor hid with alpha 0: they're all put right by showing it)
+const isHidden = id => { const p = layoutProps(F(L), id), zero = p.alpha !== undefined && +p.alpha === 0; return SELF_FADING.has(id) ? 'xpos_hudeditor' in p || 'ypos_hudeditor' in p || zero : zero; };
 // Only parts HudLayout sets up can be hidden this way (the centre print isn't one of them).
 const canHide = id => !!F(L) && Object.keys(layoutProps(F(L), id)).length > 0;
 
 function setHidden(id, hide) {
   const lay = F(L);
   if (!SELF_FADING.has(id)) return save(lay, 'alpha', hide ? '0' : '255', id);
-  moveOff(lay, id, 'xpos', '9999', hide);
+  if (hide) return moveOff(lay, id, offKey(id), '9999', true);
+  // shown: from wherever it was moved off (the way an older editor did it too) and any alpha 0 an older editor wrote
+  const p = layoutProps(lay, id);
+  for (const k of ['xpos', 'ypos']) if (`${k}_hudeditor` in p) moveOff(lay, id, k, '9999', false);
+  if (p.alpha !== undefined && +p.alpha === 0) save(lay, 'alpha', '255', id);
 }
+// which way a part that fades itself is moved off: down for one whose X the game keeps (the radio menu: moved
+// sideways it stayed, seen 2026-10-05)
+const offKey = id => HUD[id] && HUD[id].lockX ? 'ypos' : 'xpos';
 
 // After a change that alters which rows or tags show: redraw once it's written.
 const refreshSoon = async () => { await sleep(400); await writing; render(); drawBoxes(); };
@@ -3213,6 +3252,7 @@ const refreshSoon = async () => { await sleep(400); await writing; render(); dra
 // (shown or hidden: the Hide button at the top, see hideButton)
 function visibilityRows(id) {
   const lay = F(L), p = layoutProps(lay, id);
+  if (id === 'HudRadar') return [noteRow('Its see-through background is the player\'s own cl_radaralpha (a console setting), so it has no opacity here: it can be shown or hidden (the button at the top).')];
   if (SELF_FADING.has(id)) return [noteRow('The game fades this one in and out itself, so it can only be shown or hidden (the button at the top).')];
   return [rangeRow('Opacity', p.alpha ?? '255', v => save(lay, 'alpha', v, id), `${L}/${id}/alpha`, gameProps(L, id).alpha ?? '255')];
 }
@@ -3505,7 +3545,10 @@ function resRows(f, block, defaults, schemeFile, ctl) {
     if (ctl === 'Label' || 'textalignment' in p) tag(selectRow('Text alignment', TEXT_ALIGN, align(p.textalignment), v => save(f, 'textAlignment', v, block), ['textAlignment'], `${f.name}/${block}/textalignment`, align(g.textalignment)), 'layout', 'Text');
   }
   const fixed = FIXED_SIZE.has(`${f.name}|${block}`.toLowerCase());
-  for (const [k, label] of POS) if ((k in p || k.endsWith('pos')) && !(fixed && !k.endsWith('pos'))) rows.push(numRow(f, block, k, label, p[k]));
+  // (a scoreboard row's template: the game stacks the rows itself, so its Y does nothing, seen with the board opened
+  // again 2026-10-05; its X and width are each column's)
+  const rowY = PLAYER_ROW.test(block);
+  for (const [k, label] of POS) if ((k in p || k.endsWith('pos')) && !(fixed && !k.endsWith('pos')) && !(rowY && k === 'ypos')) rows.push(numRow(f, block, k, label, p[k]));
   if (fixed) { const n = noteRow('Its size stays the game\'s: with any other the game crashed as the spectator bars showed (checked 2026-10-05).'); Object.assign(n.dataset, { cat: 'layout', head: 'Box size' }); rows.push(n); }
   return rows;
 }
@@ -3516,7 +3559,7 @@ const FIXED_SIZE = new Set(['resource/ui/spectator.res|ctscorevalue', 'resource/
 // Fonts a HUD part draws with by default (HudLayout font keys, when set, win). From telehud's comments and the SDK.
 const HUD_FONTS = { HudHealth: ['HudNumbers'], HudArmor: ['HudNumbers'], HudAmmo: ['HudNumbers'], HudAccount: ['HudNumbers'], HudRoundTimer: ['HudNumbers'],
   HudHintDisplay: ['HudHintText'], HudHintKeyDisplay: ['HudHintTextSmall'], CCenterStringLabel: ['Trebuchet24'], HudMessage: ['CenterPrintText'], TargetID: ['TargetID'],
-  HudWeaponSelection: ['HudSelectionNumbers', 'HudSelectionText'], HudMenu: ['Default'], HudDeathNotice: ['Default'], HudRadar: ['ChatFont'], HudChat: ['ChatFont'],
+  HudWeaponSelection: ['HudSelectionNumbers', 'HudSelectionText'], HudMenu: ['Default'], HudDeathNotice: ['Default'], HudRadar: ['ChatFont'], HudLocation: ['ChatFont'], HudChat: ['ChatFont'],
   WinPanel_Round: ['WinPanelLarge', 'WinPanelTiny', 'WinPanelClock'], FreezePanel: ['FreezeSmall', 'FreezeMedium', 'FreezeLarge'], C4Screen: ['Default'] };
 
 // Fonts a selection draws with, as [scheme file, font, what for]: the control's own .res "font", HudLayout font keys
@@ -4523,7 +4566,8 @@ function selectionSections(sel) {
       add('colour', 'Colours: the window', schemeRows(info.file, WINDOW_COLOURS[info.file]
         .filter(([label, k]) => (!k.startsWith('Border.') || bordersUse(info.file, k.split('|'))) && (!shows || shows.includes(label)))
         .map(r => r[0] === 'Backdrop' && LOGO_WINDOWS.has(info.id) ? BACKDROP_OPACITY : r)));
-      if (frame) { const [colour, ...rest] = borderRows(S, 'FrameBorder'); add('border', 'Border: window edge (every window)', [colour, windowCornerRow(S), ...rest]); }
+      // (the window edge is always one line: a thickness changed nothing, 1 to 8 tried on the console, 2026-10-05)
+      if (frame) { const [colour, , ...rest] = borderRows(S, 'FrameBorder'); add('border', 'Border: window edge (every window)', [colour, windowCornerRow(S), ...rest]); }
       add('other', `Fading (every ${frame ? 'menu' : 'in-game'} window)`, fadeRows(info.file));
     }
     if (EXTRA[info.id]) add('colour', `Colours: ${info.name.toLowerCase()}`, schemeRows(S, EXTRA[info.id]).concat(info.file === C ? schemeRows(C, EXTRA[info.id]) : []));
@@ -4977,9 +5021,12 @@ function moveTarget(sel) {
     panel = live.panels.find(q => q.thing === sel.thing && q.name && q.name.toLowerCase() === block.toLowerCase());
   }
   const p = f && layoutProps(f, block);
-  if (!p || !Object.keys(p).length || 'xpos_hudeditor' in p) return null; // hidden parts sit off screen
+  if (!p || !Object.keys(p).length || 'xpos_hudeditor' in p || 'ypos_hudeditor' in p) return null; // hidden parts sit off screen
+  const hud = sel.info.kind === 'hud' && !sel.control;
+  if (hud && sel.info.hud.noPos) return null; // (placed by the server or the game: the location name, the large speed)
   const wide = /^\s*\d+\s*$/.test(p.wide || '') ? +p.wide : 0, s = panel && wide && panel.w ? panel.w / wide : live.H / 480;
-  return { f, block, p, s, panel, hud: sel.info.kind === 'hud' && !sel.control, lockX: sel.info.kind === 'hud' && !sel.control && !!sel.info.hud.lockX,
+  // (a scoreboard row's template only gives its column: the game stacks the rows, so it moves sideways only)
+  return { f, block, p, s, panel, hud, lockX: hud && !!sel.info.hud.lockX, lockY: !hud && PLAYER_ROW.test(block),
     put: (k, v) => save(f, k, v, block), read: k => layoutProps(f, block)[k] };
 }
 // Grid (top right): a dragged part's position lands on a multiple of it (instead of the magnet below), counted from where the position is measured
@@ -5019,7 +5066,7 @@ function snapTo(r, t) {
   const b = !t.hud && !t.plain && t.panel && t.panel.parent || { x: t.off ? t.off.x : 0, y: t.off ? t.off.y : 0, w: live.W, h: live.H }, out = {};
   const near = 12 * live.W / ($('boxes').getBoundingClientRect().width || live.W);
   for (const [k, pos, size, sizeKey] of [['xpos', 'x', 'w', 'wide'], ['ypos', 'y', 'h', 'tall']]) {
-    if (k === 'xpos' && t.lockX) continue;
+    if ((k === 'xpos' && t.lockX) || (k === 'ypos' && t.lockY)) continue;
     const u = /^\s*\d+\s*$/.test(t.p[sizeKey] || '') ? +t.p[sizeKey] : Math.round(r[size] / t.s), start = b[pos], len = b[size];
     // (plain numbers only: across the screen for the menu and logo, else inside a window smaller than the screen)
     const span = t.plain ? len / t.s : windowSpan(t, k), end = span === null ? null : Math.round(span - u - 1), mid = span === null ? null : Math.round((span - u) / 2);
@@ -5075,13 +5122,13 @@ window.addEventListener('mousemove', e => {
     })();
   }
   const hb = $('hoverbox'), t = drag.target;
-  const lockX = drag.hit.info.hud?.lockX && !drag.hit.control;
+  const lockX = drag.hit.info.hud?.lockX && !drag.hit.control, lockY = t && t.lockY;
   // the panel's own box snaps (what was clicked can be a part of it); the dashed box follows by as much
-  const base = t && t.panel || drag.rect, r = { ...base, x: base.x + (lockX ? 0 : dx), y: base.y + dy }, snap = t && !grid ? snapTo(r, t) : {}; // (with the grid on, only the grid)
+  const base = t && t.panel || drag.rect, r = { ...base, x: base.x + (lockX ? 0 : dx), y: base.y + (lockY ? 0 : dy) }, snap = t && !grid ? snapTo(r, t) : {}; // (with the grid on, only the grid)
   if (!t) { if (hb) { hb.hidden = false; hb.classList.add('drag'); place(hb, { ...drag.rect, x: drag.rect.x + r.x - base.x, y: drag.rect.y + r.y - base.y }); } return; }
   showGrid(t);
   // edges and the middle first, else the grid; the dashed box shows where it lands
-  const x = t.lockX ? null : snap.xpos || gridded(shifted(t.p.xpos, dx / t.s)), y = snap.ypos || gridded(shifted(t.p.ypos, dy / t.s));
+  const x = t.lockX ? null : snap.xpos || gridded(shifted(t.p.xpos, dx / t.s)), y = t.lockY ? null : snap.ypos || gridded(shifted(t.p.ypos, dy / t.s));
   // (not snapped: the same anchor as before, so the move is the difference in units)
   const moved = (key, v) => { const was = /^\s*[rc]?\s*([+-]?[\d.]+)\s*$/i.exec(t.p[key] || '0'), now = /^[rc]?(-?[\d.]+)$/i.exec(v || ''); return was && now ? (+now[1] - +was[1]) * (/^r/i.test(v) ? -1 : 1) * t.s : 0; };
   const at = (key, pos, v) => snap[key] ? r[pos] - base[pos] : v === null ? 0 : moved(key, v);
@@ -5089,7 +5136,7 @@ window.addEventListener('mousemove', e => {
   if (x !== null) t.put('xpos', x);
   if (y !== null) t.put('ypos', y);
   for (const o of drag.others) for (const [key, pos, v] of [['xpos', 'x', x], ['ypos', 'y', y]]) {
-    const nv = v === null || (key === 'xpos' && o.lockX) ? null : shifted(o.p[key], Math.round(at(key, pos, v) / o.s));
+    const nv = v === null || (key === 'xpos' && o.lockX) || (key === 'ypos' && o.lockY) ? null : shifted(o.p[key], Math.round(at(key, pos, v) / o.s));
     if (nv !== null) o.put(key, nv);
   }
 });
@@ -5233,7 +5280,7 @@ window.addEventListener('keydown', e => {
   e.preventDefault();
   e.stopImmediatePropagation(); // not to the game, as other keys over the preview are
   for (const t of ts) for (const [key, dd] of [['xpos', d[0]], ['ypos', d[1]]]) {
-    if (!dd || (key === 'xpos' && t.lockX)) continue;
+    if (!dd || (key === 'xpos' && t.lockX) || (key === 'ypos' && t.lockY)) continue;
     const id = `${t.f.name}/${t.block}/${key}`;
     nudged[id] = (nudged[id] || 0) + dd * (e.shiftKey ? 10 : 1);
     // worked out when written: presses faster than the write add up
@@ -5245,7 +5292,7 @@ function lineUp(how) {
   const items = [selected, ...also].map(moveTarget).filter(t => t && t.panel && Number.isFinite(t.panel.x));
   if (items.length < 2) return status('Ctrl+click parts that can be moved to line them up.');
   const edge = { left: r => r.x, centre: r => r.x + r.w / 2, right: r => r.x + r.w, top: r => r.y, middle: r => r.y + r.h / 2, bottom: r => r.y + r.h };
-  const move = (t, key, px) => { const d = Math.round(px / t.s), v = d && !(key === 'xpos' && t.lockX) ? shifted(t.p[key], d) : null; if (v !== null) t.put(key, v); };
+  const move = (t, key, px) => { const d = Math.round(px / t.s), v = d && !(key === 'xpos' && t.lockX) && !(key === 'ypos' && t.lockY) ? shifted(t.p[key], d) : null; if (v !== null) t.put(key, v); };
   if (edge[how]) {
     const key = /left|centre|right/.test(how) ? 'xpos' : 'ypos';
     for (const t of items.slice(1)) move(t, key, edge[how](items[0].panel) - edge[how](t.panel));
@@ -6224,6 +6271,36 @@ if (host && location.hash === '#hosttest') (async () => {
       check(p && p.textalignment === 'west' && p.defaultbgcolor_override === resolve(tables(F(C)), 'Button.BgColor') && fallbackText(f, t0) === null
         && lp && lp.roundedcorners === (layoutProps({ bases: F(L).bases, parsed: { entries: [] } }, 'HudAccount').roundedcorners ?? '15') && fallbackText(F(C), F(C).text + ' ') === null,
         `a key undone out of a window's or HudLayout block is first set to the game's fallback (${JSON.stringify(p)}, ${JSON.stringify(lp)})`);
+    }
+    {
+      // HudLayout: a part's colour link undone is kept in the first write (the scheme colour it names comes back in the
+      // same reload); a part moved off by its eye, undone, first goes back to its kept place
+      const nl = String.fromCharCode(10), t = (...b) => ['"Resource/HudLayout.res"', '{', ...b, '}'].join(nl);
+      const lf = { ...F(L), text: t('HudWeaponSelection', '{', '"SelectedBoxClor" "SelectionSelectedBoxBg"', '}'), parsed: null };
+      lf.parsed = parse(lf.text);
+      const first = fallbackText(lf, t('HudWeaponSelection', '{', '}')), p1 = first && layoutProps({ parsed: parse(first), bases: [] }, 'HudWeaponSelection');
+      const mf = { ...F(L), text: t('HudMenu', '{', '"ypos" "9999"', '"ypos_hudeditor" "120"', '}'), parsed: null };
+      mf.parsed = parse(mf.text);
+      const m1 = fallbackText(mf, t('HudMenu', '{', '}')), p2 = m1 && layoutProps({ parsed: parse(m1), bases: [] }, 'HudMenu');
+      check(p1 && p1.selectedboxclor === 'SelectionSelectedBoxBg' && p2 && p2.ypos === '120' && offKey('HudMenu') === 'ypos' && offKey('HudRadar') === 'xpos',
+        `undo keeps a colour link in its first write, and a moved-off part's place (${JSON.stringify(p1)}, ${JSON.stringify(p2)})`);
+    }
+    {
+      // a part the game fades itself, hidden by an older editor (alpha 0, or xpos for one that moves by y now), counts as
+      // hidden, and its eye puts every way back; a part the game places gets no move target
+      const keep = [F(L).text, F(L).parsed], id = 'HudMenu';
+      let saved = [];
+      const realSave = save;
+      try {
+        F(L).text = '"Resource/HudLayout.res"' + String.fromCharCode(10) + '{' + String.fromCharCode(10) + 'HudMenu' + String.fromCharCode(10) + '{' + String.fromCharCode(10) + '"xpos" "9999"' + String.fromCharCode(10) + '"xpos_hudeditor" "0"' + String.fromCharCode(10) + '"alpha" "0"' + String.fromCharCode(10) + '}' + String.fromCharCode(10) + '}';
+        F(L).parsed = parse(F(L).text);
+        const was = isHidden(id);
+        save = (f, k, v, b) => saved.push([k, typeof v === 'function' ? v() : v, b]);
+        setHidden(id, false);
+        check(was && saved.some(([k, v]) => k === 'xpos' && v === '0') && saved.some(([k, v]) => k === 'xpos_hudeditor' && v === null) && saved.some(([k, v]) => k === 'alpha' && v === '255')
+          && !moveTarget({ info: { kind: 'hud', id: 'HudLocation', hud: HUD.HudLocation }, thing: { key: 'hudlocation' }, control: null }),
+          `a part hidden the old way counts as hidden and its eye puts it all back; the location name gets no move target (${JSON.stringify(saved)})`);
+      } finally { save = realSave; [F(L).text, F(L).parsed] = keep; }
     }
     {
       // the spectator bars' score numbers get no size rows (any other size closed the game), their place still
