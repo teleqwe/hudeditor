@@ -1253,10 +1253,9 @@ function thingInfo(t) {
   if (hud) return { kind: 'hud', id: t.name, name: hud.name, hud };
   // a picture, text or box HudLayout adds (the editor's, or the HUD's own)
   { const c = customInfo(t.name); if (c) return c; }
-  // the main menu's logo: two buttons the menu makes (ClientScheme's Main.Title1 and Main.Title2). The second (the faint
-  // "S O U R C E") isn't offered: its colour and place showed no change in the sweep (2026-10-05), to look at again
-  if (t.key === 'gamemenubutton2') return null;
-  if (t.key === 'gamemenubutton') return { kind: 'window', id: 'gamelogo', name: 'Logo', file: C, title: 1 };
+  // the main menu's logo: two buttons the menu makes (ClientScheme's Main.Title1 and Main.Title2: the faint "S O U R C E",
+  // seen live and after a restart in a fresh game, 2026-10-08)
+  if (/^gamemenubutton2?$/.test(t.key)) return { kind: 'window', id: 'gamelogo', name: t.key.endsWith('2') ? 'Logo, second line' : 'Logo', file: C, title: t.key.endsWith('2') ? 2 : 1 };
   const win = WINDOWS[t.key];
   if (win || t.frame) return { kind: 'window', id: t.key, name: win || prettify(t.name), file: schemeOf(t) };
   return null;
@@ -2318,9 +2317,10 @@ const CS_LOGO_CLEAR = '// The CS logo in the corner of the in-game windows, see-
   + '\t"$alpha"\t"0"\n\t"$translucent"\t"1"\n\t"$vertexcolor"\t"1"\n\t"$vertexalpha"\t"1"\n}\n';
 const LOGO_WINDOWS = new Set(['team', 'class_ct', 'class_ter', 'info', 'buy_ct', 'buy_ter']);
 // Which of the window colours each in-game window shows (each changed and looked at, 2026-10-05): the rest change
-// nothing there (no in-game window draws a title; team select's texts all have their own colours), so they're left out.
+// nothing there (no in-game window draws a title), so they're left out. Team select's Text (SELECT TEAM) was first
+// left out too, wrongly: the sweep's earlier steps had masked it (seen in a fresh game, live and after a restart, 2026-10-08).
 // Their box takes the Backdrop's opacity only (drawn black, NOTES): a percent there.
-const IN_GAME_SHOWS = { scores: ['Backdrop', 'Text'], team: ['Backdrop', 'Borders'], class_ct: ['Backdrop', 'Text', 'Borders'],
+const IN_GAME_SHOWS = { scores: ['Backdrop', 'Text'], team: ['Backdrop', 'Text', 'Borders'], class_ct: ['Backdrop', 'Text', 'Borders'],
   class_ter: ['Backdrop', 'Text', 'Borders'], info: ['Backdrop', 'Text', 'Borders'], buy_ct: ['Backdrop', 'Text', 'Borders'],
   buy_ter: ['Backdrop', 'Text', 'Borders'], specgui: ['Text'], specmenu: ['Text'] }; // (the spectator bars' grey is the game's: Window background didn't reach it, live or after a restart)
 const BACKDROP_OPACITY = ['Backdrop opacity', 'BgColor', 'How solid the box behind this window is, in % (the game draws it black)', 'alpha'];
