@@ -521,7 +521,7 @@ const HUD = {
   CCenterStringLabel: { name: 'Small speed', fixed: 'The game always draws this text white, so no HUD can recolour it. Its font (below) can change.', note: 'Centre print (PrintCenterText) from server plugins; font Trebuchet24',
     middle: [120, 30] },
   // (noPos: the server plugin places it, so it has no position or size here and doesn't drag)
-  HudMessage: { name: 'Large speed', noPos: true, fixed: 'Its colour and position come from the server plugin, not the HUD. Its font (below) can change. The record times in the top left are the same kind of text.', note: 'ShowHudText / game_text from server plugins and maps; font CenterPrintText',
+  HudMessage: { name: 'Large speed', noPos: true, fixed: 'Its colour and position come from the server plugin, not the HUD. Its font (below) can change. The record times in the top left are the same kind of text, in the same panel: hiding this hides them too.', note: 'ShowHudText / game_text from server plugins and maps; font CenterPrintText',
     hit: [['c-60', '178', '120', '30'], ['4', '2', '230', '60']] },
   TargetID: { name: 'Player name when aiming', quiet: true, colours: [['Counter-Terrorists', 'CT_Blue', 'Also the kill feed\'s names'], ['Terrorists', 'T_Red', 'Also the kill feed\'s names'], ['Hostages', 'Hostage_Yellow', ''] ] },
   // radio menus, and SourceMod menus on bhop/surf servers (checkpoints, timer menus)
@@ -2354,6 +2354,8 @@ function setBackdrop(rgba) {
   clearTimeout(bdTimer);
   bdTimer = setTimeout(async () => {
     bdGroup = null;
+    // (black: the game's own materials again, so the HUD's copies and its corner pictures go on Save while it stays so)
+    if (black) for (const [n, tex] of BD_PIECES) for (const p of [BD_PATH(n), ...(/hudeditor/.test(tex) ? [`materials/${tex}.vtf`, `materials/${tex}.vmt`] : [])]) dropped.set(p, async () => !!backdropColour());
     if (!black) await call('corners', 'round').catch(err => status(`Couldn't write the corners: ${err.message}`));
     for (const [n, tex] of BD_PIECES) commit(hudFile(BD_PATH(n), bdGame(n)), `backdrop/${n}`, () => black ? bdGame(n) : bdText(tex, rgb), group);
     writing.then(() => {
@@ -3319,6 +3321,15 @@ function visibilityRows(id) {
   }
   if (SELF_FADING.has(id)) return [noteRow('The game fades this one in and out itself, so it can only be shown or hidden (the button at the top).')];
   return [rangeRow('Opacity', p.alpha ?? '255', v => save(lay, 'alpha', v, id), `${L}/${id}/alpha`, gameProps(L, id).alpha ?? '255')];
+}
+// A control's own rows that change nothing, left out with a note: [file|block] -> [[row, note]] (team select's map info
+// text is drawn in Map description's colour: its own Text did nothing, also in a fresh game, 2026-10-08)
+const OWN_DEAD = { 'resource/ui/teammenu.res|mapinfo': [['Text', 'Its text is drawn in "Map description" (Colours: team select), so it has no Text colour of its own.']] };
+function deadOwn(f, block, rows) {
+  const dead = OWN_DEAD[`${f.name.toLowerCase()}|${block.toLowerCase()}`];
+  if (!dead) return rows;
+  const names = dead.map(([l]) => l.toLowerCase()), label = r => { const n = r.querySelector('.rename'), i = r.querySelector('input[aria-label]'); return ((i && i.getAttribute('aria-label').split(':')[0]) || (n && n.textContent) || '').trim().toLowerCase(); }; // (the label as made, not as renamed)
+  return [...rows.filter(r => !names.includes(label(r))), ...dead.map(([, n]) => noteRow(n))];
 }
 // The selection's Hide / Show, at the top by its name: a HUD part, or a window's control that has a block of its own.
 function hideButton(sel) {
@@ -4621,7 +4632,7 @@ function selectionSections(sel) {
     add('colour', `${name}: this ${own.what} only`, [
       noteRow(`Only ${name}${name !== own.block ? ` (${own.block})` : ''} in ${sel.res.name.split('/').pop()} changes here. Further down: the colours ${own.what === 'part' ? 'it shares with others like it' : `every ${own.what} shares`}.`),
       ...(STARTUP_RES.has(info.id) ? [noteRow('The buy menu reads its own settings when the game makes it: these show after a game restart. The shared colours and fonts below change straight away.')] : []),
-      ...mine(resRows(sel.res, own.block, own.defaults, schemeOf(sel.thing), own.ctl))]);
+      ...mine(deadOwn(sel.res, own.block, resRows(sel.res, own.block, own.defaults, schemeOf(sel.thing), own.ctl)))]);
   }
   if (own && /^hudeditor_(pic|text|box)/i.test(own.block)) add('colour', `What this ${own.block.replace(/^hudeditor_|\d+$/gi, '').replace('pic', 'picture')} shows`, mine(customRows(own.block, sel.res)));
   if (control) {
@@ -6471,6 +6482,10 @@ if (host && location.hash === '#hosttest') (async () => {
     check(/HudHealth\s*\{\s*"xpos"\t\t"20"/.test(await readHud('scripts/HudLayout.res') || ''), 'position written into the HUD');
     check(await call('save') === '3' && !(await call('save').then(n => +n)), 'Save HUD keeps the 3 changed files, then has nothing to keep');
     setDirty(false);
+    { // team select's map info box: its own Text colour (does nothing) left out, with a note
+      const rows = deadOwn({ name: 'resource/UI/TeamMenu.res' }, 'MapInfo', [colorRow('Text', '', '1 2 3 255', () => {}, []), colorRow('Background', '', '1 2 3 255', () => {}, [])]);
+      check(rows.length === 2 && rows[0].querySelector('.rename').textContent === 'Background' && rows[1].classList.contains('note'), `the map info box has no own Text row (${rows.map(r => r.className)})`);
+    }
     { // (after Save: the corners are files of their own) the windows' box corners, a quarter circle as the game's
       const corners = await call('corners', 'round').catch(e => e.message);
       check(corners === 'vgui/hudeditor/round_corner' && (await call('exists', 'materials/vgui/hudeditor/round_corner4.vtf')) === '1', `round corners for the windows' box (${corners})`);
