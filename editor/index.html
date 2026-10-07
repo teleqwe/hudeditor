@@ -506,7 +506,8 @@ const HUD = {
     // (the game centres it across the screen: its X and width changed nothing, 2026-10-05)
     lockX: true, noWide: true },
   // (its names take the game's team colours: HudLayout's CTTextColor / TerroristTextColor changed nothing, 2026-10-05)
-  HudDeathNotice: { name: 'Kill feed', hit: ['r260', '12', '248', '100'], fixed: 'Its names are drawn in the team colours of Player name when aiming (CT_Blue, T_Red).',
+  HudDeathNotice: { name: 'Kill feed', hit: ['r260', '12', '248', '100'], layoutColours: [['CT names', 'CTTextColor', 'CT_Blue'], ['T names', 'TerroristTextColor', 'T_Red']],
+    fixed: 'Name colours show on kills after the change; lines already in the feed keep theirs.',
     settings: [['Lines', 'MaxDeathNotices', 'num', '4', 'How many kills show at once'], ['Line height', 'LineHeight', 'num', '22'],
       ['Lines line up on the', 'RightJustify', [['1', 'Right'], ['0', 'Left']], '1', 'Side of the kill feed\'s area (move the area to move the feed)']], fontKeys: [['Names font', 'TextFont', 'Default']] },
   // the chat reads ChatScheme; its message colours (names in team colours, yellow server lines) are the game's own
@@ -1399,9 +1400,9 @@ function missingRows(f) {
 // The Show/hide tab: every part of the selection with its eye. A HUD part: itself; with a file of its own (the chat,
 // the round-end panel) or a window: the parts WINDOW_PARTS names (grouped ones as one), then every other block in the
 // file, in its order (not the window's own block, nor its hidden system menu).
-// Parts with nothing to show: hidden in the game's file with no text, which the game never fills in (team select's
-// mapname shown showed nothing, 2026-10-05), so their eye would change nothing
-const NOTHING_TO_SHOW = new Set(['team/mapname']);
+// Parts with nothing to show, whose eye would change nothing. (Team select's mapname was here, wrongly: hidden and
+// empty in the game's file, but shown the game fills in the map's name, seen in a fresh game, 2026-10-08.)
+const NOTHING_TO_SHOW = new Set();
 function showHideRows(sel) {
   const { info } = sel, f = sel.res, rows = [];
   if (info.kind === 'hud' && !sel.control && canHide(info.id))
