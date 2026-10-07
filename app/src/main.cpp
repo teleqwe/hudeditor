@@ -283,6 +283,8 @@ static bool CornerInside( const wstring &shape, double u, double v )
 		return u + v >= 1;
 	if ( shape == L"scoop" )
 		return u * u + v * v >= 1;
+	if ( shape == L"round" ) // the in-game windows' box corner (round_corner_nw...): a quarter circle of the whole square
+		return ( 1 - u ) * ( 1 - u ) + ( 1 - v ) * ( 1 - v ) <= 1;
 	// "tight": a quarter circle of half the usual radius
 	return u >= 0.5 || v >= 0.5 || ( u - 0.5 ) * ( u - 0.5 ) + ( v - 0.5 ) * ( v - 0.5 ) <= 0.25;
 }
@@ -1234,7 +1236,7 @@ static void OnMessage( const wstring &msg )
 	}
 	else if ( op == L"corners" ) // box corner textures in a shape: "vgui/hudeditor/<shape>_corner" (+ 1-4)
 	{
-		if ( arg != L"bevel" && arg != L"scoop" && arg != L"tight" && arg != L"square" )
+		if ( arg != L"bevel" && arg != L"scoop" && arg != L"tight" && arg != L"square" && arg != L"round" )
 			fail( L"unknown corner shape" );
 		else if ( ( out = WriteCorners( arg ) ).empty() )
 			fail( L"couldn't write the corner textures" );

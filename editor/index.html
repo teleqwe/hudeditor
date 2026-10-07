@@ -901,12 +901,13 @@ async function loadAll() {
   files.push({ name: GM, path: GM, text: gm, parsed: parse(gm), bases: [] });
   await Promise.all(SB_PAGES.map(uiFile));
   await Promise.all(KIND_RES().map(([p]) => uiFile(p))); // (colours by kind reads every window's own colours: the HUD's copies)
-  for (const path of [CVAR_CFG, VALVE_RC, CS_LOGO, SB_SELECT]) { // the scoreboard's name colours and highlight, the logo, when the HUD has them
+  for (const path of [CVAR_CFG, VALVE_RC, CS_LOGO, SB_SELECT, ...BD_PIECES.map(([n]) => BD_PATH(n))]) { // the scoreboard's name colours and highlight, the logo, the windows' box, when the HUD has them
     const text = await readHud(path);
     if (text != null) files.push({ name: path, path, text, parsed: parse(''), bases: [] });
   }
   logoOwn = F(CS_LOGO) && !logoClear(F(CS_LOGO).text) ? F(CS_LOGO).text : null;
   logoStart = F(CS_LOGO) ? F(CS_LOGO).text : '';
+  bdStart = (F(BD_PATH('solid_background')) || {}).text || '';
   sbOpened = F(SB_SELECT) ? F(SB_SELECT).text : null;
   squareAll = (await readHud(CORNER_VMT(1)) || '').includes('vgui/white');
   render();
@@ -1009,7 +1010,7 @@ async function undo() {
       await call('write', f.path, text);
       Object.assign(f, { text, parsed: before });
       if (f.name === CVAR_CFG) applyCvars(text); // a cfg only runs at startup: give the game the values now
-      const mat = { [CS_LOGO]: 'cs_logo', [SB_SELECT]: 'scoreboard-select' }[f.name]; // (materials: the game takes them on a reload)
+      const mat = { [CS_LOGO]: 'cs_logo', [SB_SELECT]: 'scoreboard-select', ...Object.fromEntries(BD_PIECES.map(([n]) => [BD_PATH(n), n])) }[f.name]; // (materials: the game takes them on a reload)
       if (mat) call('cmd', '', `mat_reloadmaterial ${mat}`).catch(() => {});
       setDirty(true);
       status('Undone.');
@@ -2190,7 +2191,8 @@ function setEdge(lay, id, rgba) {
 // windows whose own .res is read again on a change (the scoreboard itself, the others through the plugin)
 // (and the loading screen: it can't be clicked in the preview, so what's added to it is listed under it, see selectionSections;
 // and the buy menu, which shows what's added after a game restart)
-const ADD_WINDOWS = new Set(['scores', 'team', 'class_ct', 'class_ter', 'info', 'loadingdialog', 'buy_ct', 'buy_ter']);
+// (the spectator bars too: what's added to their file draws only while spectating, with the bars, seen 2026-10-08)
+const ADD_WINDOWS = new Set(['scores', 'team', 'class_ct', 'class_ter', 'info', 'loadingdialog', 'buy_ct', 'buy_ter', 'specgui']);
 function addRows(lay = F(L)) {
   const pick = el('input', { type: 'file', accept: 'image/png,image/jpeg,image/gif,image/webp', hidden: true });
   pick.onchange = () => { if (pick.files[0]) addToHud('pic', pick.files[0], lay); pick.value = ''; };
@@ -2199,7 +2201,8 @@ function addRows(lay = F(L)) {
     el('button', { textContent: '+ Text', onclick: () => addToHud('text', null, lay) }), el('button', { textContent: '+ Colour box', onclick: () => addToHud('box', null, lay) }));
   if (lay !== F(L)) {
     r.dataset.q = 'add picture gif text box window';
-    return [...addedList(lay), r, ...(lay.name === UI_RES.buy_ct ? [noteRow('The buy menu reads its file when the game makes it: what\'s added shows after a game restart (the ⚠ by Save HUD).')] : [])];
+    return [...addedList(lay), r, ...(lay.name === UI_RES.buy_ct ? [noteRow('The buy menu reads its file when the game makes it: what\'s added shows after a game restart (the ⚠ by Save HUD).')] : []),
+      ...(lay.name === UI_RES.specgui ? [noteRow('These show only while spectating, with the bars. The bars\' own grey is fixed by the game: hide them under Show or hide and put a colour box in their place.')] : [])];
   }
   r.dataset.q = 'add picture image gif logo text label box colour background';
   return [...addedList(), r, noteRow('These go on the HUD you see while playing, in the middle of the screen, over the game (HudLayout). For a window (scoreboard, team select, class select, MOTD), open it, click it in the preview and use its Custom tab.'),
@@ -2236,22 +2239,34 @@ const SB_COLUMNS = [['avatar', 'Avatar0'], ['clan tag', 'Clan0'], ['name', 'Name
 // wins). Written like any other file, so undo, Save HUD and discarding cover them; the running game gets the values too.
 const CVAR_CFG = 'cfg/hudeditor_colours.cfg', VALVE_RC = 'cfg/valve.rc', CVAR_EXEC = 'exec hudeditor_colours.cfg';
 const VALVE_RC_TEXT = '// load the base configuration\n//exec default.cfg\nr_decal_cullsize 1\n\n// Setup custom controller\nexec joystick.cfg\n\n'
-  + `// the HUD's scoreboard name colours (HUD editor)\n${CVAR_EXEC}\n\n// run a user script file if present\nexec autoexec.cfg\n\n//\n// stuff command line statements\n//\nstuffcmds\n`;
-const readCvars = text => { const o = {}; for (const m of (text || '').matchAll(/^\s*(cl_scoreboard_\w+)\s+"?(\d+)/gm)) o[m[1].toLowerCase()] = m[2]; return o; };
-let cvarValues = null, cvarStart = null; // now; config.cfg's when the editor first read it (what a HUD without the cfg gets back)
+  + `// the game settings the HUD sets (HUD editor)\n${CVAR_EXEC}\n\n// run a user script file if present\nexec autoexec.cfg\n\n//\n// stuff command line statements\n//\nstuffcmds\n`;
+// The radar's see-through background is a game setting too (cl_radaralpha: its HudLayout alpha does nothing, NOTES),
+// kept in the same cfg. [cvar, the game's default]
+const RADAR_CVARS = { cl_radaralpha: '200' };
+const readCvars = text => { const o = {}; for (const m of (text || '').matchAll(/^\s*(cl_scoreboard_\w+|cl_radaralpha)\s+"?(\d+)/gim)) o[m[1].toLowerCase()] = m[2]; return o; };
+// now; config.cfg's when the editor first read it (what a HUD without the cfg gets back); the ones the HUD's cfg sets
+let cvarValues = null, cvarStart = null, cvarHud = new Set();
 async function loadCvars() {
   if (cvarValues) return;
   cvarStart ||= readCvars(await call('config').catch(() => ''));
-  cvarValues = { ...cvarStart, ...readCvars(F(CVAR_CFG) && F(CVAR_CFG).text) };
+  const own = readCvars(F(CVAR_CFG) && F(CVAR_CFG).text);
+  cvarValues = { ...cvarStart, ...own };
+  cvarHud = new Set(Object.keys(own));
 }
 const RGB = ['red', 'green', 'blue'];
 const cvarColour = (prefix, def) => RGB.map((c, i) => (cvarValues || {})[`${prefix}_${c}`] ?? def.split(' ')[i]).join(' ') + ' 255';
-const cvarLines = () => SCOREBOARD_CVARS.flatMap(([, prefix, def]) => RGB.map((c, i) => `${prefix}_${c} ${cvarColour(prefix, def).split(' ')[i]}`));
+const cvarValue = k => (cvarValues || {})[k] ?? RADAR_CVARS[k];
+// the cfg's lines: the name colours (all, once the HUD sets one) and each radar setting the HUD sets; all: every one,
+// for the running game
+const cvarLines = (all = false) => [
+  ...(all || [...cvarHud].some(k => k.startsWith('cl_scoreboard_')) ? SCOREBOARD_CVARS.flatMap(([, prefix, def]) => RGB.map((c, i) => `${prefix}_${c} ${cvarColour(prefix, def).split(' ')[i]}`)) : []),
+  ...Object.keys(RADAR_CVARS).filter(k => all || cvarHud.has(k)).map(k => `${k} ${cvarValue(k)}`)];
 const hudFile = (path, text) => F(path) || (files.push({ name: path, path, text, parsed: parse(''), bases: [] }), F(path));
-function setCvarColour(prefix, rgba) {
-  const rgb = rgba.split(' ');
-  RGB.forEach((c, i) => { cvarValues[`${prefix}_${c}`] = rgb[i]; });
-  call('cmd', '', RGB.map((c, i) => `${prefix}_${c} ${rgb[i]}`).join('; '));
+const setCvarColour = (prefix, rgba) => setCvars(RGB.map((c, i) => [`${prefix}_${c}`, rgba.split(' ')[i]]), 'name colours');
+function setCvars(pairs, id) {
+  cvarValues ||= {};
+  for (const [k, v] of pairs) { cvarValues[k] = v; cvarHud.add(k); }
+  call('cmd', '', pairs.map(([k, v]) => `${k} ${v}`).join('; '));
   // the game's valve.rc, or the HUD's own with the exec added before autoexec. Not an undo step: an emptied valve.rc
   // would skip the player's autoexec (discarding still removes one the editor made)
   const rc = hudFile(VALVE_RC, '');
@@ -2261,13 +2276,15 @@ function setCvarColour(prefix, rgba) {
     writing = writing.then(() => call('write', VALVE_RC, text)).catch(err => status(`Couldn't write ${VALVE_RC}: ${err.message}`));
   }
   const cfg = hudFile(CVAR_CFG, '');
-  commit(cfg, 'name colours', () => `// Scoreboard name colours, run at startup from cfg/valve.rc (HUD editor)\n${cvarLines().join('\n')}\n`);
+  commit(cfg, id, () => `// Game settings the HUD sets (scoreboard name colours, radar), run at startup from cfg/valve.rc (HUD editor)\n${cvarLines().join('\n')}\n`);
 }
 // Puts the running game's name colours to what a cfg text says (after an undo, or a discard), else to config.cfg's.
 function applyCvars(text) {
   if (!cvarStart) return;
-  cvarValues = { ...cvarStart, ...readCvars(text) };
-  call('cmd', '', cvarLines().join('; ')).catch(() => {});
+  const own = readCvars(text);
+  cvarValues = { ...cvarStart, ...own };
+  cvarHud = new Set(Object.keys(own));
+  call('cmd', '', cvarLines(true).join('; ')).catch(() => {});
 }
 
 // The game's background is a picture (materials/vgui/scoreboard/panel-scoreboard). The editor can add a box of its own
@@ -2317,6 +2334,41 @@ const CS_LOGO_GAME = 'UnlitGeneric\n{\n\t"$translucent" 1\n\t"$basetexture" "vgu
 const CS_LOGO_CLEAR = '// The CS logo in the corner of the in-game windows, see-through (HUD editor)\nUnlitGeneric\n{\n\t"$basetexture"\t"vgui/gfx/vgui/cs_logo"\n'
   + '\t"$alpha"\t"0"\n\t"$translucent"\t"1"\n\t"$vertexcolor"\t"1"\n\t"$vertexalpha"\t"1"\n}\n';
 const LOGO_WINDOWS = new Set(['team', 'class_ct', 'class_ter', 'info', 'buy_ct', 'buy_ter']);
+// Their box: pieces of materials/vgui/gfx/vgui/solid_background and round_corner_nw/ne/se/sw (black, times BgColor's
+// alpha; trans_background is clear), drawn by the game. The HUD's own materials of those names, white and tinted
+// ($color), colour it; the game reads a material's texture once, so it shows after a restart (seen 2026-10-08). The
+// corners are the exe's "round" corner textures (a quarter circle, as the game's).
+const BD_PIECES = [['solid_background', 'vgui/white'], ...['nw', 'ne', 'se', 'sw'].map((k, i) => [`round_corner_${k}`, `vgui/hudeditor/round_corner${i + 1}`])];
+const BD_PATH = n => `materials/vgui/gfx/vgui/${n}.vmt`;
+const bdGame = n => `UnlitGeneric\n{\n\t"$translucent" 1\n\t"$basetexture" "vgui/gfx/vgui/${n}"\n\t"$vertexcolor" 1\n\t"$vertexalpha" 1\n\t"$no_fullbright" 1\n\t"$ignorez" 1\n}\n`;
+const bdText = (tex, rgb) => `// The box behind the in-game windows, tinted (HUD editor)\nUnlitGeneric\n{\n\t"$translucent" 1\n\t"$basetexture" "${tex}"\n`
+  + `\t"$color" "[${rgb.map(x => (x / 255).toFixed(3)).join(' ')}]"\n\t"$vertexcolor" 1\n\t"$vertexalpha" 1\n\t"$no_fullbright" 1\n\t"$ignorez" 1\n}\n`;
+function backdropColour() {
+  const c = /"\$color"\s+"\[\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)\s*\]"/.exec((F(BD_PATH('solid_background')) || {}).text || '');
+  return c ? `${[1, 2, 3].map(i => Math.round(c[i] * 255)).join(' ')} 255` : null;
+}
+let bdTimer = null, bdGroup = null, bdStart = ''; // (bdStart: the box's material as the game last read it)
+function setBackdrop(rgba) {
+  const rgb = toRgba(rgba).slice(0, 3), black = rgb.every(x => x === 0), group = bdGroup ??= burstGroup(); // (a picker drag: one undo step)
+  for (const [n] of BD_PIECES) waiting.add(BD_PATH(n));
+  clearTimeout(bdTimer);
+  bdTimer = setTimeout(async () => {
+    bdGroup = null;
+    if (!black) await call('corners', 'round').catch(err => status(`Couldn't write the corners: ${err.message}`));
+    for (const [n, tex] of BD_PIECES) commit(hudFile(BD_PATH(n), bdGame(n)), `backdrop/${n}`, () => black ? bdGame(n) : bdText(tex, rgb), group);
+    writing.then(() => {
+      for (const [n] of BD_PIECES) waiting.delete(BD_PATH(n));
+      if (!waiting.size && renderAfterSave) { renderAfterSave = false; render(); }
+      if ((F(BD_PATH('solid_background')) || {}).text !== bdStart) needRestart('the window backdrop colour');
+    });
+  }, 250);
+}
+function backdropRow() {
+  const r = colorRow('Backdrop colour', 'The box behind team select, class select, the MOTD and the buy menu: pictures in the HUD, shown after a game restart. Its opacity is Backdrop opacity',
+    backdropColour() || '0 0 0 255', setBackdrop, ['solid_background'], '0 0 0 255');
+  r.querySelector('.alpha').hidden = true;
+  return r;
+}
 // Which of the window colours each in-game window shows (each changed and looked at, 2026-10-05): the rest change
 // nothing there (no in-game window draws a title), so they're left out. Team select's Text (SELECT TEAM) was first
 // left out too, wrongly: the sweep's earlier steps had masked it (seen in a fresh game, live and after a restart, 2026-10-08).
@@ -2381,18 +2433,22 @@ function scoreboardSections(sel, shownFonts) {
     })];
   // where the rows start: every row template of both teams moves by the same amount, the hidden ones (the list area,
   // the dead/MVP icon) too, which can't be clicked in the preview
-  const cy = v => { const m = /^c([+-]?\d+)$/i.exec(v || ''); return m ? +m[1] : null; }, top = cy(layoutProps(f, 'CTPlayerName0').ypos);
+  // (read from the CT list: the list's place is where the rows start; a template's own Y does nothing, NOTES)
+  const cy = v => { const m = /^c([+-]?\d+)$/i.exec(v || ''); return m ? +m[1] : null; }, top = cy(layoutProps(f, 'CTPlayerArea').ypos);
   if (top !== null) rows.splice(1, 0, inputRow('Rows start at', top, v => {
-    const d = +v - cy(layoutProps(f, 'CTPlayerName0').ypos);
+    const d = +v - cy(layoutProps(f, 'CTPlayerArea').ypos);
     if (d) for (const b of ROW_PARTS) { const y = cy(layoutProps(f, b).ypos); if (y !== null) save(f, 'ypos', `c${y + d}`, b); }
     refreshSoon();
   }, { type: 'number', step: 1, title: 'From the centre. Both teams\' first rows and the list under them move together' }));
   // the player rows' columns: the game puts each row's avatar, name, icon and numbers where these row templates are
   // (never drawn themselves, so not clickable), per team; hidden ones (moved off with their eye) are left out
-  const columns = ['CT', 'T'].flatMap(team => SB_COLUMNS.map(([label, k]) => [label, `${team}Player${k}`, k])
+  const columns = ['CT', 'T'].flatMap(team => [...SB_COLUMNS.map(([label, k]) => [label, `${team}Player${k}`, k])
     .filter(([, b]) => Object.keys(layoutProps(f, b)).length && !partHidden(f, b))
-    .flatMap(([label, b, k]) => [['xpos', 'X'], ['wide', 'width'], ...(k === 'Area' ? [['tall', 'height']] : [])]
-      .map(([key, what]) => numRow(f, b, key, `${team} ${label}: ${what}`, layoutProps(f, b)[key]))));
+    .flatMap(([label, b, k]) => [['xpos', 'X'], ['wide', 'width'], ...(k === 'Area' ? [['ypos', 'Y'], ['tall', 'height']] : [])]
+      .map(([key, what]) => numRow(f, b, key, `${team} ${label}: ${what}`, layoutProps(f, b)[key]))),
+    // the space between rows: the name template's height (the game spaces every row of that team by it, seen 2026-10-08;
+    // the list's Y above moves the rows, a template's own Y doesn't)
+    ...(Object.keys(layoutProps(f, `${team}PlayerName0`)).length ? [numRow(f, `${team}PlayerName0`, 'tall', `${team} row height (spacing)`, layoutProps(f, `${team}PlayerName0`).tall)] : [])]);
   for (const r of columns) Object.assign(r.dataset, { cat: 'layout', head: 'Columns' });
   const fonts = SCOREBOARD_FONTS.filter(([name]) => !shownFonts.includes(name) && hasFont(C, name)).map(([name, what]) => fontFold(C, name, what));
   return [['Scoreboard: background', background], ['Scoreboard: text colours', text], ['Scoreboard: player rows', [...rows, ...columns]], ['Scoreboard: MVP star', mvpRows()], ['Scoreboard: fonts', fonts]];
@@ -2405,7 +2461,7 @@ async function select(sel) {
   if (sel) sel.res = await uiFile(resPath(sel));
   if (sel && sel.thing.key === 'loadingdialog') await Promise.all([uiFile(UI_RES.loadingdialog), uiFile(LOADING_VAC)]); // (both written together)
   if (sel && STARTUP_RES.has(sel.thing.key)) await uiFile(UI_RES[sel.thing.key]); // (its Custom tab: the buy menu's own file, whatever page's control is clicked)
-  if (sel && sel.thing.key === 'scores') await loadCvars();
+  if (sel && (sel.thing.key === 'scores' || sel.info.id === 'HudRadar')) await loadCvars();
   if (sel && CLASS_PAGES[sel.thing.key]) await Promise.all(CLASS_PAGES[sel.thing.key].map(async n => { // (Class picture)
     await uiFile(classPage(n));
     if (!classGame[n] && host) try { const t = await call('vanilla', `${n}.res`); classGame[n] = { text: t, parsed: parse(t), bases: [] }; } catch {}
@@ -3256,7 +3312,11 @@ const refreshSoon = async () => { await sleep(400); await writing; render(); dra
 // (shown or hidden: the Hide button at the top, see hideButton)
 function visibilityRows(id) {
   const lay = F(L), p = layoutProps(lay, id);
-  if (id === 'HudRadar') return [noteRow('Its see-through background is the player\'s own cl_radaralpha (a console setting), so it has no opacity here: it can be shown or hidden (the button at the top).')];
+  if (id === 'HudRadar') {
+    if (!cvarValues) loadCvars().then(() => render()); // (reached through the search before the radar was clicked)
+    const r = rangeRow('Opacity', cvarValue('cl_radaralpha'), v => setCvars([['cl_radaralpha', v]], 'cl_radaralpha'), 'cvar/cl_radaralpha', RADAR_CVARS.cl_radaralpha);
+    return [r, noteRow('A game setting (cl_radaralpha): the HUD keeps it in cfg/hudeditor_colours.cfg, which the game runs at startup. A player\'s own autoexec.cfg runs after it and wins.')];
+  }
   if (SELF_FADING.has(id)) return [noteRow('The game fades this one in and out itself, so it can only be shown or hidden (the button at the top).')];
   return [rangeRow('Opacity', p.alpha ?? '255', v => save(lay, 'alpha', v, id), `${L}/${id}/alpha`, gameProps(L, id).alpha ?? '255')];
 }
@@ -3483,6 +3543,22 @@ function borderRows(file, name) {
     BORDER_SHARED[name] && `Also changes ${BORDER_SHARED[name]}.`].filter(Boolean);
   if (notes.length) rows.push(noteRow(notes.join(' ')));
   return rows;
+}
+
+// A border round panels whose own colour the game sets (the spectator bars): "border" names a scheme border and
+// "paintborder" 1 draws it (seen 2026-10-08). Its own block in ClientScheme's Borders, made from BaseBorder when first
+// ticked, edited with the border rows. (Turned off: paintborder 0, the block kept.)
+const SPEC_BORDER = 'HudEditorSpecBorder';
+function panelBorderRows(f, blocks, name) {
+  const p = layoutProps(f, blocks[0]), on = (p.border || '').toLowerCase() === name.toLowerCase() && p.paintborder === '1';
+  const own = () => (borderOf(C, name) || {}).name?.toLowerCase() === name.toLowerCase(); // (borderOf falls back to BaseBorder)
+  const row = checkRow('Border', on, v => {
+    const g = burstGroup();
+    if (v && !own()) save(F(C), name, () => copyBorder(borderOf(C, 'BaseBorder'), {}), ['Borders'], g);
+    for (const b of blocks) { save(f, 'border', name, b, g); save(f, 'paintborder', v ? '1' : '0', b, g); }
+    refreshSoon();
+  }, `${f.name}/${name}/on`, 'off');
+  return on && own() ? [row, ...borderRows(C, name)] : [row];
 }
 
 // Square or rounded windows: FrameBorder's backgroundtype. Where FrameBorder isn't its own block, it becomes one
@@ -4576,11 +4652,12 @@ function selectionSections(sel) {
       const shows = !frame && IN_GAME_SHOWS[info.id];
       add('colour', 'Colours: the window', schemeRows(info.file, WINDOW_COLOURS[info.file]
         .filter(([label, k]) => (!k.startsWith('Border.') || bordersUse(info.file, k.split('|'))) && (!shows || shows.includes(label)))
-        .map(r => r[0] === 'Backdrop' && LOGO_WINDOWS.has(info.id) ? BACKDROP_OPACITY : r)));
+        .map(r => r[0] === 'Backdrop' && LOGO_WINDOWS.has(info.id) ? BACKDROP_OPACITY : r)).concat(LOGO_WINDOWS.has(info.id) ? [backdropRow()] : []));
       if (frame) { const [colour, ...rest] = borderRows(S, 'FrameBorder'); add('border', 'Border: window edge (every window)', [colour, windowCornerRow(S), ...rest]); }
       add('other', `Fading (every ${frame ? 'menu' : 'in-game'} window)`, fadeRows(info.file));
     }
     if (EXTRA[info.id]) add('colour', `Colours: ${info.name.toLowerCase()}`, schemeRows(S, EXTRA[info.id]).concat(info.file === C ? schemeRows(C, EXTRA[info.id]) : []));
+    if (info.id === 'specgui' && sel.res) add('border', 'Border: spectator bars', panelBorderRows(sel.res, ['topbar', 'bottombarblank'], SPEC_BORDER));
     if (CMD_WINDOWS.has(info.id)) add('custom', 'Command buttons', commandRows(sel));
     if (CMD_WINDOWS.has(info.id) && sel.res) add('layout', 'Button places', buttonPlaceRows(sel.res));
     // the MOTD's parts: its message boxes are empty (so not there to click) until a server sends one
@@ -5518,6 +5595,7 @@ async function restartGame(between = null) {
     // started, then checked: once more if it doesn't come up
     gameHud = hudPath; // (it starts with the HUD open now)
     logoStart = F(CS_LOGO) ? F(CS_LOGO).text : '';
+    bdStart = (F(BD_PATH('solid_background')) || {}).text || '';
     for (let tries = 0; !live && tries < 3; tries++) {
       try { await call('launch'); } catch (err) { if (!/already running/i.test(err.message)) throw err; }
       status('Starting the game again: the preview comes back once it has loaded.');
@@ -6349,6 +6427,34 @@ if (host && location.hash === '#hosttest') (async () => {
       } finally { save = realSave; }
     }
     {
+      // leads made features (2026-10-08): the radar's opacity is a cvar in the HUD's cfg (no name colours written with
+      // it); the in-game windows' box tinted through its materials; the spectator bars take added parts and a border
+      const keep = [cvarValues, cvarHud];
+      try {
+        cvarValues = {}; cvarHud = new Set(['cl_radaralpha']); cvarValues.cl_radaralpha = '90';
+        const lines = cvarLines(), all = cvarLines(true);
+        check(readCvars('cl_radaralpha "90"\ncl_scoreboard_ct_color_red 1').cl_radaralpha === '90' && lines.join() === 'cl_radaralpha 90'
+          && all.length === 19 && all.includes('cl_radaralpha 90'), `the radar's opacity is a cvar of the HUD's cfg (${lines})`);
+      } finally { [cvarValues, cvarHud] = keep; }
+      const t = bdText('vgui/white', [255, 0, 255]), keepBd = F(BD_PATH('solid_background'));
+      files.push({ name: BD_PATH('solid_background'), path: BD_PATH('solid_background'), text: t, parsed: parse(''), bases: [] });
+      const back = backdropColour();
+      files.splice(files.indexOf(F(BD_PATH('solid_background'))), 1);
+      if (keepBd) files.push(keepBd);
+      check(back === '255 0 255 255' && /"\$color" "\[1\.000 0\.000 1\.000\]"/.test(t) && BD_PIECES[3][1] === 'vgui/hudeditor/round_corner3',
+        `the windows' box is tinted through its materials (${back})`);
+      const saved = [], realSave = save, spec = { name: UI_RES.specgui, path: UI_RES.specgui, bases: [], text: '"r"\n{\n"topbar"\n{\n"tall" "52"\n}\n}' };
+      spec.parsed = parse(spec.text);
+      try {
+        save = (f, k, v, b) => saved.push([f.name, k, typeof v === 'function' ? v() : v, b]);
+        const [row] = panelBorderRows(spec, ['topbar', 'bottombarblank'], SPEC_BORDER), box = row.querySelector('input');
+        box.checked = true; box.dispatchEvent(new Event('change'));
+        check(ADD_WINDOWS.has('specgui') && saved.some(([f, k, , b]) => f === C && k === SPEC_BORDER && b[0] === 'Borders')
+          && ['topbar', 'bottombarblank'].every(b => saved.some(([, k, v, bb]) => k === 'paintborder' && v === '1' && bb === b) && saved.some(([, k, v, bb]) => k === 'border' && v === SPEC_BORDER && bb === b)),
+          `the spectator bars take added parts and a border of their own (${JSON.stringify(saved.map(s => s.slice(1, 2)))})`);
+      } finally { save = realSave; }
+    }
+    {
       // the editor only lists the custom folder; a HUD folder dropped from there is opened, not copied
       const listed = (await call('huds')).split('\n').filter(l => l && !l.startsWith('\t')).map(l => l.split('\t'));
       check(listed.length === 1 && listed[0][1] === path && listed[0][2] === 'custom', 'the HUD list is the HUDs in the custom folder');
@@ -6365,6 +6471,10 @@ if (host && location.hash === '#hosttest') (async () => {
     check(/HudHealth\s*\{\s*"xpos"\t\t"20"/.test(await readHud('scripts/HudLayout.res') || ''), 'position written into the HUD');
     check(await call('save') === '3' && !(await call('save').then(n => +n)), 'Save HUD keeps the 3 changed files, then has nothing to keep');
     setDirty(false);
+    { // (after Save: the corners are files of their own) the windows' box corners, a quarter circle as the game's
+      const corners = await call('corners', 'round').catch(e => e.message);
+      check(corners === 'vgui/hudeditor/round_corner' && (await call('exists', 'materials/vgui/hudeditor/round_corner4.vtf')) === '1', `round corners for the windows' box (${corners})`);
+    }
     await openHud(path); // fresh copy of the saved HUD
     check((await readHud('resource/ClientScheme.res')).includes('"Panel.FgColor"\t\t"1 2 3 255"') && layoutProps(F(L), 'HudHealth').xpos === '20', 'saved changes are in the HUD');
     check(layoutProps(F(L), 'HudHealth').ypos === '446', 'own HudLayout value wins, the rest comes from #base');
@@ -6523,9 +6633,10 @@ if (host && location.hash === '#hosttest') (async () => {
     check(layoutProps(spec, 'CTScoreLabel').xpos === 'r268' && !partHidden(spec, 'CTScoreLabel'), 'showing a window part puts its position back');
     const sb = await uiFile('resource/UI/scoreboard.res'), sbSections = scoreboardSections({ res: sb, info: { id: 'scores' }, thing: { key: 'scores' } }, []);
     const sbCounts = sbSections.map(([, rows]) => rows.length);
-    // (player rows: where they start and their colours, then each team's columns: 7 places and widths, and the list's)
+    // (player rows: where they start and their colours, then each team's columns: 7 places and widths, the list's place
+    // and size, and the row height)
     const sbCols = sbSections[2][1].filter(r => r.dataset.head === 'Columns').length;
-    check(sbCounts[0] === 2 && sbCounts[1] === 6 && sbCounts[2] === 9 + 34 && sbCols === 34 && sbCounts[3] === 3 && sbCounts[4] >= 8, `scoreboard: background, text colours, player rows (and where they start, and their columns), MVP star and fonts in one place (${sbCounts}; ${sbCols} column rows)`);
+    check(sbCounts[0] === 2 && sbCounts[1] === 6 && sbCounts[2] === 9 + 38 && sbCols === 38 && sbCounts[3] === 3 && sbCounts[4] >= 8, `scoreboard: background, text colours, player rows (and where they start, and their columns), MVP star and fonts in one place (${sbCounts}; ${sbCols} column rows)`);
     const menuFonts = fontsOf({ info: { kind: 'window', id: 'gamemenu', file: S }, thing: { key: 'gamemenu' } }).map(([f, n]) => `${f}:${n}`).join();
     const btnFonts = fontsOf({ info: { kind: 'window', id: 'info', file: C }, thing: { key: 'info' }, control: { cls: 'Button' } });
     check(menuFonts === `${S}:MenuLarge,${C}:ClientTitleFont` && btnFonts.length === 1 && btnFonts[0][1] === 'Default' && fontNames(C).length > 50
