@@ -857,6 +857,7 @@ static void RestoreVisibility( VPANEL p, const Shown &was, int depth )
 static bool RunStep( int step, void ( *fn )() );
 static void StepHud();
 static void KeepHintKeyPlace();
+static void RecolourTooltipsSafe();
 static void HideRowTemplates();
 static double g_flReshowUntil;
 
@@ -1166,6 +1167,7 @@ static void StepPanels()
 	HideRowTemplates();
 	Centre();
 	SR_SafeCall( KeepHintKeyPlace );
+	SR_SafeCall( RecolourTooltipsSafe );
 }
 
 // The right-side text (HudHintKeyDisplay) keeps its y in a member, m_iBaseY, that each hint text sets (SetHintText,
@@ -1192,6 +1194,45 @@ static void KeepHintKeyPlace()
 	int x, y;
 	g_pVPanel->GetPos( p, x, y );
 	*(int *)( panel + 0x268 ) = y - (int)*(float *)( panel + 0x290 );
+}
+
+// The tooltip box (a TextEntry named "tooltip", made at the first hover, one per module) takes Tooltip.TextColor and
+// Tooltip.BgColor only as it's made; a reload gives it its scheme's TextEntry colours, so the editor's game showed
+// those until a restart (NOTES). After a reload it gets the Tooltip colours again, through the SDK's own SetFgColor /
+// SetBgColor slots (skipped when the thunks aren't the expected shape, or the menu check below fails).
+int SlotSetFgColor();
+int SlotSetBgColor();
+int SlotLabelSetFont();
+typedef void ( *SetColorFn )( void *, Color );
+static void *g_TipPanel;
+static Color g_TipFg, g_TipBg;
+static void SetTipColours()
+{
+	void **vt = *(void ***)g_TipPanel;
+	( (SetColorFn)vt[SlotSetFgColor()] )( g_TipPanel, g_TipFg );
+	( (SetColorFn)vt[SlotSetBgColor()] )( g_TipPanel, g_TipBg );
+}
+static void RecolourTooltips( VPANEL p, int depth )
+{
+	for ( int i = 0; p && depth < 64 && i < g_pVPanel->GetChildCount( p ); ++i )
+	{
+		VPANEL c = g_pVPanel->GetChild( p, i );
+		int m = c && !Q_stricmp( g_pVPanel->GetName( c ), "tooltip" ) && !Q_stricmp( g_pVPanel->GetClassName( c ), "TextEntry" ) ? PanelModule( c ) : -1;
+		IScheme *s = m >= 0 ? g_pSchemeMgr->GetIScheme( g_pVPanel->GetScheme( c ) ) : NULL;
+		if ( s && ( g_TipPanel = g_pVPanel->GetPanel( c, s_Modules[m] ) ) != NULL )
+		{
+			g_TipFg = s->GetColor( "Tooltip.TextColor", Color( 0, 0, 0, 255 ) );
+			g_TipBg = s->GetColor( "Tooltip.BgColor", Color( 255, 255, 255, 255 ) );
+			if ( !SR_SafeCall( SetTipColours ) )
+				Warning( "[schemereload] colouring a tooltip crashed\n" );
+		}
+		RecolourTooltips( c, depth + 1 );
+	}
+}
+static void RecolourTooltipsSafe()
+{
+	if ( SlotSetFgColor() > 0 && SlotSetBgColor() > 0 && SlotLabelSetFont() == 0x710 / 8 )
+		RecolourTooltips( TopPanel(), 0 );
 }
 
 // Some panels hide themselves a frame after a reload (the scoreboard does whenever its scheme is applied), after the

@@ -35,3 +35,5 @@ int SlotCreateControlByName() { return SlotOf( Thunk( &vgui::EditablePanel::Crea
 int SlotSetParent() { return SlotOf( Thunk( static_cast< void ( vgui::Panel::* )( vgui::VPANEL ) >( &vgui::Panel::SetParent ) ) ); }
 int SlotAddActionSignalTarget() { return SlotOf( Thunk( static_cast< void ( vgui::Panel::* )( vgui::VPANEL ) >( &vgui::Panel::AddActionSignalTarget ) ) ); }
 int SlotLoadControlSettings() { return SlotOf( Thunk( &vgui::EditablePanel::LoadControlSettings ) ); }
+int SlotSetFgColor() { return SlotOf( Thunk( &vgui::Panel::SetFgColor ) ); }
+int SlotSetBgColor() { return SlotOf( Thunk( &vgui::Panel::SetBgColor ) ); }
