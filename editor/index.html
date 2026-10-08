@@ -582,10 +582,10 @@ const WINDOW_COLOURS = {
     ['Text', 'Label.TextColor', 'Shared by in-game windows and the buy menu'], ['Borders', 'Border.Bright|Border.Dark', '']],
   [S]: [['Window background', 'Frame.BgColor', ''], ['Window background, not focused', 'Frame.OutOfFocusBgColor', ''],
     ['Title', 'FrameTitleBar.TextColor', ''], ['Title bar', 'FrameTitleBar.BgColor', ''], ['Text', 'Label.TextColor', ''], ['Borders', 'Border.Bright|Border.Dark', ''],
-    // (checked 2026-10-02: a plain start shows tooltips in these; in the editor's game a reload gives the box the text
-    // fields' colours until the game restarts)
-    ['Tooltip text', 'Tooltip.TextColor', 'What players see. Shows after a game restart (the ⚠ by Save HUD): until then the editor\'s game shows tooltips in the text field colours'],
-    ['Tooltip background', 'Tooltip.BgColor', 'What players see. Shows after a game restart (the ⚠ by Save HUD)']],
+    // (checked 2026-10-02: a plain start shows tooltips in these; a reload gave the box the text fields' colours until a
+    // restart, which the plugin puts right since 2026-10-08: seen live, red then blue, on the server browser's lock)
+    ['Tooltip text', 'Tooltip.TextColor', 'The server browser\'s column headers have them'],
+    ['Tooltip background', 'Tooltip.BgColor', 'The server browser\'s column headers have them']],
 };
 const EXTRA = {
   gamemenu: [['Menu text', 'MainMenu.TextColor', 'Resume Game, Find Servers, Options...'], ['Menu text (mouse over)', 'MainMenu.ArmedTextColor', ''],
@@ -1118,8 +1118,6 @@ let mirroring = false; // (a loading screen file's save copied into the other on
 function save(f, key, value, section = null, inGroup = null) { // (inGroup: an action's own, kept across an await)
   const id = `${f.name}/${section}/${key}`, group = pendingGroup[id] ??= inGroup || burstGroup();
   if (f.name === L && section === 'HudChat' && /^(xpos|ypos|wide|tall)$/i.test(key)) chatResFirst(/^wide$/i.test(key) ? value : null);
-  // the game copies these into its one tooltip box when it makes it, so a reload doesn't reach them
-  if (/^tooltip\./i.test(key)) needRestart('tooltip colours');
   clearTimeout(timers[id]);
   waiting.add(id);
   timers[id] = setTimeout(() => {
