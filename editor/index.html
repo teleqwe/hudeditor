@@ -3009,6 +3009,12 @@ function schemeRows(file, list, after = null) {
   const f = F(file);
   if (!f) return [];
   const t = tables(f);
+  // the numbers start in Panel.FgColor and health and money go back to OrangeDim after each flash (hudanimations.txt):
+  // one row sets both, but a HUD that has them apart (COD Warzone) gets a row each, so a change doesn't make them one
+  const nf = resolve(t, 'Panel.FgColor'), od = resolve(t, 'OrangeDim');
+  if (nf && od && toRgba(nf).join() !== toRgba(od).join()) list = list.flatMap(e => e[1] !== NUMBERS[1] ? [e]
+    : [['Numbers and icons', 'Panel.FgColor', 'How health, armour, ammo, money and the timer start; ammo goes back to it after a flash'],
+      ['Health and money after a flash', 'OrangeDim', 'They go back to this after each change (the game has it the same as the numbers)']]);
   return list.map(([label, keys, note = '', how = '']) => {
     const ks = keys.split('|'), value = resolve(t, ks[0]);
     if (!value) return null;
@@ -6408,6 +6414,16 @@ async function parserCheck() {
     && parsePanels('screen\t1920\t1080\t0\tC:\\Users\\x\\testhud\\\n').loadHud === 'C:\\Users\\x\\testhud\\', 'the HUD the game started with, as the plugin says, matched to one opened');
   check(Math.round(contrast('255 255 255 255', '0 0 0 255')) === 21 && contrast('200 240 245', '64 200 210') < 3 && contrast('200 240 245', '8 24 32') > 3,
     'colours by kind: readability is the contrast of the two colours (white on black 21 to 1, pale text on bright cyan under 3)');
+  { // Numbers and icons: one row while Panel.FgColor and OrangeDim match, a row each when the HUD has them apart
+    const keep = files, row = (a, b) => { const cs = `Scheme { Colors { "OrangeDim" "${a}" } BaseSettings { "Panel.FgColor" "${b}" } }`; files = [{ name: C, text: cs, parsed: parse(cs), bases: [] }]; return schemeRows(C, [NUMBERS]).map(r => r.dataset.keys); };
+    try {
+      const one = row('255 176 0 120', 'OrangeDim'), two = row('255 176 0 120', '255 255 255 255');
+      check(one.join() === 'Panel.FgColor + OrangeDim' && two.join() === 'Panel.FgColor,OrangeDim', `Numbers and icons: one row, or two when the HUD has them apart (${one} | ${two})`);
+    } finally { files = keep; }
+    // the buy menu's file: a change to what the editor added is live (no restart), one to the game's own controls isn't
+    const bm = '"Resource/UI/BuyMenu.res" { "buy" { "wide" "640" } }', bmAdd = '"Resource/UI/BuyMenu.res" { "buy" { "wide" "640" } "HudEditor_box1" { "xpos" "8" } }';
+    check(gameBlocks(bm) === gameBlocks(bmAdd) && gameBlocks(bm) !== gameBlocks(bm.replace('640', '600')), 'the buy menu: only a change to the game\'s own controls asks for a restart');
+  }
   // ...through a name of no kind (held on to, so the kind's colour past it is written in), and one whose own colour stays
   // while the one it names changes (↺)
   {
