@@ -25,3 +25,6 @@ vanilla/
 .claude/
 .codex/
 editor/index.new
+
+# (the front page README is public)
+!/README.md
