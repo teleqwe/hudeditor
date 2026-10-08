@@ -3,6 +3,8 @@
 Edit Counter-Strike: Source HUDs while the game is running. Click a part of the game, change it, and see the change
 straight away. No text files.
 
+![The editor: the game on the left, the timer box selected and its colours on the right](docs/editor.png)
+
 ## Download
 
 Get **CSSHudEditor.exe** (or the .zip with its license files) from the [Releases](../../releases) page. It is one
@@ -24,6 +26,21 @@ This is a **beta**: back up any HUD you care about before you edit it.
 4. Change colours, fonts, sizes and places. The game updates as you go.
 5. **Save HUD** keeps your changes, **Ctrl+Z** undoes, **Discard changes** goes back to the last save. A few settings
    only show after a game restart: the yellow **⚠** by Save HUD lists them and restarts the game for you.
+
+## See it in action
+
+Click a part and its settings show on the right, a tab for each kind. Here, a team select button's colours, its font,
+and its border with a colour for each side:
+
+<p>
+  <img src="docs/tab-colours.png" width="32%" alt="The Colours tab: the button's text and background, normal and under the mouse">
+  <img src="docs/tab-fonts.png" width="32%" alt="The Fonts tab: its face, size for 1440p screens, weight and blur">
+  <img src="docs/tab-borders.png" width="32%" alt="The Borders tab: border colour, thickness, the sides drawn and a colour for each side">
+</p>
+
+**Menus too:** the main menu, its buttons, colours and background, and every in-game window:
+
+![The main menu selected in the editor, with its colours on the right](docs/main-menu.png)
 
 ## What you can do
 

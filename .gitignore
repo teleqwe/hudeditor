@@ -19,12 +19,11 @@ dev/*/
 
 # Only the program and its source are public: notes, docs, tests, game reference files and Claude's files stay local
 *.md
-docs/
 dev/
 vanilla/
 .claude/
 .codex/
 editor/index.new
 
-# (the front page README is public)
+# (the front page README and its pictures in docs/ are public)
 !/README.md
