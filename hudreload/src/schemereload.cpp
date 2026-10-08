@@ -1042,6 +1042,9 @@ static bool IsCodeMade( const char *name )
 // c-320,200 all came out centred, their top at the top of the screen). The re-apply below gives them their file's place
 // again, and so does the MOTD itself whenever its scheme is applied (it reads its .res again, place included: the
 // refresh after a reload), so they're put back in the middle after a reload and on every tick (see TimerTick).
+static void ReapplyLayouts();
+struct Fitted { int r[4]; }; // a window part's place and size as set for a 5:4 screen (see CentreWindows)
+static std::unordered_map< VPANEL, Fitted > g_Fitted;
 static void CentreWindows()
 {
 	if ( g_pEngineClient && g_pEngineClient->IsDrawingLoadingImage() )
@@ -1053,6 +1056,12 @@ static void CentreWindows()
 		g_pVPanel->GetSize( vp, pw, ph );
 	if ( pw <= 0 || ph <= 0 ) // (not there or not laid out yet)
 		return;
+	// (no longer 5:4: the parts fitted for it get their files' places again)
+	if ( pw * 3 >= ph * 4 && !g_Fitted.empty() )
+	{
+		g_Fitted.clear();
+		SR_SafeCall( ReapplyLayouts );
+	}
 	for ( int i = 0; i < g_pVPanel->GetChildCount( vp ); ++i )
 	{
 		VPANEL win = g_pVPanel->GetChild( vp, i );
@@ -1062,6 +1071,33 @@ static void CentreWindows()
 		int x, y, w, h;
 		g_pVPanel->GetPos( win, x, y );
 		g_pVPanel->GetSize( win, w, h );
+		// On a screen narrower than 4:3 (5:4) the game fits the 640x480 area to the width: everything at width / 640,
+		// centred (seen without the plugin, 2026-10-08, 1280x1024: the MOTD's OK button at 151,757, its text 959 wide),
+		// where the file read again here scales by height (1365 wide: 42 px cut off each side, the OK at 120,776). So the
+		// window's parts are scaled into the area the game would use; the window keeps its size, as its parts are pinned
+		// to its corners and a new size moves them back. What was set is remembered: a part is done again only once
+		// something else (its file read again) has changed it.
+		if ( pw * 3 < ph * 4 && w > pw )
+		{
+			float k = (float)pw / w;
+			int ox = ( w - pw ) / 2, oy = (int)( h * ( 1 - k ) / 2 + 0.5f );
+			for ( int c = 0; c < g_pVPanel->GetChildCount( win ); ++c )
+			{
+				VPANEL ch = g_pVPanel->GetChild( win, c );
+				if ( !ch )
+					continue;
+				int r[4];
+				g_pVPanel->GetPos( ch, r[0], r[1] );
+				g_pVPanel->GetSize( ch, r[2], r[3] );
+				auto done = g_Fitted.find( ch );
+				if ( done != g_Fitted.end() && !memcmp( done->second.r, r, sizeof( r ) ) )
+					continue;
+				Fitted f = { { ox + (int)( r[0] * k + 0.5f ), oy + (int)( r[1] * k + 0.5f ), (int)( r[2] * k + 0.5f ), (int)( r[3] * k + 0.5f ) } };
+				g_pVPanel->SetPos( ch, f.r[0], f.r[1] );
+				g_pVPanel->SetSize( ch, f.r[2], f.r[3] );
+				g_Fitted[ch] = f;
+			}
+		}
 		if ( x != ( pw - w ) / 2 || y != ( ph - h ) / 2 )
 			g_pVPanel->SetPos( win, ( pw - w ) / 2, ( ph - h ) / 2 );
 	}

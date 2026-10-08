@@ -5549,7 +5549,7 @@ $('boxes').onclick = async e => {
 // when the editor closes (kept in localStorage while changed, so a crash doesn't make another size "yours").
 // Common sizes of each shape: 4:3 is what players on stretched 4:3 see.
 const RESOLUTIONS = [['16:9', [[1280, 720], [1600, 900], [1920, 1080], [2560, 1440], [3840, 2160]]], ['16:10', [[1280, 800], [1680, 1050], [1920, 1200]]],
-  ['4:3', [[1024, 768], [1280, 960], [1440, 1080]]], ['21:9', [[2560, 1080], [3440, 1440]]]];
+  ['4:3', [[1024, 768], [1280, 960], [1440, 1080]]], ['5:4', [[1280, 1024]]], ['21:9', [[2560, 1080], [3440, 1440]]]];
 // screen heights people play at (the picker's, and older ones), for which end of a font's yres range it is made for
 const SCREEN_HEIGHTS = new Set([480, 600, 864, 1024, ...RESOLUTIONS.flatMap(([, l]) => l.map(([, h]) => h))]);
 let homeRes = null;
