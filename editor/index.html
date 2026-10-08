@@ -2530,15 +2530,26 @@ function scoreboardSections(sel, shownFonts) {
   // the player rows' columns: the game puts each row's avatar, name, icon and numbers where these row templates are
   // (never drawn themselves, so not clickable), per team; hidden ones (moved off with their eye) are left out
   const columns = ['CT', 'T'].flatMap(team => [...SB_COLUMNS.map(([label, k]) => [label, `${team}Player${k}`, k])
-    .filter(([, b]) => Object.keys(layoutProps(f, b)).length && !partHidden(f, b))
-    .flatMap(([label, b, k]) => [['xpos', 'X'], ['wide', 'width'], ...(k === 'Area' ? [['ypos', 'Y'], ['tall', 'height']] : [])]
-      .map(([key, what]) => numRow(f, b, key, `${team} ${label}: ${what}`, layoutProps(f, b)[key]))),
-    // the space between rows: the name template's height (the game spaces every row of that team by it, seen 2026-10-08;
-    // the list's Y above moves the rows, a template's own Y doesn't)
-    ...(Object.keys(layoutProps(f, `${team}PlayerName0`)).length ? [numRow(f, `${team}PlayerName0`, 'tall', `${team} row height (spacing)`, layoutProps(f, `${team}PlayerName0`).tall)] : [])]);
+    .filter(([, b]) => Object.keys(layoutProps(f, b)).length)
+    // (a hidden column keeps its X: your own row's highlight starts at the first column, hidden ones too, and it moves
+    // only after a restart, seen 2026-10-09)
+    .flatMap(([label, b, k]) => (partHidden(f, b) ? [['xpos', 'X']] : [['xpos', 'X'], ['wide', 'width'], ...(k === 'Area' ? [['ypos', 'Y'], ['tall', 'height']] : [])])
+      .map(([key, what]) => numRow(f, b, key, `${team} ${label}${partHidden(f, b) ? ' (hidden)' : ''}: ${what}`, layoutProps(f, b)[key]))),
+    // the space between rows: the row parts' height (the game spaces every row of that team by the tallest of them:
+    // the name's alone made rows taller, never shorter than the other parts' 14, seen 2026-10-09; the list's Y above
+    // moves the rows, a template's own Y doesn't), every part of the team at once, one undo step
+    ...(Object.keys(layoutProps(f, `${team}PlayerName0`)).length ? [rowHeightRow(f, team)] : [])]);
   for (const r of columns) Object.assign(r.dataset, { cat: 'layout', head: 'Columns' });
   const fonts = SCOREBOARD_FONTS.filter(([name]) => !shownFonts.includes(name) && hasFont(C, name)).map(([name, what]) => fontFold(C, name, what));
   return [['Scoreboard: background', background], ['Scoreboard: text colours', text], ['Scoreboard: player rows', [...rows, ...columns]], ['Scoreboard: MVP star', mvpRows()], ['Scoreboard: fonts', fonts]];
+}
+
+function rowHeightRow(f, team) {
+  const parts = SB_COLUMNS.filter(([, k]) => k !== 'Area').map(([, k]) => `${team}Player${k}`).filter(b => Object.keys(layoutProps(f, b)).length);
+  const now = layoutProps(f, `${team}PlayerName0`).tall;
+  const row = inputRow(`${team} row height (spacing)`, now, v => { const g = Symbol(); for (const b of parts) save(f, 'tall', v, b, g); },
+    { type: 'number', min: 4, max: 60, step: 1, undoId: `${f.name}/${team}rows/tall`, title: 'Every part of the row (the game spaces the rows by the tallest)' });
+  return row;
 }
 
 async function select(sel) {
