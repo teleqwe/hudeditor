@@ -284,6 +284,7 @@
   .row.added[aria-current="true"] .name { color: var(--accent); }
   .row.action { display: flex; flex-wrap: wrap; gap: 8px; }
   .row.action button { flex: 1; padding: 7px 10px; }
+  .row.action .undo { flex: none; padding: 0; } /* (an ↺ in an action row: Separate font) */
   .thing-btn { width: 100%; }
   .thing-btn .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .thing-btn.sel { color: var(--accent); background: var(--soft); }
@@ -3272,9 +3273,16 @@ function hudRows(id, hud) {
   // fonts the part's code reads from HudLayout by name (read again on every reload)
   for (const [label, keys, dflt] of hud.fontKeys || []) {
     const ks = keys.split('|'), now = p[ks[0].toLowerCase()] || dflt, names = fontNames(C);
-    rows.push(pickRow(label, names.find(n => n.toLowerCase() === now.toLowerCase()) || now, () => fontNames(C).sort(),
-      v => { ks.forEach(k => save(lay, k, v, id)); refreshSoon(); }, { id: `${L}/${id}/${ks[0]}`.toLowerCase(), keys: [ks[0]], dflt: gameProps(L, id)[ks[0].toLowerCase()] || dflt }));
-    Object.assign(rows[rows.length - 1].dataset, { cat: 'font', head: 'Fonts it uses' });
+    // (a text the user added: any font, from a drop-down; the game's parts: Separate font)
+    if (hud.word) { // (CUSTOM: a picture, text or box added in HudLayout, the editor's or the HUD's own)
+      rows.push(pickRow(label, names.find(n => n.toLowerCase() === now.toLowerCase()) || now, () => fontNames(C).sort(),
+        v => { ks.forEach(k => save(lay, k, v, id)); refreshSoon(); }, { id: `${L}/${id}/${ks[0]}`.toLowerCase(), keys: [ks[0]], dflt: gameProps(L, id)[ks[0].toLowerCase()] || dflt }));
+      Object.assign(rows[rows.length - 1].dataset, { cat: 'font', head: 'Its font' });
+      continue;
+    }
+    for (const r of separateFontRows(C, names.find(n => n.toLowerCase() === now.toLowerCase()) || now, gameProps(L, id)[ks[0].toLowerCase()] || dflt,
+      (v, group) => ks.forEach(k => save(lay, k, v, id, group)), `${L}/${id}/${ks[0]}`.toLowerCase(), ks))
+      Object.assign(r.dataset, { cat: 'font', head: hud.fontKeys.length > 1 ? `Separate font: ${label.toLowerCase()}` : 'Separate font' }), rows.push(r);
   }
   if (!hud.noPos) for (const [k, label] of [['xpos', 'X position'], ['ypos', 'Y position'], ['wide', 'Width'], ['tall', 'Height']])
     if ((k in p || ((hud.pos || canHide(id)) && k.endsWith('pos'))) && !(hud.lockX && k === 'xpos') && !(hud.square && k === 'tall') && !(hud.noWide && k === 'wide')) rows.push(numRow(lay, id, k, label, p[k]));
@@ -3696,8 +3704,10 @@ function resRows(f, block, defaults, schemeFile, ctl) {
     const deflt = CONTROL_FONTS[ctl] && CONTROL_FONTS[ctl][0][1];
     // (its font goes under Fonts, its alignment under Layout: see selectionSections)
     const tag = (r, cat, head) => { Object.assign(r.dataset, { cat, head }); rows.push(r); };
-    if (!CODE_FONTS[block.toLowerCase()] && (p.font || deflt)) tag(pickRow('Font', p.font || deflt, () => fontNames(schemeFile), v => save(f, 'font', v, block),
-      { id: `${f.name}/${block}/font`, note: `Just this one; any font in ${schemeFile}`, keys: ['font'], dflt: g.font || deflt || null }), 'font', 'Its own font');
+    if (/^hudeditor_/i.test(block) && (p.font || deflt)) tag(pickRow('Font', p.font || deflt, () => fontNames(schemeFile), v => save(f, 'font', v, block),
+      { id: `${f.name}/${block}/font`, note: `Any font in ${schemeFile}`, keys: ['font'], dflt: g.font || deflt || null }), 'font', 'Its font');
+    else if (!CODE_FONTS[block.toLowerCase()] && (p.font || deflt))
+      for (const r of separateFontRows(schemeFile, p.font || deflt, g.font || deflt, (v, group) => save(f, 'font', v, block, group), `${f.name}/${block}/font`, ['font'])) tag(r, 'font', 'Separate font');
     // where a text sits in its box: a right-aligned one grows leftwards from its right edge
     const align = v => (v || 'west').toLowerCase().replace(/^(north|south)(west|east)$/, '$1-$2');
     if (ctl === 'Label' || 'textalignment' in p) tag(selectRow('Text alignment', TEXT_ALIGN, align(p.textalignment), v => save(f, 'textAlignment', v, block), ['textAlignment'], `${f.name}/${block}/textalignment`, align(g.textalignment)), 'layout', 'Text');
@@ -3923,6 +3933,50 @@ function fontPick(value, names, onPick, faces = false) {
   };
   return b;
 }
+// "Separate font": a part draws with a font by name, shared with every other part that names it (Default: most buttons
+// and texts in the in-game windows, the kill feed, the radio menu), so changing that font changes them all. A name typed
+// here becomes a font block of its own in the scheme, a copy of the one the part uses now, and the part is pointed at
+// it: from then on the font's rows below change only it. A name the scheme already has points the part at that font.
+// A new font name only takes after a game restart: live, the part draws with nothing (the kill feed's names went) or
+// keeps its old font (a button), seen 2026-10-08; one the game already had works straight away.
+// set(name, group): writes the part's font key. One undo step for the copy and the pointer.
+function separateFontRows(file, now, game, set, id, keys = []) {
+  const own = game && now.toLowerCase() !== game.toLowerCase();
+  const note = noteRow(own
+    ? `This part has its own font, ${now}: changing it below changes only what uses ${now}. To share ${game} with the others again, type ${game} and click Separate.`
+    : `This part shares the font ${now} with other parts, so changing ${now} below changes all of them. To change only this one, type a name for its own font (Killfeed, say) and click Separate: it gets its own copy of ${now}, shown after a game restart.`);
+  const input = el('input', { type: 'text', placeholder: 'Name for its own font', spellcheck: false });
+  input.setAttribute('aria-label', 'Name for its own font');
+  const go = () => {
+    const name = input.value.trim();
+    if (!/^[A-Za-z][\w.-]*$/.test(name)) return status('A font name is letters, numbers, _ . or -, starting with a letter.');
+    const have = fontNames(file).find(n => n.toLowerCase() === name.toLowerCase()), group = Symbol();
+    // (said once the write has landed: the write's own "Changed in game" would hide it)
+    const tell = msg => sleep(400).then(() => writing).then(() => status(msg));
+    if (have) {
+      if (have.toLowerCase() === now.toLowerCase()) return status(`It already uses ${have}.`);
+      set(have, group);
+      tell(`${have} already exists: this part now uses it (shared with whatever else uses ${have}).`);
+    } else {
+      if (!fontVariants(F(file), now).size) return status(`${now} isn't in ${file}, so there's nothing to copy.`);
+      // (every entry of the font it uses now, its screen sizes too, as the game merges them with #base; worked out when
+      // written, so a font change still on its way is in the copy)
+      save(F(file), name, () => [...fontVariants(F(file), now)].map(([n, props]) => [n, Object.entries(props)]), ['Fonts'], group);
+      set(name, group);
+      needRestart(`the new font ${name}`);
+      tell(`${name} is this part's own font now, a copy of ${now}: changes to it reach only this part. The game shows a new font after a restart (the ⚠ by Save HUD).`);
+    }
+    undo.update(have || name);
+    refreshSoon();
+  };
+  const row = el('div', { className: 'row action separate' });
+  const undo = undoArrow(id, now, v => v, v => { set(v, Symbol()); refreshSoon(); });
+  row.append(input, el('button', { textContent: 'Separate', onclick: go }), undo);
+  input.onkeydown = e => { if (e.key === 'Enter') go(); };
+  row.dataset.q = note.dataset.q = `separate font own font name copy ${now} ${keys.join(' ')}`.toLowerCase();
+  return [note, row];
+}
+
 // A row with a font drop-down and its ↺. names() lists the choices.
 function pickRow(label, value, names, onChange, { faces = false, id = null, note = '', keys = [], dflt = null } = {}) {
   const row = el('div', { className: 'row pick' }), meta = el('div', { className: 'meta' });
@@ -6569,6 +6623,21 @@ if (host && location.hash === '#hosttest') (async () => {
     check(/HudHealth\s*\{\s*"xpos"\t\t"20"/.test(await readHud('scripts/HudLayout.res') || ''), 'position written into the HUD');
     check(await call('save') === '3' && !(await call('save').then(n => +n)), 'Save HUD keeps the 3 changed files, then has nothing to keep');
     setDirty(false);
+    { // Separate font: a new name makes a font block (a copy, every entry) and points the part at it; a name the scheme
+      // has points the part at that one, with no block made
+      const saved = [], set = [], realSave = save;
+      try {
+        save = (f, k, v, b) => saved.push([k, typeof v === 'function' ? v() : v, b]);
+        const [note, row] = separateFontRows(C, 'Default', 'Default', v => set.push(v), 'test/separate');
+        const input = row.querySelector('input'), btn = row.querySelector('button');
+        input.value = 'Killfeed'; btn.click();
+        const made = saved.find(([k, , b]) => k === 'Killfeed' && b[0] === 'Fonts'), entries = made ? made[1].length : 0;
+        input.value = 'hudnumbers'; btn.click();
+        check(/shares the font Default/.test(note.textContent) && made && entries === fontVariants(F(C), 'Default').size && set.join() === 'Killfeed,HudNumbers'
+          && saved.length === 1 && restartFor.has('the new font Killfeed') && ![...restartFor].some(w => /HudNumbers/.test(w)),
+          `Separate font makes its own copy (shown after a restart), or uses a font that exists (${set}, ${entries} entries)`);
+      } finally { save = realSave; restartFor.delete('the new font Killfeed'); needRestart(); }
+    }
     { // Border colour shows on every side row at once (they'd keep their old colours until the list was drawn again)
       const realSave = save;
       try {
@@ -6751,8 +6820,8 @@ if (host && location.hash === '#hosttest') (async () => {
     const menuFonts = fontsOf({ info: { kind: 'window', id: 'gamemenu', file: S }, thing: { key: 'gamemenu' } }).map(([f, n]) => `${f}:${n}`).join();
     const btnFonts = fontsOf({ info: { kind: 'window', id: 'info', file: C }, thing: { key: 'info' }, control: { cls: 'Button' } });
     check(menuFonts === `${S}:MenuLarge,${C}:ClientTitleFont` && btnFonts.length === 1 && btnFonts[0][1] === 'Default' && fontNames(C).length > 50
-      && resRows(sb, 'MapName', [], C, 'Label').some(r => r.dataset.q.startsWith('font') && r.querySelector('.fontpick')) && allFonts().ontoggle,
-      `fonts for everything: the main menu's own, a control type's default, a per-control font picker (${menuFonts})`);
+      && resRows(sb, 'MapName', [], C, 'Label').some(r => r.dataset.head === 'Separate font' && r.querySelector('input[type=text]')) && allFonts().ontoggle,
+      `fonts for everything: the main menu's own, a control type's default, a control's Separate font (${menuFonts})`);
     const listFonts = fontsOf({ info: { kind: 'window', id: 'cserverbrowserdialog', file: S }, thing: { key: 'cserverbrowserdialog' }, control: { cls: 'CGameListPanel', key: 'gamelist' } })
       .map(([, n, w]) => `${n}:${w}`).join();
     check(listFonts === 'DefaultSmall:servers, column headers' && hideHow('TextMessage').join() === 'xpos,9999',
