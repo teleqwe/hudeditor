@@ -120,7 +120,7 @@
   #search { width: 100%; padding: 8px 10px; }
   #parts:empty { display: none; }
   #ingame { display: grid; gap: 8px; padding: 10px 0 4px; }
-  .ingame { display: flex; gap: 8px; }
+  .ingame { display: flex; flex-wrap: wrap; gap: 8px; } /* (more toggles than fit: onto a second line) */
   .ingame button { flex: 1 1 auto; min-width: 0; padding: 6px 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ingame.chips button { padding: 3px 8px; border-radius: 12px; font-size: 12px; }
   .ingame.chips button[aria-pressed="false"] { opacity: .5; text-decoration: line-through; }
@@ -525,13 +525,13 @@ const HUD = {
   // (noPos: the server plugin places it, so it has no position or size here and doesn't drag)
   // drawn by the game's own panels from game settings (kept in the HUD's cfg): no HudLayout block, colours fixed in code
   // (its panel is the whole screen: clicked only where it draws, at the bottom, by net_graphpos)
-  CNetGraphPanel: { name: 'Net graph', noPos: true, scheme: S, hitAt: () => { const v = cvarValue('net_graphpos');
+  CNetGraphPanel: { name: 'Net graph', noPos: true, scheme: S, shownBy: () => pressed('netgraphbtn') || cvarValue('net_graph') !== '0', hitAt: () => { const v = cvarValue('net_graphpos');
       return [v === '1' ? 'r170' : v === '2' ? 'c-85' : v === '0' ? '5' : String(Math.max(5, +v || 0)), 'r70', '165', '65']; }, fixed: 'Drawn by the game from console settings (net_graph...), which the HUD keeps in cfg/hudeditor_colours.cfg, run at startup: a player\'s own autoexec.cfg runs after it and wins. Its colours are the game\'s; its font, DefaultFixedOutline, is also the position text\'s.',
     cvars: [['Show', 'net_graph', [['0', 'Off'], ['1', 'On'], ['2', 'On, with the data graph'], ['3', 'On, with the data legend']]],
       ['Place', 'net_graphpos', [['1', 'Bottom right'], ['2', 'Bottom centre'], ['0', 'Bottom left']], 'Or a number: that many units from the left'],
       ['Graph height', 'net_graphheight', 'num'], ['Text', 'net_graphtext', 'onoff'], ['Text scales with the screen', 'net_graphproportionalfont', 'onoff'],
       ['Solid graph', 'net_graphsolid', 'onoff'], ['Ping / loss graph', 'net_graphshowlatency', 'onoff'], ['Interpolation graph', 'net_graphshowinterp', 'onoff']] },
-  CFPSPanel: { name: 'Position and fps text', noPos: true, scheme: S, fixed: 'Drawn by the game in the top right from console settings, which the HUD keeps in cfg/hudeditor_colours.cfg (run at startup; a player\'s own autoexec.cfg runs after it and wins). White, in the font DefaultFixedOutline (the net graph\'s too).',
+  CFPSPanel: { name: 'Position and fps text', noPos: true, scheme: S, shownBy: () => pressed('showposbtn') || cvarValue('cl_showpos') !== '0' || cvarValue('cl_showfps') !== '0', fixed: 'Drawn by the game in the top right from console settings, which the HUD keeps in cfg/hudeditor_colours.cfg (run at startup; a player\'s own autoexec.cfg runs after it and wins). White, in the font DefaultFixedOutline (the net graph\'s too).',
     cvars: [['Position (cl_showpos)', 'cl_showpos', [['0', 'Off'], ['1', 'Where you look from'], ['2', 'Where you stand']]], ['Fps (cl_showfps)', 'cl_showfps', [['0', 'Off'], ['1', 'On'], ['2', 'Smoothed']]]] },
   HudMessage: { name: 'Large speed', noPos: true, fixed: 'Its colour and position come from the server plugin, not the HUD. Its font (below) can change. The record times in the top left are the same kind of text, in the same panel: hiding this hides them too.', note: 'ShowHudText / game_text from server plugins and maps; font CenterPrintText',
     hit: [['c-60', '178', '120', '30'], ['4', '2', '230', '60']] },
@@ -2529,7 +2529,7 @@ function pickAll(fx, fy) {
     if (loading && p.thing.key !== 'loadingdialog') continue; // (it's in front of everything: only its parts)
     const info = thingInfo(p.thing);
     if (!info || (p === p.thing && NO_CLICK.has(p.key)) || (cover && info.kind === 'hud')) continue;
-    if (info.kind === 'hud' && canHide(info.id) && isHidden(info.id)) continue; // hidden parts are still laid out, but not seen
+    if (!seenInGame(info)) continue;
     const r = clickRects(p, info, live.W, live.H).find(inside);
     if (!r) continue;
     // menus and the console draw above the HUD, and in-game windows' buttons (team select's...) above its parts; not the
@@ -5117,13 +5117,17 @@ function renderList() {
 }
 
 // ---------- preview boxes ----------
+// What the preview offers to click and outlines: not a part hidden with its eye (still laid out by the game, not seen),
+// nor one drawn from game settings while they're off (the net graph, the position text)
+const pressed = id => $(id).getAttribute('aria-pressed') === 'true';
+const seenInGame = info => info.kind !== 'hud' || !((canHide(info.id) && isHidden(info.id)) || (info.hud.shownBy && !info.hud.shownBy()));
 function boxList() {
   if (live) {
     const boxes = [], sel = selected, cover = covered(), loading = loadingUp();
     for (const p of live.panels) {
       if (!p.thing || p !== p.thing || (loading && p.key !== 'loadingdialog')) continue; // (the loading screen: only its box)
       const info = thingInfo(p);
-      if (!info || NO_CLICK.has(p.key) || (cover && info.kind === 'hud')) continue;
+      if (!info || NO_CLICK.has(p.key) || (cover && info.kind === 'hud') || !seenInGame(info)) continue;
       for (const r of clickRects(p, info, live.W, live.H))
         if (r.w * r.h <= 0.9 * live.W * live.H && r.x < live.W && r.y < live.H && r.x + r.w > 0 && r.y + r.h > 0) boxes.push({ thing: p, info, r, cls: 'thing' });
     }
@@ -5967,6 +5971,7 @@ if (host) {
     const on = $(id).getAttribute('aria-pressed') !== 'true', mode = cvarValue(cvar);
     $(id).setAttribute('aria-pressed', String(on));
     call('cmd', '', `${cvar} ${on ? (mode !== '0' ? mode : '1') : '0'}`);
+    drawBoxes(); // (its outline comes and goes with it)
   };
   $('texts').onclick = e => { const b = e.target.closest('button'); if (b) toggleText(+b.dataset.bit); };
   $('textchips').onclick = e => { const b = e.target.closest('button'); if (b) toggleText(+b.dataset.bit); };
@@ -6520,6 +6525,10 @@ if (host && location.hash === '#hosttest') (async () => {
         check(readCvars('cl_radaralpha "90"\ncl_scoreboard_ct_color_red 1').cl_radaralpha === '90' && lines.join() === 'cl_radaralpha 90'
           && all.filter(l => l.startsWith('cl_scoreboard_')).length === 18 && all.includes('cl_radaralpha 90') && !all.some(l => l.startsWith('net_graph ')),
           `the radar's opacity is a cvar of the HUD's cfg; the net graph's only once set (${lines})`);
+        // (only while on: switched off, the net graph's panel offers no box or click)
+        const ngInfo = { kind: 'hud', id: 'CNetGraphPanel', hud: HUD.CNetGraphPanel }, off = seenInGame(ngInfo);
+        $('netgraphbtn').setAttribute('aria-pressed', 'true'); const onNow = seenInGame(ngInfo); $('netgraphbtn').setAttribute('aria-pressed', 'false');
+        check(!off && onNow && seenInGame({ kind: 'window' }), `the net graph is clickable only while it is on (${off}, ${onNow})`);
         const ng = cvarRows(HUD.CNetGraphPanel.cvars), full = { x: 0, y: 0, w: 1920, h: 1080 }; full.thing = full;
         const at = clickRects(full, { hud: HUD.CNetGraphPanel }, 1920, 1080)[0];
         check(at.x > 1300 && at.y > 850 && at.w < 600, `the net graph's full-screen panel is clicked only at the bottom right (${JSON.stringify(at)})`);
