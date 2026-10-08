@@ -3923,7 +3923,7 @@ function allFonts() {
     const symRow = pickRow('Font', sym, () => fontFaces, v => { sym = v; }, { faces: true, note: 'Marlett is the game\'s own' });
     const symAdd = el('div', { className: 'row action' }), symGo = el('div', { className: 'row check' });
     symAdd.append(el('button', { textContent: '+ Add font', title: 'Add a .ttf or .otf font file to the HUD, for every scheme', onclick: () => {
-      addFontFile(FONT_FILES.map(([f]) => f).filter(F), fam => { symRow.children[1].set(fam); sym = fam; });
+      addFontFile(FONT_FILES.map(([f]) => f).filter(F), fam => { symRow.children[1].set(fam); sym = fam; }, 'Use as symbol font makes it the symbol font');
     } }));
     symGo.append(el('span'), el('button', { textContent: 'Use as symbol font', onclick: () => useAsSymbolFont(sym.trim()) }));
     symAdd.dataset.q = symGo.dataset.q = 'symbol font marlett arrows ticks add font';
@@ -4454,9 +4454,11 @@ function listFontFile(f, rel, group = null) {
     return setAt(f, ['CustomFontFiles'], String(Math.max(0, ...nums) + 1), rel);
   }, group);
 }
-function addFontFile(schemes, then = null) {
+let fontAddedNote = '';
+function addFontFile(schemes, then = null, note = 'Apply to every text font uses it') {
   fontSchemes = schemes;
   fontAdded = then;
+  fontAddedNote = note;
   $('fontfile').value = '';
   $('fontfile').click();
 }
@@ -4474,7 +4476,7 @@ $('fontfile').onchange = async () => {
     if (!fontFaces.includes(family)) fontFaces.unshift(family);
     try { const face = new FontFace(family, data); await face.load(); document.fonts.add(face); } catch {} // (the list shows it in itself)
     setDirty(true);
-    if (fontAdded) { fontAdded(family); fontAdded = null; status(`Added "${family}" to every scheme and picked it: Apply to every text font uses it.`); }
+    if (fontAdded) { fontAdded(family); fontAdded = null; status(`Added "${family}" to every scheme and picked it: ${fontAddedNote}.`); }
     else status(`Added "${family}". Pick it in any Face box, or in All fonts > Every text font at once.`);
   } catch (err) {
     status(`Couldn't add that font: ${err.message}`);
