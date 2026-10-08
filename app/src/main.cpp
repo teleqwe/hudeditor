@@ -1300,6 +1300,23 @@ static void OnMessage( const wstring &msg )
 			}
 		} );
 	}
+	else if ( op == L"symbolfaces" ) // installed font families made as symbol fonts (Marlett, Webdings...), one per line:
+	{                                // Windows draws those only when asked for a symbol font (the scheme's "symbol" 1)
+		std::vector< wstring > names;
+		LOGFONTW lf{};
+		lf.lfCharSet = DEFAULT_CHARSET;
+		HDC dc = GetDC( NULL );
+		EnumFontFamiliesExW( dc, &lf, []( const LOGFONTW *f, const TEXTMETRICW *, DWORD, LPARAM p ) -> int {
+			if ( f->lfCharSet == SYMBOL_CHARSET && f->lfFaceName[0] != L'@' )
+				( (std::vector< wstring > *)p )->push_back( f->lfFaceName );
+			return 1;
+		}, (LPARAM)&names, 0 );
+		ReleaseDC( NULL, dc );
+		std::sort( names.begin(), names.end() );
+		names.erase( std::unique( names.begin(), names.end() ), names.end() );
+		for ( auto &n : names )
+			out += ( out.empty() ? L"" : L"\n" ) + n;
+	}
 	else if ( op == L"capturefull" ) // arg "1": frames at the game's full size (zoomed in), "0": halved again when big
 		g_cap.full = arg == L"1";
 	else if ( op == L"capture" ) // start sending the game's window to the page (see StartCapture)

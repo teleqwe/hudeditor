@@ -3842,6 +3842,17 @@ function allFonts() {
     d.append(el('div', { className: 'sub', textContent: 'Every text font at once' }), add, faceRow,
       inputRow('Weight', '', v => { weight = v; }, { type: 'number', step: 100, min: 0, title: 'Left empty: weights stay' }),
       noteRow('Icon and symbol fonts (weapon icons, the logo, arrows) are left alone. Every screen size is changed.'), apply);
+    // the symbol font: one face for every scheme's Marlett (see useAsSymbolFont)
+    let sym = symbolFace();
+    const symRow = pickRow('Font', sym, () => fontFaces, v => { sym = v; }, { faces: true, note: 'Marlett is the game\'s own' });
+    const symAdd = el('div', { className: 'row action' }), symGo = el('div', { className: 'row check' });
+    symAdd.append(el('button', { textContent: '+ Add font', title: 'Add a .ttf or .otf font file to the HUD, for every scheme', onclick: () => {
+      addFontFile(FONT_FILES.map(([f]) => f).filter(F), fam => { symRow.children[1].set(fam); sym = fam; });
+    } }));
+    symGo.append(el('span'), el('button', { textContent: 'Use as symbol font', onclick: () => useAsSymbolFont(sym.trim()) }));
+    symAdd.dataset.q = symGo.dataset.q = 'symbol font marlett arrows ticks add font';
+    d.append(el('div', { className: 'sub', textContent: 'Symbol font (arrows, ticks, window buttons)' }), symAdd, symRow,
+      noteRow('The game draws these from letters of its Marlett font, so a font drawn on the same letters can take its place: t u scroll up and down, w 4 left and right, u drop-down, g e f b tick box, a menu tick, n j k h radio button, 0 1 r minimise, maximise and close, p o resize grip. It goes into every scheme and screen size; sizes stay as they are.'), symGo);
     for (const [file, where] of FONT_FILES) {
       const names = fontNames(file);
       if (names.length) d.append(el('div', { className: 'sub', textContent: `${file} (${where})` }), ...names.map(n => fontFold(file, n, '')));
@@ -3892,6 +3903,58 @@ async function setAllFonts(face, weight) {
   await writing;
   render();
   status(`${[face, weight && `weight ${weight}`].filter(Boolean).join(', ')} on ${n} font entries. Icon fonts were left alone.`);
+}
+
+// The controls draw their arrows, ticks and window buttons from letters of the scheme font Marlett (MarlettSmall for the
+// chat's small tick boxes, NOTES): a font drawn on those letters takes its place in every scheme, every screen height,
+// with anti-aliasing on for thin shapes and Symbol font on only for a font made as one (see symbolEncoded); Marlett
+// picked again is the game's. Sizes stay. One undo step.
+const SYMBOL_BLOCKS = ['marlett', 'marlettsmall'];
+const symbolFace = () => { for (const [file] of FONT_FILES) { const v = F(file) && fontVariants(F(file), 'Marlett'); if (v && v.size) return v.values().next().value.name || 'Marlett'; } return 'Marlett'; };
+// A font file's character map made for a symbol font (a Windows Symbol subtable, platform 3 encoding 0, as Marlett's and
+// Webdings'): Windows draws it only when asked for a symbol font, and one drawn on plain letters (Unicode, 3 1: Dusk
+// Hop's DuskSymbols) only when not. Seen 2026-10-08: Webdings with Symbol font off drew plain letters.
+function symbolEncoded(b) {
+  if (b.length < 12) return false;
+  const v = new DataView(b.buffer, b.byteOffset, b.byteLength);
+  for (let i = 0, n = v.getUint16(4); i < n && 12 + i * 16 + 16 <= b.length; i++) {
+    const r = 12 + i * 16;
+    if (String.fromCharCode(b[r], b[r + 1], b[r + 2], b[r + 3]) !== 'cmap') continue;
+    const at = v.getUint32(r + 8);
+    for (let j = 0, k = v.getUint16(at + 2); j < k; j++) if (v.getUint16(at + 4 + j * 8) === 3 && v.getUint16(at + 6 + j * 8) === 0) return true;
+  }
+  return false;
+}
+// a font file in the HUD by its character map, else an installed one by what Windows says of it
+async function isSymbolFont(face) {
+  const lc = face.toLowerCase();
+  const own = ((await call('hudfonts').catch(() => '')) || '').split('\n').map(l => l.split('\t')).find(([fam]) => fam && fam.toLowerCase() === lc);
+  if (own) try { return symbolEncoded(Uint8Array.from(atob(await call('readbin', own[1])), c => c.charCodeAt(0))); } catch {}
+  return lc === 'marlett' || ((await call('symbolfaces').catch(() => '')) || '').toLowerCase().split('\n').includes(lc);
+}
+async function useAsSymbolFont(face) {
+  if (!face) return status('Pick or add a font first.');
+  const marlett = face.toLowerCase() === 'marlett', symbol = await isSymbolFont(face), group = Symbol();
+  let n = 0;
+  for (const [file] of FONT_FILES) {
+    const f = F(file), blocks = f ? fontNames(file).filter(b => SYMBOL_BLOCKS.includes(b.toLowerCase())) : [];
+    if (!blocks.length) continue;
+    n += blocks.length;
+    commit(f, `${file}/symbol font`, () => {
+      let cur = f;
+      for (const b of blocks) for (const [v] of fontVariants(cur, b))
+        for (const [k, val] of [['name', face], ['symbol', symbol ? '1' : '0'], ['antialias', marlett ? '0' : '1']]) {
+          const text = setAt(cur, ['Fonts', b, v], k, val);
+          cur = { ...cur, text, parsed: parse(text) };
+        }
+      return cur.text;
+    }, group);
+  }
+  if (!n) return status('No scheme here has a Marlett font to replace.');
+  await writing;
+  render();
+  status(marlett ? 'Marlett is the symbol font again, as the game has it. Ctrl+Z undoes it.'
+    : `${face} is the symbol font now (${n} Marlett fonts, every screen size, Symbol font ${symbol ? 'on: it\'s made as one' : 'off: it\'s drawn on plain letters'}). Ctrl+Z undoes it.`);
 }
 
 // A font's settings in a fold, filled when first opened. Open ones stay open across re-renders.
@@ -6941,6 +7004,18 @@ if (host && location.hash === '#hosttest') (async () => {
     const cf = F(C), marlett = fontVariants(cf, 'Marlett'), dflt = fontVariants(cf, 'Default');
     check([...dflt.values()].every(p => p.name === 'Arial' && p.weight === '600') && [...marlett.values()].every(p => p.name === 'Marlett'),
       'every text font at once: Arial 600, the symbol font left alone');
+    { // Use as symbol font: every scheme's Marlett and MarlettSmall, every screen height; Marlett again puts the game's back
+      const symbols = () => FONT_FILES.flatMap(([file]) => F(file) ? ['Marlett', 'MarlettSmall'].flatMap(b => [...fontVariants(F(file), b).values()]) : []);
+      // (Webdings is made as a symbol font: Symbol font on; Arial, like a font drawn on plain letters: off)
+      await useAsSymbolFont('Webdings');
+      const on = symbols(), ok = on.length >= 10 && on.every(p => p.name === 'Webdings' && p.symbol === '1' && p.antialias === '1');
+      await useAsSymbolFont('Arial');
+      const plain = symbols().every(p => p.name === 'Arial' && p.symbol === '0');
+      await useAsSymbolFont('Marlett');
+      const font = enc => { const b = new Uint8Array(40), v = new DataView(b.buffer); v.setUint16(4, 1); b.set([99, 109, 97, 112], 12); v.setUint32(20, 28); v.setUint16(30, 1); v.setUint16(32, 3); v.setUint16(34, enc); return b; };
+      check(ok && plain && symbols().every(p => p.name === 'Marlett' && p.symbol === '1') && symbolFace() === 'Marlett' && symbolEncoded(font(0)) && !symbolEncoded(font(1)),
+        `Use as symbol font: every scheme's Marlett and MarlettSmall at every height, Symbol font as the font is made, and back (${on.length} entries)`);
+    }
     {
       // a font's +: Underline added turns anti-aliasing off (it only draws without, checked in game); Characters and
       // Custom (nothing to see) aren't offered
