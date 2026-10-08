@@ -1597,11 +1597,35 @@ function commandRows(sel) {
 // ---------- the bomb's screen ----------
 // The C4's little screen (on the planted bomb and on the C4 in your hands) has a scheme of its own,
 // resource/C4Panel.res: the code/timer colour while armed and after defusing, and its font (Default there).
-// (Not offered in the list for now, 2026-10-02: the user asked for the loading screen's card to be about that alone.)
+// (A card of its own in the list since 2026-10-08: the loading screen's card is about that alone, as the user asked.
+// The plugin finds its scheme by content: the game loads it under the tag "ClientScheme".)
 const C4 = 'resource/C4Panel.res';
 const C4_SEL = () => ({ thing: { name: 'C4Screen', key: 'c4screen' }, control: null, info: { kind: 'hud', id: 'C4Screen', name: 'Bomb screen', hud: { name: 'Bomb screen', scheme: C4,
   colours: [['Armed', 'C4Panel_Armed', 'The code and timer while the bomb ticks'], ['Defused', 'C4Panel_Defused', 'Once it is defused']],
-  fixed: 'The screen on the bomb and on the C4 in your hands. To see it on the test server: give weapon_c4 in the console, then pick the C4.' } } });
+  fixed: 'The little screen on the C4: the code typed in as it\'s planted, then stars while it ticks. Plant a bomb (below) shows it on the test server.' } } });
+
+// The screen shows only on a C4 being planted or planted, and only a Terrorist can carry one: on the test server
+// (de_dust2, cheats on) this joins the Terrorists and plants one on bomb site B (its middle, read from the map's
+// func_bomb_target), the view turned down to it. Seen 2026-10-08: the code as it's typed in, then the stars.
+function bombRows() {
+  const r = el('div', { className: 'row action' }), local = !!live && live.local && !menuUp();
+  r.append(el('button', { textContent: 'Plant a bomb', disabled: !local, title: local ? 'Joins the Terrorists and plants a C4 on bomb site B' : 'Start the test server first (Test tools)', onclick: plantBomb }));
+  return [r, noteRow(local ? 'Joins the Terrorists and plants a C4 on bomb site B of the test map, looking down at it: the screen shows the code as it\'s typed in, then the stars while it ticks (90 seconds).'
+    : 'Start the test server (Test tools) to plant one and see it.')];
+}
+async function plantBomb() {
+  const cmd = async (c, ms) => { await call('cmd', '', c); await sleep(ms); };
+  status('Planting a bomb on site B...');
+  await cmd('jointeam 2', 2000);
+  await cmd('joinclass 1; hidepanel class_ter; hidepanel team', 2000);
+  await cmd('mp_c4timer 90; mp_restartgame 1', 4000);
+  await cmd('give weapon_c4', 800);
+  await cmd('use weapon_c4', 1500);
+  await cmd('setpos -1536 2680 20; setang 20 0 0; +attack', 4500);
+  await cmd('-attack', 800);
+  await cmd('setang 75 0 0', 300);
+  status('Planted: its screen is at your feet. It goes off in 90 seconds.');
+}
 
 // ---------- round-end and killer panels ----------
 // The round-end panel's boxes (resource/UI/Win_Round.res), and the killer panel (resource/UI/FreezePanel_Basic.res),
@@ -4863,6 +4887,7 @@ function selectionSections(sel) {
   if (info.kind === 'hud') {
     if (info.hud.custom) add('colour', `${info.name}: what it shows`, customRows(info.id));
     if (info.id === 'WinPanel_Round' && sel.res) add('colour', 'Round end panel: boxes', winBoxRows(sel.res));
+    if (info.id === 'C4Screen') add('colour', 'See it in the game', bombRows());
     if (info.id === 'FreezePanel' && sel.res) { const [c, p] = freezeRows(sel.res); add('colour', 'Killer panel: colours', c); add('show', 'Killer panel', p); }
     add('colour', info.name, hudRows(info.id, info.hud));
     add('other', `${info.name}: settings`, [...hudSettingRows(info.id, info.hud), ...(info.hud.extraCvars ? [...cvarRows(info.hud.extraCvars),
@@ -5255,6 +5280,9 @@ function renderList() {
   const loading = el('div', { className: 'row action' });
   loading.append(el('button', { textContent: 'Edit the loading screen', title: 'The box that shows while a map loads: the game holds it open while you edit it', onclick: () => select(LOADING_SEL()) }));
   list.append(card('Loading screen', [loading, noteRow('The box that shows while a map loads. The game holds it open while it\'s picked here.')]));
+  const bomb = el('div', { className: 'row action' });
+  bomb.append(el('button', { textContent: 'Edit the bomb screen', title: 'The little screen on the C4', onclick: async () => { await uiFile(C4); select(C4_SEL()); } }));
+  list.append(card('Bomb screen', [bomb, noteRow('The little screen on the C4, on bomb maps: the code typed in as it\'s planted, and the stars while it ticks.')]));
   // (the MVP star is the scoreboard's: Scoreboard: MVP star, see scoreboardSections)
   // The HUD check-up, off for now (10-02): its code stays (checkupRows, runCheckup); this line puts it back in the list.
   // list.append(card('HUD check-up', checkupRows()));
