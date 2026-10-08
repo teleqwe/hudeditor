@@ -51,6 +51,7 @@ extern "C" unsigned long long SR_NewestResTime( const char *filePath );
 extern "C" unsigned long long SR_FileTime( const char *path );
 extern "C" int SR_SafeCall( void ( *fn )() );
 extern "C" bool SR_WriteFileAtomic( const char *path, const char *data, int len );
+extern "C" void *SR_ModuleBase( const char *name );
 
 using namespace vgui;
 
@@ -848,6 +849,7 @@ static void RestoreVisibility( VPANEL p, const Shown &was, int depth )
 
 static bool RunStep( int step, void ( *fn )() );
 static void StepHud();
+static void KeepHintKeyPlace();
 static void HideRowTemplates();
 static double g_flReshowUntil;
 
@@ -1153,6 +1155,33 @@ static void StepPanels()
 	g_flReshowUntil = Plat_FloatTime() + 0.7;
 	HideRowTemplates();
 	Centre();
+	SR_SafeCall( KeepHintKeyPlace );
+}
+
+// The right-side text (HudHintKeyDisplay) keeps its y in a member, m_iBaseY, that each hint text sets (SetHintText,
+// which also grows the box up from its bottom when its ypos counts from the bottom) and every frame puts the panel back
+// to (OnThink). A reload gives the panel HudLayout's place and size but leaves the member, so a frame later the panel
+// went back to the old place and the next hint grew it from there: down by (layout tall - text height) every other
+// reload or so, and an edited y didn't hold. Set to where the reload put it, the next hint lays it out as a fresh start
+// does. (client.dll x64, 2026-10-08: CHudHintKeyDisplay's vtable at +0x4459f0, OnThink +0x13e500, SetHintText
+// +0x13ea90; m_iBaseY at +0x268, YOffset (float) at +0x290. Another vtable, after a game update: left alone.)
+static void KeepHintKeyPlace()
+{
+	VPANEL p = FindNamed( TopPanel(), "HudHintKeyDisplay", 0 );
+	char *panel = p ? (char *)g_pVPanel->GetPanel( p, "ClientDLL" ) : NULL, *client = (char *)SR_ModuleBase( "client.dll" );
+	if ( !panel || !client )
+		return;
+	if ( *(char **)panel != client + 0x4459f0 )
+	{
+		static bool s_bSaid;
+		if ( !s_bSaid )
+			Msg( "[schemereload] the right-side text isn't the class this plugin knows (a game update?): its place after a reload is left to the game\n" );
+		s_bSaid = true;
+		return;
+	}
+	int x, y;
+	g_pVPanel->GetPos( p, x, y );
+	*(int *)( panel + 0x268 ) = y - (int)*(float *)( panel + 0x290 );
 }
 
 // Some panels hide themselves a frame after a reload (the scoreboard does whenever its scheme is applied), after the

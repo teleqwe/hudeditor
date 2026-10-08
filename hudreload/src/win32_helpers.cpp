@@ -136,3 +136,9 @@ extern "C" int SR_SafeCall( void ( *fn )() )
 		return 0;
 	}
 }
+
+// Where a loaded module starts (NULL: not loaded), for checking a game object is the class expected before touching it.
+extern "C" void *SR_ModuleBase( const char *name )
+{
+	return (void *)GetModuleHandleA( name );
+}
