@@ -278,6 +278,9 @@
   .row.menuadd { display: grid; grid-template-columns: 1fr auto; gap: 6px 8px; }
   .row.menuadd > .meta, .row.menuadd > .wide { grid-column: 1 / -1; }
   .row.menuadd > .meta { color: var(--text); font-size: 12px; font-weight: 550; }
+  .row.specitem { display: grid; grid-template-columns: 1fr repeat(3, 30px); gap: 4px; align-items: center; }
+  .row.specitem > .meta, .row.specitem > .wide { grid-column: 1 / -1; }
+  .row.specitem > button { padding: 3px 0; }
   .row.added { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto 30px; gap: 8px; align-items: center; padding: 7px 0; }
   .row.added .thumb { width: 22px; height: 22px; border-radius: 4px; border: 1px solid var(--line); background: var(--c, var(--field)); }
   .row.added .meta { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -923,6 +926,10 @@ async function loadAll() {
   files = (await Promise.all([C, S, L, CH].map(loadFile))).filter(Boolean);
   const gm = (await readHud(GM)) ?? GAME_MENU; // written into the HUD on the first change
   files.push({ name: GM, path: GM, text: gm, parsed: parse(gm), bases: [] });
+  for (const [p, , root, rootKeys, items] of SPEC_MENUS) { // (the same: the game's items until the first change)
+    const own = await readHud(p), t = own ?? specText(root, rootKeys, items);
+    files.push({ name: p, path: p, text: t, parsed: parse(t), bases: [], ...(own == null ? { gameCopy: t } : {}) }); // (see uiFile)
+  }
   await Promise.all(SB_PAGES.map(uiFile));
   await Promise.all(KIND_RES().map(([p]) => uiFile(p))); // (colours by kind reads every window's own colours: the HUD's copies)
   for (const path of [CVAR_CFG, VALVE_RC, CS_LOGO, SB_SELECT, ...BD_PIECES.map(([n]) => BD_PATH(n))]) { // the scoreboard's name colours and highlight, the logo, the windows' box, when the HUD has them
@@ -1063,7 +1070,8 @@ function setDirty(d) {
 // button that restarts the game.
 // A .res file's settings without the editor's own blocks (hudeditor_...): what the game's own controls get.
 const gameBlocks = text => parse(text).entries.filter(e => !/^hudeditor/i.test(e.path[1] || '')).map(e => `${e.path.join('/')}|${e.key}|${e.value}`).join('\n');
-const RESTART_FILES = [[/^resource\/GameMenu\.res$/i, 'main menu buttons'], [/^servers\//i, 'server browser'], [/^resource\/UI\/BuyMenu/i, 'buy menu']];
+const RESTART_FILES = [[/^resource\/GameMenu\.res$/i, 'main menu buttons'], [/^servers\//i, 'server browser'], [/^resource\/UI\/BuyMenu/i, 'buy menu'],
+  [/^resource\/spectator(menu|modes)\.res$/i, 'spectator drop-down menus']];
 const restartFor = new Set();
 // (kept for the HUD while the game runs, so the editor opened again over a running game still shows it)
 function needRestart(what) {
@@ -4614,6 +4622,102 @@ function menuRows() {
   return [...rows, add, run, gap, note];
 }
 
+// The spectator bar's two drop-downs are the game's command menus (CommandMenu): resource/spectatormenu.res (Options,
+// on the left) and spectatormodes.res (the camera, on the right). Each item runs a command ("command") or turns a
+// setting on and off with a tick ("toggle"), or holds a submenu of items. The game reads them once, as it starts.
+// (commandmenu.res, the old key-held menu of the same kind, no longer opens: +commandmenu is an unknown command in
+// CS:S, 2026-10-09; these two are the command menus left.)
+const specItem = (label, what = {}) => ({ keys: [['label', label], ...Object.entries(what).filter(([k]) => k !== 'kids')], kids: what.kids || [] });
+const SPEC_MENUS = [
+  ['resource/spectatormenu.res', 'Options menu (left)', 'spectatormenu.res', [], [specItem('#Valve_Close', { command: 'spec_menu 0' }),
+    specItem('#Valve_Settings', { kids: [['Locked', 'overview_locked'], ['Names', 'overview_names'], ['Health', 'overview_health'], ['Tracks', 'overview_tracks']].map(([n, t]) => specItem(`#Valve_Overview_${n}`, { toggle: t })) }),
+    specItem('#Valve_Overview', { kids: [['Off', 'overview_mode 0'], ['Small', 'overview_mode 1'], ['Large', 'overview_mode 2'], ['ZoomIn', 'overview_zoom 1.1 0.1 rel'], ['ZoomOut', 'overview_zoom 0.9 0.1 rel']]
+      .map(([n, c]) => specItem(`#Valve_Overview_${n}`, { command: c })) }),
+    specItem('#Valve_Auto_Director', { toggle: 'spec_autodirector' }), specItem('#Valve_Show_Scores', { command: 'togglescores' })]],
+  ['resource/spectatormodes.res', 'Camera menu (right)', 'spectatormodes.res', [['type', 'menu']], [3, 4, 5].map(n => specItem(`#Spec_Mode${n}`, { command: `spec_mode ${n + 1}` }))]];
+// the game's own texts, in English
+const SPEC_WORDS = { '#valve_close': 'Close', '#valve_settings': 'Settings', '#valve_overview': 'Overview', '#valve_overview_locked': 'Locked',
+  '#valve_overview_names': 'Names', '#valve_overview_health': 'Health', '#valve_overview_tracks': 'Tracks', '#valve_overview_off': 'Off',
+  '#valve_overview_small': 'Small', '#valve_overview_large': 'Large', '#valve_overview_zoomin': 'Zoom in', '#valve_overview_zoomout': 'Zoom out',
+  '#valve_auto_director': 'Auto-director', '#valve_show_scores': 'Show scores', '#spec_mode3': 'First person', '#spec_mode4': 'Chase camera', '#spec_mode5': 'Free look' };
+const specText = (root, rootKeys, items) => {
+  const kv = (keys, tabs) => keys.map(([k, v]) => `${tabs}"${k}"\t\t"${v}"\n`).join('');
+  const block = (it, name, tabs) => `${tabs}"${name}"\n${tabs}{\n${kv(it.keys, tabs + '\t')}${it.kids.map((k, j) => block(k, `${name}${j + 1}`, tabs + '\t')).join('')}${tabs}}\n`;
+  return `"${root}"\n{\n${kv(rootKeys, '\t')}${items.map((it, i) => block(it, `menuitem${i + 1}`, '\t')).join('')}}\n`;
+};
+// [root name, the root's own keys, items], submenus inside submenus too
+function specParse(text, fallbackRoot) {
+  const p = parse(text);
+  const keysAt = path => p.entries.filter(e => samePath(e.path, path)).map(e => [e.key, e.value]);
+  const under = path => p.sections.filter(s => s.path.length === path.length + 1 && samePath(s.path.slice(0, -1), path)).map(s => ({ keys: keysAt(s.path), kids: under(s.path) }));
+  const root = (p.sections.find(s => s.path.length === 1) || { path: [fallbackRoot] }).path[0];
+  return [root, keysAt([root]), under([root])];
+}
+function specMenuRows() {
+  const rows = [noteRow('The spectator bar\'s two drop-downs. Each item runs a command (say !r, a server\'s !commands, anything you\'d type in the console), turns a setting on and off (with a tick when on), or opens a submenu. The game reads them as it starts: the ⚠ by Save HUD restarts it to show them.')];
+  for (const [path, title, rootName, , gameItems] of SPEC_MENUS) {
+    const f = F(path);
+    if (!f) continue;
+    const [root, rootKeys, items] = specParse(f.text, rootName);
+    const val = (it, k) => (it.keys.find(([key]) => key.toLowerCase() === k) || [])[1];
+    const setKey = (it, k, v) => { const e = it.keys.find(([key]) => key.toLowerCase() === k); if (e) e[1] = v; else it.keys.push([k, v]); };
+    const put = next => { commit(f, `specmenu|${path}`, () => specText(root, rootKeys, next)); writing = writing.then(render); };
+    const clean = v => v.replace(/["\\]/g, '').trim();
+    rows.push(el('div', { className: 'row note meta', textContent: title }));
+    const itemRow = (it, list, i, depth) => {
+      const row = el('div', { className: 'row specitem' }), label = val(it, 'label') || '', cmd = val(it, 'command'), tog = val(it, 'toggle');
+      if (depth) row.style.paddingLeft = '22px';
+      const word = SPEC_WORDS[label.toLowerCase()];
+      const meta = it.kids.length ? `${depth ? '' : 'Submenu: '}${it.kids.length} item${it.kids.length > 1 ? 's' : ''}` : tog ? `Turns ${tog} on and off` : `Runs ${cmd || 'nothing'}`;
+      row.append(el('div', { className: 'meta', textContent: word ? `${word} (the game's own text) · ${meta}` : meta }));
+      const name = el('input', { value: label, className: 'wide', title: 'What the item says, shown as typed ("#..." is one of the game\'s own texts)' });
+      name.setAttribute('aria-label', 'Item text');
+      name.onchange = () => { if (clean(name.value)) { setKey(it, 'label', clean(name.value)); put(items); } };
+      row.append(name);
+      if (!it.kids.length) {
+        const what = el('input', { value: tog || cmd || '', title: tog ? 'The setting it turns on and off' : 'What it runs, as typed in the console' });
+        what.setAttribute('aria-label', tog ? 'Setting' : 'Command');
+        what.onchange = () => { const v = clean(what.value); if (v) { setKey(it, tog ? 'toggle' : 'command', v); put(items); } };
+        row.append(what);
+      } else row.append(el('div'));
+      const move = d => { [list[i], list[i + d]] = [list[i + d], list[i]]; put(items); };
+      row.append(el('button', { textContent: '↑', title: 'Move up', disabled: i === 0, onclick: () => move(-1) }),
+        el('button', { textContent: '↓', title: 'Move down', disabled: i === list.length - 1, onclick: () => move(1) }),
+        // (a submenu keeps one item at least: an empty one shows nothing to pick)
+        el('button', { textContent: '✕', title: depth && list.length === 1 ? 'A submenu needs an item: remove the submenu itself' : 'Remove', disabled: !!depth && list.length === 1,
+          onclick: () => { list.splice(i, 1); put(items); } }));
+      row.dataset.q = `spectator menu item ${label} ${cmd || tog || ''}`.toLowerCase();
+      rows.push(row);
+      it.kids.forEach((k, j) => itemRow(k, it.kids, j, depth + 1));
+    };
+    items.forEach((it, i) => itemRow(it, items, i, 0));
+    // a new item: a command, a setting's tick, or a submenu, in the menu itself or in one of its submenus
+    const add = el('div', { className: 'row menuadd' });
+    const text = el('input', { placeholder: 'Item text', className: 'wide' }), what = el('input', { placeholder: 'say !r' });
+    const kind = el('select'), where = el('select');
+    for (const [v, t] of [['command', 'Runs a command'], ['toggle', 'Turns a setting on and off'], ['menu', 'Opens a submenu']]) kind.append(el('option', { value: v, textContent: t }));
+    where.append(el('option', { value: '-1', textContent: 'In the menu' }), ...items.map((it, i) => it.kids.length ? el('option', { value: String(i), textContent: `In "${SPEC_WORDS[(val(it, 'label') || '').toLowerCase()] || val(it, 'label')}"` }) : null).filter(Boolean));
+    kind.onchange = () => { what.hidden = kind.value === 'menu'; what.placeholder = kind.value === 'toggle' ? 'cl_showfps' : 'say !r'; };
+    for (const [e, l] of [[text, 'Item text'], [what, 'Command or setting'], [kind, 'Kind of item'], [where, 'Where it goes']]) e.setAttribute('aria-label', l);
+    add.append(el('div', { className: 'meta', textContent: `Add to the ${title.split(' (')[0].toLowerCase()}` }), text, kind, what, where, el('button', { className: 'primary', textContent: 'Add', onclick: () => {
+      const t = clean(text.value), w = clean(what.value);
+      if (!t) return status('Type the item\'s text.');
+      if (kind.value !== 'menu' && !w) return status(kind.value === 'toggle' ? 'Type the setting it turns on and off, like cl_showfps.' : 'Type what it runs, like say !r.');
+      // (a submenu needs an item to show: it starts with one that closes the menu)
+      const it = kind.value === 'menu' ? specItem(t, { kids: [specItem('#Valve_Close', { command: 'spec_menu 0' })] }) : specItem(t, { [kind.value]: w });
+      (where.value === '-1' ? items : items[+where.value].kids).push(it);
+      put(items);
+    } }));
+    add.dataset.q = 'spectator menu add item command toggle submenu';
+    const reset = el('div', { className: 'row action' });
+    reset.append(el('button', { className: 'ghost', textContent: 'The game\'s items', title: 'Back to the game\'s own items', onclick: () => put(JSON.parse(JSON.stringify(gameItems))) }));
+    const note = noteRow('');
+    note.append(undoArrow(`${path}/items`, specText(root, rootKeys, items), t => specParse(t, rootName)[2].map(it => val(it, 'label')).join(', '), t => put(specParse(t, rootName)[2])));
+    rows.push(add, reset, note);
+  }
+  return rows;
+}
+
 // The main menu background: the game stretches materials/console/background01 (4:3 screens) or
 // background01_widescreen over the screen. The picture is cropped to that shape (w x h, its middle) and written as
 // VTF 7.2, one mip level: BGR888 (no compression, so dark gradients don't band), or DXT1 (a sixth of the size) for an
@@ -4916,6 +5020,7 @@ function selectionSections(sel) {
     }
     if (EXTRA[info.id]) add('colour', `Colours: ${info.name.toLowerCase()}`, schemeRows(S, EXTRA[info.id]).concat(info.file === C ? schemeRows(C, EXTRA[info.id]) : []));
     if (info.id === 'specgui' && sel.res) add('border', 'Border: spectator bars', panelBorderRows(sel.res, ['topbar', 'bottombarblank'], SPEC_BORDER));
+    if (info.id === 'specmenu') add('custom', 'Drop-down menus', specMenuRows());
     if (CMD_WINDOWS.has(info.id)) add('custom', 'Command buttons', commandRows(sel));
     if (CMD_WINDOWS.has(info.id) && sel.res) add('layout', 'Button places', buttonPlaceRows(sel.res));
     // the MOTD's parts: its message boxes are empty (so not there to click) until a server sends one
@@ -6283,6 +6388,15 @@ async function parserCheck() {
   check(fromHex('#0a14ff', 128) === '10 20 255 128', 'hex -> rgba');
   const gmItems = menuItems({ parsed: parse(GAME_MENU) });
   check(gmItems.length === 11 && menuName(gmItems[3]) === '(gap)' && menuText(gmItems) === GAME_MENU, 'game menu buttons read and written back unchanged');
+  {
+    const [path, , root, rootKeys, items] = SPEC_MENUS[0], text = specText(root, rootKeys, items), [r, rk, back] = specParse(text, 'x');
+    const modes = specParse(specText(...SPEC_MENUS[1].slice(2)), 'x');
+    const deep = [specItem('a', { kids: [specItem('b', { kids: [specItem('c', { command: 'say c' })] })] })], deepText = specText('m', [], deep);
+    check(specText(...specParse(deepText, 'x')) === deepText && /"menuitem111"/.test(deepText), 'spectator menus keep a submenu inside a submenu');
+    check(path.endsWith('spectatormenu.res') && r === root && !rk.length && back.length === 5 && back[1].kids.length === 4 && back[2].kids[4].keys[1][1] === 'overview_zoom 0.9 0.1 rel'
+      && specText(r, rk, back) === text && modes[1][0].join() === 'type,menu' && modes[2].length === 3 && /"menuitem21"/.test(text),
+      'spectator drop-down menus read and written back (submenus, the root\'s own keys)');
+  }
   const cv = el('canvas', { width: 2, height: 1 }), g = cv.getContext('2d');
   g.fillStyle = '#ff0000', g.fillRect(0, 0, 1, 1), g.fillStyle = '#0000ff', g.fillRect(1, 0, 1, 1);
   const tex = await backgroundVtf([cv], 2, 1), dv = new DataView(tex.buffer), anim = await backgroundVtf([cv, cv], 2, 1);

@@ -885,9 +885,17 @@ static VPANEL FindShown( VPANEL p, const char *name, int depth ) // the same, am
 			return f;
 	return 0;
 }
-CON_COMMAND( schemereload_press, "schemereload_press <panel name>: clicks that button (one on screen)" )
+CON_COMMAND( schemereload_press, "schemereload_press <panel name>[/<child name>]: clicks that button (one on screen)" )
 {
-	VPANEL p = args.ArgC() > 1 && g_pVGui ? FindShown( TopPanel(), args.Arg( 1 ), 0 ) : 0;
+	// ("settingscombo/Button": the arrow of that drop-down, where every drop-down's arrow is named Button)
+	char name[128];
+	Q_strncpy( name, args.ArgC() > 1 ? args.Arg( 1 ) : "", sizeof( name ) );
+	char *child = strchr( name, '/' );
+	if ( child )
+		*child++ = 0;
+	VPANEL p = args.ArgC() > 1 && g_pVGui ? FindShown( TopPanel(), name, 0 ) : 0;
+	if ( p && child )
+		p = *child ? FindShown( p, child, 0 ) : 0;
 	if ( p )
 		g_pVGui->PostMessage( p, new KeyValues( "PressButton" ), 0 );
 	else
