@@ -2938,6 +2938,9 @@ function windowShows(lay, id, key) {
   const win = selected && selected.thing;
   if (lay.name === L || !win || id.toLowerCase() === win.key) return null;
   const open = live && live.panels.find(p => p === p.thing && p.key === win.key);
+  // a window as wide as the screen counts X from the middle: the buy menu's frame is the whole screen with its box and
+  // pages in the middle, so a plain X (from its box's left edge, below) lined up at one screen shape only, 2026-10-09
+  if (key === 'xpos' && open && open.w >= live.W - 2) return null;
   // (its box, the ...solid panels: the ones on screen)
   const solid = open ? live.panels.filter(p => p.parent === open && /solid$/.test(p.key) && p.x < live.W && p.x + p.w > 0) : [];
   if (solid.length) return Math.round(Math.max(...solid.map(p => key === 'xpos' ? p.x + p.w - open.x : p.y + p.h - open.y)) / (live.H / 480));
