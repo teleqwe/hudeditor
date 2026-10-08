@@ -3990,7 +3990,9 @@ async function setAllFonts(face, weight) {
     commit(f, `${file}/every font`, () => {
       let cur = f;
       for (const font of fontNames(file)) for (const [v, p] of fontVariants(cur, font)) {
-        if (SYMBOL_FACES.has((p.name || '').toLowerCase())) continue;
+        // (and Marlett's blocks whatever face they have: Use as symbol font puts a font drawn on plain letters there,
+        // which looks like a text font; "Apply to every text font" after it made the arrows Palatino letters, 2026-10-09)
+        if (SYMBOL_FACES.has((p.name || '').toLowerCase()) || SYMBOL_BLOCKS.includes(font.toLowerCase())) continue;
         for (const [k, val] of [['name', face], ['weight', weight]]) {
           if (!val || p[k] === val) continue;
           const text = setAt(cur, ['Fonts', font, v], k, val);
@@ -4317,7 +4319,7 @@ function resolutionFlaws() {
     for (const font of fontNames(file)) {
       if (!f.parsed.entries.some(e => e.path.length === 4 && e.path[1].toLowerCase() === 'fonts' && e.path[2].toLowerCase() === font.toLowerCase())) continue;
       const vars = fontVariants(f, font), p = vars.get(activeVariant(vars, live ? live.H : 1080));
-      if (!p || SYMBOL_FACES.has((p.name || '').toLowerCase()) || +(p.symbol || 0) > 0 || fixedFont(file, font)) continue;
+      if (!p || SYMBOL_FACES.has((p.name || '').toLowerCase()) || SYMBOL_BLOCKS.includes(font.toLowerCase()) || +(p.symbol || 0) > 0 || fixedFont(file, font)) continue;
       const groups = sharedHeights(f, font);
       if (groups.length) out.push({ file, font, groups });
     }
@@ -4449,7 +4451,7 @@ function fontRows(file, font) {
   if (/^\d+$/.test(p.tall || '')) size.lastElementChild.textContent = p.yres ? `Pixels, for ${p.yres.trim().replace(/\s+/, 'p to ')}p`
     : fixedFont(file, font) ? 'Pixels, the same at every resolution (menus don\'t scale it)' : `Scales with resolution: ${Math.round(entryPx(p, H, false, fontBase(file, font)))} px at ${H}p`;
   // one entry per resolution (see splitText), with a caution when screen sizes share one size in pixels
-  const text = !SYMBOL_FACES.has((p.name || '').toLowerCase()) && !(+(p.symbol || 0) > 0), shared = text ? sharedHeights(f, font) : [];
+  const text = !SYMBOL_FACES.has((p.name || '').toLowerCase()) && !SYMBOL_BLOCKS.includes(font.toLowerCase()) && !(+(p.symbol || 0) > 0), shared = text ? sharedHeights(f, font) : [];
   const split = el('div', { className: 'row action' }), done = text && isSplit(f, font);
   split.append(el('button', { className: done ? 'done' : shared.length ? '' : 'ghost', textContent: 'Split into resolutions', disabled: done, onclick: () => splitFonts([[file, font]]),
     title: done ? 'Done: every resolution has its own size. Pick a resolution (Game, at the top) to adjust one; Ctrl+Z undoes the split.'
@@ -7249,9 +7251,13 @@ if (host && location.hash === '#hosttest') (async () => {
       const on = symbols(), ok = on.length >= 10 && on.every(p => p.name === 'Webdings' && p.symbol === '1' && p.antialias === '1');
       await useAsSymbolFont('Arial');
       const plain = symbols().every(p => p.name === 'Arial' && p.symbol === '0');
+      // (a symbol font drawn on plain letters stays the symbol font when every text font changes after it)
+      await setAllFonts('Tahoma', '');
+      const kept = symbols().every(p => p.name === 'Arial');
+      await setAllFonts('Arial', '');
       await useAsSymbolFont('Marlett');
       const font = enc => { const b = new Uint8Array(40), v = new DataView(b.buffer); v.setUint16(4, 1); b.set([99, 109, 97, 112], 12); v.setUint32(20, 28); v.setUint16(30, 1); v.setUint16(32, 3); v.setUint16(34, enc); return b; };
-      check(ok && plain && symbols().every(p => p.name === 'Marlett' && p.symbol === '1') && symbolFace() === 'Marlett' && symbolEncoded(font(0)) && !symbolEncoded(font(1)),
+      check(ok && plain && kept && symbols().every(p => p.name === 'Marlett' && p.symbol === '1') && symbolFace() === 'Marlett' && symbolEncoded(font(0)) && !symbolEncoded(font(1)),
         `Use as symbol font: every scheme's Marlett and MarlettSmall at every height, Symbol font as the font is made, and back (${on.length} entries)`);
     }
     {
