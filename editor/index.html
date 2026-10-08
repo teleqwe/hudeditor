@@ -983,7 +983,12 @@ function fallbackOf(f, sub, key) {
     // a part moved off by its eye, its place kept beside it (moveOff): that place (seen 10-05: an undone hide of the
     // radio menu, which the game places itself, left it off screen)
     const kept = layoutProps(f, sub[0])[`${k}_hudeditor`];
-    return layoutProps({ bases: f.bases, parsed: { entries: [] } }, sub[0])[k] ?? kept ?? (link ? link[1] : typeof fb === 'function' ? fb() : fb);
+    // a part's font key (Separate font): the font it draws without one (seen 2026-10-08: an undone NumberFont kept its
+    // font); a game part whose place no HudLayout gives (the radio menu: the game draws its menu in the middle of a
+    // panel left where it was made, at 0 0): back to 0, or an undone move left it where it was dragged
+    const font = hud && (hud.fontKeys || []).find(([, ks]) => ks.toLowerCase().split('|').includes(k));
+    return layoutProps({ bases: f.bases, parsed: { entries: [] } }, sub[0])[k] ?? kept ?? (link ? link[1] : typeof fb === 'function' ? fb() : fb)
+      ?? (font ? font[2] : hud && /^[xy]pos$/.test(k) && !(k in gameProps(L, sub[0])) ? '0' : undefined);
   }
   if (k in RES_FALLBACK) return RES_FALLBACK[k];
   const p = nestedProps(f, sub), ctl = p.controlname && controlOf(p.controlname);
@@ -6529,6 +6534,13 @@ if (host && location.hash === '#hosttest') (async () => {
       const m1 = fallbackText(mf, t('HudMenu', '{', '}')), p2 = m1 && layoutProps({ parsed: parse(m1), bases: [] }, 'HudMenu');
       check(p1 && p1.selectedboxclor === 'SelectionSelectedBoxBg' && p2 && p2.ypos === '120' && offKey('HudMenu') === 'ypos' && offKey('HudRadar') === 'xpos',
         `undo keeps a colour link in its first write, and a moved-off part's place (${JSON.stringify(p1)}, ${JSON.stringify(p2)})`);
+      // a part's font key undone goes to the font it draws without one first (the game keeps the last); the radio menu's
+      // place, which the game's HudLayout doesn't give, to 0
+      const nf = { ...F(L), text: t('HudHealth', '{', '"NumberFont" "Trebuchet24"', '}', 'HudMenu', '{', '"ypos" "300"', '}'), parsed: null, bases: [] };
+      nf.parsed = parse(nf.text);
+      const n1 = fallbackText(nf, t('HudHealth', '{', '}', 'HudMenu', '{', '}')), np = n1 ? { parsed: parse(n1), bases: [] } : null;
+      check(np && layoutProps(np, 'HudHealth').numberfont === 'HudNumbers' && layoutProps(np, 'HudMenu').ypos === '0',
+        `an undone font key first writes the part's own default, an undone radio menu place 0 (${n1 && JSON.stringify([layoutProps(np, 'HudHealth'), layoutProps(np, 'HudMenu')])})`);
     }
     {
       // a part the game fades itself, hidden by an older editor (alpha 0, or xpos for one that moves by y now), counts as
