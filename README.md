@@ -55,8 +55,12 @@ This is a **beta**: back up any HUD you care about before you edit it.
 
 ## Building from source
 
-Run `build-all.bat` (Visual Studio 2022 with the C++ tools). It needs the Source SDK 2013 in `hudreload/sdk/` and the
-WebView2 SDK in `app/webview2/`, which aren't in this repo. `appuild.bat` builds only the exe.
+You need the Visual Studio 2022 Build Tools (C++) and two SDKs that aren't in this repo:
+- [Source SDK 2013](https://github.com/ValveSoftware/source-sdk-2013) checked out in `hudreload/sdk/`
+- the WebView2 SDK (the `Microsoft.Web.WebView2` NuGet package, unzipped) in `app/webview2/`
+
+`build-all.bat` builds the plugin, installs it into the game and builds `app/CSSHudEditor.exe` (it closes the game and
+the editor first). `app\build.bat` builds only the exe.
 
 ## License
 
