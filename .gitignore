@@ -16,3 +16,12 @@ claude huds/
 # Each HUD build's own folder under dev/ (art, screenshots, one-off scripts); the shared test scripts in dev/ and the art kit are kept
 dev/*/
 !dev/art/
+
+# Only the program and its source are public: notes, docs, tests, game reference files and Claude's files stay local
+*.md
+docs/
+dev/
+vanilla/
+.claude/
+.codex/
+editor/index.new

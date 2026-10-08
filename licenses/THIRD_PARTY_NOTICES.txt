@@ -1,0 +1,25 @@
+# Third-party notices
+
+CS:S HUD Editor's own code is under the MIT License (`LICENSE`). These parts come from others and keep their own
+terms.
+
+## Source 1 SDK (Valve Corporation)
+
+The game plugin (`schemereload.dll`, built from `hudreload/` and packed inside `CSSHudEditor.exe`) is built with
+Valve's Source SDK 2013: its headers and some of its source files (tier1). They are under the Source 1 SDK License,
+copied here as `SOURCE_SDK_LICENSE.txt`, with Valve's third-party notices as `SOURCE_SDK_THIRDPARTYLEGALNOTICES.txt`.
+As that license asks, this distribution is free of charge and includes both files and Valve's copyright notice:
+
+Copyright(c) Valve Corporation. All rights reserved.
+
+## Microsoft Edge WebView2 SDK (Microsoft Corporation)
+
+`CSSHudEditor.exe` links the WebView2 loader (`WebView2LoaderStatic.lib`, package Microsoft.Web.WebView2
+1.0.4191.47). Its license is copied here as `WEBVIEW2_LICENSE.txt`.
+
+## Counter-Strike: Source files (Valve Corporation)
+
+`app/defaults/` (packed inside the exe) and `vanilla/` hold the game's own default HUD files (schemes, HUD layout,
+window layouts), so a new HUD can start from the game's look and the editor can show the game's values. They are
+Valve's, part of Counter-Strike: Source, and are included only for use with the game. Counter-Strike: Source is a
+trademark of Valve Corporation; this project is not made or endorsed by Valve.
