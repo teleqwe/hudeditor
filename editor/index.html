@@ -519,10 +519,12 @@ const HUD = {
   HudDeathNotice: { name: 'Kill feed', hit: ['r260', '12', '248', '100'], layoutColours: [['CT names', 'CTTextColor', 'CT_Blue'], ['T names', 'TerroristTextColor', 'T_Red']],
     fixed: 'Name colours show on kills after the change; lines already in the feed keep theirs.',
     settings: [['Lines', 'MaxDeathNotices', 'num', '4', 'How many kills show at once'], ['Line height', 'LineHeight', 'num', '22'],
-      ['Lines line up on the', 'RightJustify', [['1', 'Right'], ['0', 'Left']], '1', 'Side of the kill feed\'s area (move the area to move the feed)']], fontKeys: [['Names font', 'TextFont', 'Default']] },
+      ['Lines line up on the', 'RightJustify', [['1', 'Right'], ['0', 'Left']], '1', 'Side of the kill feed\'s area (move the area to move the feed)']], fontKeys: [['Names font', 'TextFont', 'Default']],
+    extraCvars: [['Each kill stays for', 'hud_deathnotice_time', 'time', 'Seconds (hud_deathnotice_time)']] },
   // the chat reads ChatScheme; its message colours (names in team colours, yellow server lines) are the game's own
   HudChat: { name: 'Chat', scheme: CH, rounded: true, colours: [['Background', 'DullWhite', 'Behind the chat while typing; the game sets how see-through it is', 'rgb'],
-    ['Typing text', 'Chat.TypingText', ''], ['"Say :" text', 'Label.TextColor', ''], ['Typing box', 'TextEntry.BgColor', '']] },
+    ['Typing text', 'Chat.TypingText', ''], ['"Say :" text', 'Label.TextColor', ''], ['Typing box', 'TextEntry.BgColor', '']],
+    extraCvars: [['Each line stays for', 'hud_saytext_time', 'time', 'Seconds, while the chat is closed (hud_saytext_time)']] },
   HudHintDisplay: { name: 'Timer / hint text', fit: true, rounded: true, roundOnly: true, note: 'Font HudHintText', colours: [['Text', 'HintMessageFg', 'Also the right-side text'], ['Background', 'HintMessageBg', '']],
     // (center_x/center_y only move the box away from the text, and HintSize is the box's width as a fraction: checked in game)
     settings: [['Space beside the text', 'text_xpos', 'num', '8', 'Left and right, inside the box'], ['Space above and below', 'text_ypos', 'num', '8', 'Inside the box']] },
@@ -2267,10 +2269,10 @@ const VALVE_RC_TEXT = '// load the base configuration\n//exec default.cfg\nr_dec
   + `// the game settings the HUD sets (HUD editor)\n${CVAR_EXEC}\n\n// run a user script file if present\nexec autoexec.cfg\n\n//\n// stuff command line statements\n//\nstuffcmds\n`;
 // More game settings kept in the same cfg: the radar's see-through background (cl_radaralpha: its HudLayout alpha does
 // nothing, NOTES), the net graph and the position text (drawn by the game's own panels, CNetGraphPanel and CFPSPanel:
-// SDK 2013 vgui_netgraphpanel.cpp, vgui_fpspanel.cpp). [cvar: the game's default]
+// SDK 2013 vgui_netgraphpanel.cpp, vgui_fpspanel.cpp), how long kill feed and chat lines stay. [cvar: the game's default]
 const GAME_CVARS = { cl_radaralpha: '200', net_graph: '0', net_graphpos: '1', net_graphheight: '64', net_graphtext: '1', net_graphproportionalfont: '1',
-  net_graphsolid: '1', net_graphshowlatency: '1', net_graphshowinterp: '1', cl_showpos: '0', cl_showfps: '0' };
-const readCvars = text => { const o = {}; for (const m of (text || '').matchAll(/^\s*(cl_scoreboard_\w+|[a-z_]+)\s+"?(-?\d+)/gim)) { const k = m[1].toLowerCase(); if (k.startsWith('cl_scoreboard_') || k in GAME_CVARS) o[k] = m[2]; } return o; };
+  net_graphsolid: '1', net_graphshowlatency: '1', net_graphshowinterp: '1', cl_showpos: '0', cl_showfps: '0', hud_deathnotice_time: '6', hud_saytext_time: '12' };
+const readCvars = text => { const o = {}; for (const m of (text || '').matchAll(/^\s*(cl_scoreboard_\w+|[a-z_]+)\s+"?(-?\d+(?:\.\d+)?)/gim)) { const k = m[1].toLowerCase(); if (k.startsWith('cl_scoreboard_') || k in GAME_CVARS) o[k] = String(+m[2]); } return o; };
 // now; config.cfg's when the editor first read it (what a HUD without the cfg gets back); the ones the HUD's cfg sets
 let cvarValues = null, cvarStart = null, cvarHud = new Set();
 async function loadCvars() {
@@ -2304,7 +2306,7 @@ function setCvars(pairs, id) {
     writing = writing.then(() => call('write', VALVE_RC, text)).catch(err => status(`Couldn't write ${VALVE_RC}: ${err.message}`));
   }
   const cfg = hudFile(CVAR_CFG, '');
-  commit(cfg, id, () => `// Game settings the HUD sets (scoreboard name colours, radar, net graph, position text), run at startup from cfg/valve.rc (HUD editor)\n${cvarLines().join('\n')}\n`);
+  commit(cfg, id, () => `// Game settings the HUD sets (scoreboard name colours, radar, net graph, position text, kill feed and chat times), run at startup from cfg/valve.rc (HUD editor)\n${cvarLines().join('\n')}\n`);
 }
 // Puts the running game's name colours to what a cfg text says (after an undo, or a discard), else to config.cfg's.
 function applyCvars(text) {
@@ -2491,7 +2493,7 @@ async function select(sel) {
   if (sel) sel.res = await uiFile(resPath(sel));
   if (sel && sel.thing.key === 'loadingdialog') await Promise.all([uiFile(UI_RES.loadingdialog), uiFile(LOADING_VAC)]); // (both written together)
   if (sel && STARTUP_RES.has(sel.thing.key)) await uiFile(UI_RES[sel.thing.key]); // (its Custom tab: the buy menu's own file, whatever page's control is clicked)
-  if (sel && (sel.thing.key === 'scores' || sel.info.id === 'HudRadar' || HUD[sel.info.id]?.cvars)) await loadCvars();
+  if (sel && (sel.thing.key === 'scores' || sel.info.id === 'HudRadar' || HUD[sel.info.id]?.cvars || HUD[sel.info.id]?.extraCvars)) await loadCvars();
   if (sel && CLASS_PAGES[sel.thing.key]) await Promise.all(CLASS_PAGES[sel.thing.key].map(async n => { // (Class picture)
     await uiFile(classPage(n));
     if (!classGame[n] && host) try { const t = await call('vanilla', `${n}.res`); classGame[n] = { text: t, parsed: parse(t), bases: [] }; } catch {}
@@ -3321,13 +3323,14 @@ function fixedFontRows() {
   return [noteRow(`The position text draws ${FIXED_FONT} at its size in pixels (tiny on big screens), the net graph scaled with the screen.`), r];
 }
 
-// A part drawn from game settings (hud.cvars: [label, cvar, options | 'num' | 'onoff', note]), kept in the HUD's cfg.
+// A part drawn from game settings (hud.cvars: [label, cvar, options | 'num' | 'time' | 'onoff', note]), kept in the
+// HUD's cfg; hud.extraCvars: a part's own settings that are game settings (its Extras).
 function cvarRows(list) {
   if (!cvarValues) loadCvars().then(() => render()); // (reached through the search before the part was clicked)
   return list.map(([label, k, kind, note = '']) => {
     const now = cvarValue(k), def = GAME_CVARS[k], set = v => setCvars([[k, v]], k), at = `cvar/${k}`;
     const row = kind === 'onoff' ? toggleRow(label, now !== '0', on => set(on ? '1' : '0'), note, at, def !== '0')
-      : kind === 'num' ? inputRow(label, now, set, { type: 'number', step: 1, undoId: at, dflt: def })
+      : kind === 'num' || kind === 'time' ? inputRow(label, now, set, { type: 'number', step: kind === 'time' ? 0.5 : 1, min: 0, undoId: at, dflt: def, ...(note ? { title: note } : {}) })
       : selectRow(label, kind.some(([v]) => v === now) ? kind : [...kind, [now, now]], now, set, [k], at, def);
     if (note && Array.isArray(kind)) row.querySelector('.meta').textContent = note;
     row.dataset.keys = k;
@@ -4782,7 +4785,8 @@ function selectionSections(sel) {
     if (info.id === 'WinPanel_Round' && sel.res) add('colour', 'Round end panel: boxes', winBoxRows(sel.res));
     if (info.id === 'FreezePanel' && sel.res) { const [c, p] = freezeRows(sel.res); add('colour', 'Killer panel: colours', c); add('show', 'Killer panel', p); }
     add('colour', info.name, hudRows(info.id, info.hud));
-    add('other', `${info.name}: settings`, hudSettingRows(info.id, info.hud));
+    add('other', `${info.name}: settings`, [...hudSettingRows(info.id, info.hud), ...(info.hud.extraCvars ? [...cvarRows(info.hud.extraCvars),
+      noteRow('A game setting: the HUD keeps it in cfg/hudeditor_colours.cfg, which the game runs at startup. A player\'s own autoexec.cfg runs after it and wins.')] : [])]);
     if (info.id === 'HudChat' && sel.res) add('layout', 'Chat: space inside', chatPaddingRows(sel));
     // parts moved off screen (the chat's Filters button) can't be clicked any more
     add('show', 'Show or hide', showHideRows(sel));
@@ -6613,6 +6617,12 @@ if (host && location.hash === '#hosttest') (async () => {
         const at = clickRects(full, { hud: HUD.CNetGraphPanel }, 1920, 1080)[0];
         check(at.x > 1300 && at.y > 850 && at.w < 600, `the net graph's full-screen panel is clicked only at the bottom right (${JSON.stringify(at)})`);
         check(ng.length === 8 && ng[0].dataset.keys === 'net_graph' && HUD_FONTS.CFPSPanel[0] === 'DefaultFixedOutline' && readCvars('net_graphpos "2"\ncl_showpos 1').net_graphpos === '2', `the net graph and position text rows (${ng.map(r => r.dataset.keys)})`);
+        // the kill feed's and chat's line times: game settings in their Extras, in seconds (halves kept)
+        const kt = cvarRows(HUD.HudDeathNotice.extraCvars)[0], ct = cvarRows(HUD.HudChat.extraCvars)[0];
+        check(kt.dataset.keys === 'hud_deathnotice_time' && kt.querySelector('input').value === '6' && ct.dataset.keys === 'hud_saytext_time'
+          && readCvars('hud_deathnotice_time 2.5\nhud_saytext_time "30"').hud_deathnotice_time === '2.5' && readCvars('hud_saytext_time "30"').hud_saytext_time === '30'
+          && readCvars('net_graph "0.000000"').net_graph === '0',
+          `the kill feed and chat line times (${kt.dataset.keys} ${kt.querySelector('input').value}, ${ct.dataset.keys})`);
       } finally { [cvarValues, cvarHud] = keep; }
       const t = bdText('vgui/white', [255, 0, 255]), keepBd = F(BD_PATH('solid_background'));
       files.push({ name: BD_PATH('solid_background'), path: BD_PATH('solid_background'), text: t, parsed: parse(''), bases: [] });
