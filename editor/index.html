@@ -65,6 +65,7 @@
   #res { width: 190px; text-overflow: ellipsis; }
   .caution { padding: 4px 9px; border-color: #c9a43c; background: rgba(242, 201, 76, .1); color: #f2c94c; font-size: 14px; line-height: 1.2; }
   .caution:hover { border-color: #f2c94c; background: rgba(242, 201, 76, .18); }
+  .row.note.restart { color: #f2c94c; } /* (a note that the game shows this only after a restart, as the ⚠ says) */
   .cautionpop { position: fixed; z-index: 20; width: min(380px, calc(100vw - 24px)); padding: 16px; background: var(--surface); border: 1px solid #c9a43c; border-radius: 8px; box-shadow: 0 12px 40px #0008; }
   .cautionpop h3 { margin: 0 0 8px; font-size: 13px; font-weight: 550; color: #f2c94c; }
   .cautionpop p { margin: 0 0 8px; font-size: 12px; color: var(--muted); line-height: 1.45; }
@@ -3974,7 +3975,12 @@ function separateFontRows(file, now, game, set, id, keys = []) {
   row.append(input, el('button', { textContent: 'Separate', onclick: go }), undo);
   input.onkeydown = e => { if (e.key === 'Enter') go(); };
   row.dataset.q = note.dataset.q = `separate font own font name copy ${now} ${keys.join(' ')}`.toLowerCase();
-  return [note, row];
+  // (made since the game started: here too, not only by the ⚠)
+  if (!restartFor.has(`the new font ${now}`)) return [note, row];
+  const wait = noteRow(`⚠ Needs a game restart: the game only shows the new font ${now} after it restarts. Until then this part keeps its old font or shows no text. Restart with the ⚠ by Save HUD.`);
+  wait.classList.add('restart');
+  wait.dataset.q = note.dataset.q;
+  return [note, wait, row];
 }
 
 // A row with a font drop-down and its ↺. names() lists the choices.
@@ -6636,6 +6642,8 @@ if (host && location.hash === '#hosttest') (async () => {
         check(/shares the font Default/.test(note.textContent) && made && entries === fontVariants(F(C), 'Default').size && set.join() === 'Killfeed,HudNumbers'
           && saved.length === 1 && restartFor.has('the new font Killfeed') && ![...restartFor].some(w => /HudNumbers/.test(w)),
           `Separate font makes its own copy (shown after a restart), or uses a font that exists (${set}, ${entries} entries)`);
+        const after = separateFontRows(C, 'Killfeed', 'Default', () => {}, 'test/separate2');
+        check(after.length === 3 && after[1].classList.contains('restart') && /Needs a game restart/.test(after[1].textContent), 'a separated font made since the game started says it needs a restart');
       } finally { save = realSave; restartFor.delete('the new font Killfeed'); needRestart(); }
     }
     { // Border colour shows on every side row at once (they'd keep their old colours until the list was drawn again)
