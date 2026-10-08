@@ -478,15 +478,21 @@ const INSIDE = (ix, iy, dx, dy) => [['Icon X', 'icon_xpos', 'num', ix], ['Icon Y
 // HUD parts, keyed by panel name (= HudLayout block). layoutColours are colours set in that HudLayout block;
 // hit = clickable area (HudLayout units) for panels much bigger than what they draw.
 const HUD = {
-  HudHealth: { name: 'Health', colours: [NUMBERS, WARN], layoutColours: [['Low health', 'LowHealthColor', 'HudIcon_Red']], settings: INSIDE('8', '-4', '35', '-4') },
-  HudArmor: { name: 'Armor', colours: [NUMBERS], settings: INSIDE('8', '-4', '34', '-4') },
+  // (fontKeys of the number parts: NumberFont draws the number, money's +/- line too; SmallNumberFont drew nothing; each
+  // seen live in game, 2026-10-08. Health also draws NumberGlowFont behind its number, HudNumbersGlow, which the game's
+  // scheme hasn't: nothing shows, so it gets no row)
+  HudHealth: { name: 'Health', colours: [NUMBERS, WARN], layoutColours: [['Low health', 'LowHealthColor', 'HudIcon_Red']], settings: INSIDE('8', '-4', '35', '-4'),
+    fontKeys: [['Number font', 'NumberFont', 'HudNumbers']] },
+  HudArmor: { name: 'Armor', colours: [NUMBERS], settings: INSIDE('8', '-4', '34', '-4'), fontKeys: [['Number font', 'NumberFont', 'HudNumbers']] },
   HudAmmo: { name: 'Ammo', colours: [NUMBERS], settings: [['Magazine X', 'digit_xpos', 'num', '8'], ['Magazine Y', 'digit_ypos', 'num', '-4'],
     ['Reserve X', 'digit2_xpos', 'num', '63'], ['Reserve Y', 'digit2_ypos', 'num', '-4'], ['Divider X', 'bar_xpos', 'num', '53'],
     ['Divider Y', 'bar_ypos', 'num', '3'], ['Divider width', 'bar_width', 'num', '2'], ['Divider height', 'bar_height', 'num', '20'],
-    ['Icon X', 'icon_xpos', 'num', '110'], ['Icon Y', 'icon_ypos', 'num', '2']] },
+    ['Icon X', 'icon_xpos', 'num', '110'], ['Icon Y', 'icon_ypos', 'num', '2']], fontKeys: [['Number font', 'NumberFont', 'HudNumbers']] },
   HudAccount: { name: 'Money', colours: [NUMBERS, HIGHLIGHT, WARN], settings: [...INSIDE('9', '16', '100', '16'),
-    ['+/− icon X', 'icon2_xpos', 'num', '9'], ['+/− icon Y', 'icon2_ypos', 'num', '-4'], ['+/− amount X', 'digit2_xpos', 'num', '100'], ['+/− amount Y', 'digit2_ypos', 'num', '-4']] },
-  HudRoundTimer: { name: 'Round timer', colours: [NUMBERS, WARN], layoutColours: [['Low time flash', 'FlashColor', 'HudIcon_Red']], settings: INSIDE('8', '-4', '42', '-4') },
+    ['+/− icon X', 'icon2_xpos', 'num', '9'], ['+/− icon Y', 'icon2_ypos', 'num', '-4'], ['+/− amount X', 'digit2_xpos', 'num', '100'], ['+/− amount Y', 'digit2_ypos', 'num', '-4']],
+    fontKeys: [['Number font', 'NumberFont', 'HudNumbers']] },
+  HudRoundTimer: { name: 'Round timer', colours: [NUMBERS, WARN], layoutColours: [['Low time flash', 'FlashColor', 'HudIcon_Red']], settings: INSIDE('8', '-4', '42', '-4'),
+    fontKeys: [['Number font', 'NumberFont', 'HudNumbers']] },
   // (the radar is square: its width sizes it, a height changed nothing; the place name sits under it wherever its own
   // block says, and fades with its own opacity; both seen 2026-10-05)
   HudRadar: { name: 'Radar', square: true },
@@ -508,7 +514,7 @@ const HUD = {
     // ("SelectedBoxClor" is spelt that way in the game)
     links: { NumberColor: 'SelectionNumberFg', TextColor: 'SelectionTextFg', BoxColor: 'SelectionBoxBg', EmptyBoxColor: 'SelectionEmptyBoxBg', SelectedBoxClor: 'SelectionSelectedBoxBg' }, rounded: true,
     // (the game centres it across the screen: its X and width changed nothing, 2026-10-05)
-    lockX: true, noWide: true },
+    lockX: true, noWide: true, fontKeys: [['Slot number font', 'NumberFont', 'HudSelectionNumbers'], ['Weapon name font', 'TextFont', 'HudSelectionText']] },
   // (its names take the game's team colours: HudLayout's CTTextColor / TerroristTextColor changed nothing, 2026-10-05)
   HudDeathNotice: { name: 'Kill feed', hit: ['r260', '12', '248', '100'], layoutColours: [['CT names', 'CTTextColor', 'CT_Blue'], ['T names', 'TerroristTextColor', 'T_Red']],
     fixed: 'Name colours show on kills after the change; lines already in the feed keep theirs.',
@@ -3744,7 +3750,9 @@ function fontsOf(sel) {
   const file = schemeOf(sel.control || sel.thing);
   if (sel.info.kind === 'hud') {
     const hf = sel.info.hud.scheme || schemeOf(sel.thing), p = layoutProps(F(L), sel.info.id);
-    for (const [k, v] of Object.entries(p)) if (/font/.test(k) && !/^font_?size/.test(k)) add(hf, v, k);
+    const keys = sel.info.hud.fontKeys || [], named = new Set(keys.map(([, ks]) => ks.split('|')[0].toLowerCase()));
+    for (const [label, ks, dflt] of keys) add(hf, p[ks.split('|')[0].toLowerCase()] || dflt, label.toLowerCase());
+    for (const [k, v] of Object.entries(p)) if (/font/.test(k) && !named.has(k) && !/^font_?size/.test(k)) add(hf, v, k);
     if (!out.length) for (const n of HUD_FONTS[sel.info.id] || []) add(hf, n, '');
     return out;
   }
