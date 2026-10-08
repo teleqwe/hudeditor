@@ -4568,7 +4568,7 @@ const MENU_NAMES = { ResumeGame: 'Resume Game', Disconnect: 'Disconnect', OpenPl
 const menuItems = f => f.parsed.sections.filter(s => s.path.length === 2)
   .map(s => f.parsed.entries.filter(e => samePath(e.path, s.path)).map(e => [e.key, e.value]));
 const menuVal = (item, k) => (item.find(([key]) => key.toLowerCase() === k.toLowerCase()) || [])[1] || '';
-const menuName = item => MENU_NAMES[menuVal(item, 'command')] || menuVal(item, 'label') || '(gap)';
+const menuName = item => (menuVal(item, 'label') && !menuVal(item, 'label').startsWith('#') ? menuVal(item, 'label') : MENU_NAMES[menuVal(item, 'command')]) || menuVal(item, 'label') || '(gap)';
 const menuText = items => `"GameMenu"\n{\n${items.map((it, i) => `\t"${i + 1}"\n\t{\n${it.map(([k, v]) => `\t\t"${k}" "${v}"\n`).join('')}\t}\n`).join('')}}\n`;
 function setMenu(items) {
   const f = F(GM);
@@ -4584,7 +4584,19 @@ function menuRows() {
     const row = el('div', { className: 'row menuitem' });
     const what = cmd(it).startsWith('engine connect ') ? `Connects to ${cmd(it).slice(15)}` : cmd(it).startsWith('engine ') ? `Runs ${cmd(it).slice(7)}`
       : menuVal(it, 'OnlyInGame') === '1' ? 'In game only' : '';
-    const name = el('div', { textContent: menuName(it) });
+    // its text, as typed (a game button's "#..." text shows in English; typing replaces it); a gap has none
+    const name = el('div', { textContent: cmd(it) ? '' : menuName(it) });
+    if (cmd(it)) {
+      const shown = menuName(it);
+      const text = el('input', { value: shown, title: 'The button\'s text, shown as typed' });
+      text.setAttribute('aria-label', 'Button text');
+      text.style.width = '100%';
+      text.onchange = () => {
+        const v = text.value.replace(/["\\]/g, '').trim();
+        if (v && v !== shown) setMenu(items.map((x, j) => j !== i ? x : x.some(([k]) => k.toLowerCase() === 'label') ? x.map(([k, val]) => [k, k.toLowerCase() === 'label' ? v : val]) : [['label', v], ...x]));
+      };
+      name.append(text);
+    }
     name.append(el('div', { className: 'meta', textContent: what }));
     const btn = (text, title, on, off) => el('button', { textContent: text, title, disabled: !!off, onclick: on });
     row.append(name, btn('↑', 'Move up', () => move(i, -1), i === 0), btn('↓', 'Move down', () => move(i, 1), i === items.length - 1),
