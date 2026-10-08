@@ -563,7 +563,9 @@ const HUD = {
     ['Fade in', 'fade_in_time', 'time', '0.07', 'Seconds'], ['Fade out', 'fade_out_time', 'time', '1.0', 'Seconds after they stop talking']] },
   // its HudLayout colours and sizes (DmgColorLeft, dmg_xpos...) are Half-Life 2's and do nothing here: checked in game
   HudDamageIndicator: { name: 'Damage arrows', quiet: true, fixed: 'The red arrows round the crosshair when you take damage. They are pictures, so here they can only be faded or hidden.' },
-  WinPanel_Round: { name: 'Round end panel' },
+  // (cl_round_win_fade_time: how long it takes to fade once the next round starts: 8 faded over seconds, 0.1 at once;
+  // the panel came in the same with either, 2026-10-08)
+  WinPanel_Round: { name: 'Round end panel', extraCvars: [['Fades out over', 'cl_round_win_fade_time', 'time', 'Seconds, once the next round starts (cl_round_win_fade_time)']] },
   FreezePanel: { name: 'Killer panel', quiet: true },
   HudAchievementTracker: { name: 'Achievement tracker', quiet: true },
 };
@@ -2276,9 +2278,10 @@ const VALVE_RC_TEXT = '// load the base configuration\n//exec default.cfg\nr_dec
   + `// the game settings the HUD sets (HUD editor)\n${CVAR_EXEC}\n\n// run a user script file if present\nexec autoexec.cfg\n\n//\n// stuff command line statements\n//\nstuffcmds\n`;
 // More game settings kept in the same cfg: the radar's see-through background (cl_radaralpha: its HudLayout alpha does
 // nothing, NOTES), the net graph and the position text (drawn by the game's own panels, CNetGraphPanel and CFPSPanel:
-// SDK 2013 vgui_netgraphpanel.cpp, vgui_fpspanel.cpp), how long kill feed and chat lines stay. [cvar: the game's default]
+// SDK 2013 vgui_netgraphpanel.cpp, vgui_fpspanel.cpp), how long kill feed and chat lines stay, the round-end panel's
+// fade. [cvar: the game's default]
 const GAME_CVARS = { cl_radaralpha: '200', net_graph: '0', net_graphpos: '1', net_graphheight: '64', net_graphtext: '1', net_graphproportionalfont: '1',
-  net_graphsolid: '1', net_graphshowlatency: '1', net_graphshowinterp: '1', cl_showpos: '0', cl_showfps: '0', hud_deathnotice_time: '6', hud_saytext_time: '12' };
+  net_graphsolid: '1', net_graphshowlatency: '1', net_graphshowinterp: '1', cl_showpos: '0', cl_showfps: '0', hud_deathnotice_time: '6', hud_saytext_time: '12', cl_round_win_fade_time: '1.5' };
 const readCvars = text => { const o = {}; for (const m of (text || '').matchAll(/^\s*(cl_scoreboard_\w+|[a-z_]+)\s+"?(-?\d+(?:\.\d+)?)/gim)) { const k = m[1].toLowerCase(); if (k.startsWith('cl_scoreboard_') || k in GAME_CVARS) o[k] = String(+m[2]); } return o; };
 // now; config.cfg's when the editor first read it (what a HUD without the cfg gets back); the ones the HUD's cfg sets
 let cvarValues = null, cvarStart = null, cvarHud = new Set();
@@ -2313,7 +2316,7 @@ function setCvars(pairs, id) {
     writing = writing.then(() => call('write', VALVE_RC, text)).catch(err => status(`Couldn't write ${VALVE_RC}: ${err.message}`));
   }
   const cfg = hudFile(CVAR_CFG, '');
-  commit(cfg, id, () => `// Game settings the HUD sets (scoreboard name colours, radar, net graph, position text, kill feed and chat times), run at startup from cfg/valve.rc (HUD editor)\n${cvarLines().join('\n')}\n`);
+  commit(cfg, id, () => `// Game settings the HUD sets (scoreboard name colours, radar, net graph, position text, kill feed and chat times, round-end fade), run at startup from cfg/valve.rc (HUD editor)\n${cvarLines().join('\n')}\n`);
 }
 // Puts the running game's name colours to what a cfg text says (after an undo, or a discard), else to config.cfg's.
 function applyCvars(text) {
@@ -6638,7 +6641,7 @@ if (host && location.hash === '#hosttest') (async () => {
         const kt = cvarRows(HUD.HudDeathNotice.extraCvars)[0], ct = cvarRows(HUD.HudChat.extraCvars)[0];
         check(kt.dataset.keys === 'hud_deathnotice_time' && kt.querySelector('input').value === '6' && ct.dataset.keys === 'hud_saytext_time'
           && readCvars('hud_deathnotice_time 2.5\nhud_saytext_time "30"').hud_deathnotice_time === '2.5' && readCvars('hud_saytext_time "30"').hud_saytext_time === '30'
-          && readCvars('net_graph "0.000000"').net_graph === '0',
+          && readCvars('net_graph "0.000000"').net_graph === '0' && cvarRows(HUD.WinPanel_Round.extraCvars)[0].querySelector('input').value === '1.5',
           `the kill feed and chat line times (${kt.dataset.keys} ${kt.querySelector('input').value}, ${ct.dataset.keys})`);
       } finally { [cvarValues, cvarHud] = keep; }
       const t = bdText('vgui/white', [255, 0, 255]), keepBd = F(BD_PATH('solid_background'));
