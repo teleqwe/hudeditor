@@ -2161,8 +2161,9 @@ async function addToHud(kind, file, lay = F(L)) {
   if (box && !loadingUp()) { status('Added: its settings are under Custom and Layout here. Show the box (top of this page) to see it.'); return refreshSoon(); }
   // in a window: selected as if clicked (clicked again until it's the one, if something is over its middle), once the
   // game has made it
+  // (in this window: the HUD's own added parts are numbered from 1 too, so hudeditor_pic1 can be on screen twice)
   for (let i = 0; i < 20; i++) {
-    const p = live && live.panels.find(q => q.key === name.toLowerCase());
+    const p = live && live.panels.find(q => q.key === name.toLowerCase() && q.thing && q.thing.key === win.thing.key);
     const hit = p && pickAll((p.x + p.w / 2) / live.W, (p.y + p.h / 2) / live.H).find(h => (h.node || h.control) && (h.node || h.control).key === name.toLowerCase());
     if (hit) return select(hit);
     await sleep(300);
