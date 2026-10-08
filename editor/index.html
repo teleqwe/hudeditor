@@ -414,6 +414,8 @@
       <div class="ingame">
         <button id="scores" aria-pressed="false" title="Keep the scoreboard open to edit it. Click again (or press Tab in the game) to close it.">Scoreboard</button>
         <button id="keepchat" aria-pressed="false" title="Keep the chat open (typing) to edit it: opened again after a change reloads the HUD. Click again to close it.">Chat</button>
+        <button id="netgraphbtn" aria-pressed="false" title="Show the net graph in the editor's game (net_graph) to edit it. Not saved in the HUD: its own setting is in the Net graph's rows.">Net graph</button>
+        <button id="showposbtn" aria-pressed="false" title="Show the position text in the editor's game (cl_showpos) to edit it. Not saved in the HUD.">Position</button>
         <button id="textsbtn" class="toolsbtn" aria-expanded="false">Speed &amp; timer</button>
       </div>
       <!-- the test game's sample texts, each on or off (remembered): the bhop/surf timer and speed texts -->
@@ -521,6 +523,16 @@ const HUD = {
   CCenterStringLabel: { name: 'Small speed', fixed: 'The game always draws this text white, so no HUD can recolour it. Its font (below) can change.', note: 'Centre print (PrintCenterText) from server plugins; font Trebuchet24',
     middle: [120, 30] },
   // (noPos: the server plugin places it, so it has no position or size here and doesn't drag)
+  // drawn by the game's own panels from game settings (kept in the HUD's cfg): no HudLayout block, colours fixed in code
+  // (its panel is the whole screen: clicked only where it draws, at the bottom, by net_graphpos)
+  CNetGraphPanel: { name: 'Net graph', noPos: true, scheme: S, hitAt: () => { const v = cvarValue('net_graphpos');
+      return [v === '1' ? 'r170' : v === '2' ? 'c-85' : v === '0' ? '5' : String(Math.max(5, +v || 0)), 'r70', '165', '65']; }, fixed: 'Drawn by the game from console settings (net_graph...), which the HUD keeps in cfg/hudeditor_colours.cfg, run at startup: a player\'s own autoexec.cfg runs after it and wins. Its colours are the game\'s; its font, DefaultFixedOutline, is also the position text\'s.',
+    cvars: [['Show', 'net_graph', [['0', 'Off'], ['1', 'On'], ['2', 'On, with the data graph'], ['3', 'On, with the data legend']]],
+      ['Place', 'net_graphpos', [['1', 'Bottom right'], ['2', 'Bottom centre'], ['0', 'Bottom left']], 'Or a number: that many units from the left'],
+      ['Graph height', 'net_graphheight', 'num'], ['Text', 'net_graphtext', 'onoff'], ['Text scales with the screen', 'net_graphproportionalfont', 'onoff'],
+      ['Solid graph', 'net_graphsolid', 'onoff'], ['Ping / loss graph', 'net_graphshowlatency', 'onoff'], ['Interpolation graph', 'net_graphshowinterp', 'onoff']] },
+  CFPSPanel: { name: 'Position and fps text', noPos: true, scheme: S, fixed: 'Drawn by the game in the top right from console settings, which the HUD keeps in cfg/hudeditor_colours.cfg (run at startup; a player\'s own autoexec.cfg runs after it and wins). White, in the font DefaultFixedOutline (the net graph\'s too).',
+    cvars: [['Position (cl_showpos)', 'cl_showpos', [['0', 'Off'], ['1', 'Where you look from'], ['2', 'Where you stand']]], ['Fps (cl_showfps)', 'cl_showfps', [['0', 'Off'], ['1', 'On'], ['2', 'Smoothed']]]] },
   HudMessage: { name: 'Large speed', noPos: true, fixed: 'Its colour and position come from the server plugin, not the HUD. Its font (below) can change. The record times in the top left are the same kind of text, in the same panel: hiding this hides them too.', note: 'ShowHudText / game_text from server plugins and maps; font CenterPrintText',
     hit: [['c-60', '178', '120', '30'], ['4', '2', '230', '60']] },
   TargetID: { name: 'Player name when aiming', quiet: true, colours: [['Counter-Terrorists', 'CT_Blue', 'Also the kill feed\'s names'], ['Terrorists', 'T_Red', 'Also the kill feed\'s names'], ['Hostages', 'Hostage_Yellow', ''] ] },
@@ -2240,10 +2252,12 @@ const SB_COLUMNS = [['avatar', 'Avatar0'], ['clan tag', 'Clan0'], ['name', 'Name
 const CVAR_CFG = 'cfg/hudeditor_colours.cfg', VALVE_RC = 'cfg/valve.rc', CVAR_EXEC = 'exec hudeditor_colours.cfg';
 const VALVE_RC_TEXT = '// load the base configuration\n//exec default.cfg\nr_decal_cullsize 1\n\n// Setup custom controller\nexec joystick.cfg\n\n'
   + `// the game settings the HUD sets (HUD editor)\n${CVAR_EXEC}\n\n// run a user script file if present\nexec autoexec.cfg\n\n//\n// stuff command line statements\n//\nstuffcmds\n`;
-// The radar's see-through background is a game setting too (cl_radaralpha: its HudLayout alpha does nothing, NOTES),
-// kept in the same cfg. [cvar, the game's default]
-const RADAR_CVARS = { cl_radaralpha: '200' };
-const readCvars = text => { const o = {}; for (const m of (text || '').matchAll(/^\s*(cl_scoreboard_\w+|cl_radaralpha)\s+"?(\d+)/gim)) o[m[1].toLowerCase()] = m[2]; return o; };
+// More game settings kept in the same cfg: the radar's see-through background (cl_radaralpha: its HudLayout alpha does
+// nothing, NOTES), the net graph and the position text (drawn by the game's own panels, CNetGraphPanel and CFPSPanel:
+// SDK 2013 vgui_netgraphpanel.cpp, vgui_fpspanel.cpp). [cvar: the game's default]
+const GAME_CVARS = { cl_radaralpha: '200', net_graph: '0', net_graphpos: '1', net_graphheight: '64', net_graphtext: '1', net_graphproportionalfont: '1',
+  net_graphsolid: '1', net_graphshowlatency: '1', net_graphshowinterp: '1', cl_showpos: '0', cl_showfps: '0' };
+const readCvars = text => { const o = {}; for (const m of (text || '').matchAll(/^\s*(cl_scoreboard_\w+|[a-z_]+)\s+"?(-?\d+)/gim)) { const k = m[1].toLowerCase(); if (k.startsWith('cl_scoreboard_') || k in GAME_CVARS) o[k] = m[2]; } return o; };
 // now; config.cfg's when the editor first read it (what a HUD without the cfg gets back); the ones the HUD's cfg sets
 let cvarValues = null, cvarStart = null, cvarHud = new Set();
 async function loadCvars() {
@@ -2255,17 +2269,18 @@ async function loadCvars() {
 }
 const RGB = ['red', 'green', 'blue'];
 const cvarColour = (prefix, def) => RGB.map((c, i) => (cvarValues || {})[`${prefix}_${c}`] ?? def.split(' ')[i]).join(' ') + ' 255';
-const cvarValue = k => (cvarValues || {})[k] ?? RADAR_CVARS[k];
+const cvarValue = k => (cvarValues || {})[k] ?? GAME_CVARS[k];
+let cvarTouched = new Set(); // (the game settings set from the editor: undo and discarding put those back too)
 // the cfg's lines: the name colours (all, once the HUD sets one) and each radar setting the HUD sets; all: every one,
 // for the running game
 const cvarLines = (all = false) => [
   ...(all || [...cvarHud].some(k => k.startsWith('cl_scoreboard_')) ? SCOREBOARD_CVARS.flatMap(([, prefix, def]) => RGB.map((c, i) => `${prefix}_${c} ${cvarColour(prefix, def).split(' ')[i]}`)) : []),
-  ...Object.keys(RADAR_CVARS).filter(k => all || cvarHud.has(k)).map(k => `${k} ${cvarValue(k)}`)];
+  ...Object.keys(GAME_CVARS).filter(k => cvarHud.has(k) || all && (k in (cvarStart || {}) || cvarTouched.has(k))).map(k => `${k} ${cvarValue(k)}`)];
 const hudFile = (path, text) => F(path) || (files.push({ name: path, path, text, parsed: parse(''), bases: [] }), F(path));
 const setCvarColour = (prefix, rgba) => setCvars(RGB.map((c, i) => [`${prefix}_${c}`, rgba.split(' ')[i]]), 'name colours');
 function setCvars(pairs, id) {
   cvarValues ||= {};
-  for (const [k, v] of pairs) { cvarValues[k] = v; cvarHud.add(k); }
+  for (const [k, v] of pairs) { cvarValues[k] = v; cvarHud.add(k); cvarTouched.add(k); }
   call('cmd', '', pairs.map(([k, v]) => `${k} ${v}`).join('; '));
   // the game's valve.rc, or the HUD's own with the exec added before autoexec. Not an undo step: an emptied valve.rc
   // would skip the player's autoexec (discarding still removes one the editor made)
@@ -2276,7 +2291,7 @@ function setCvars(pairs, id) {
     writing = writing.then(() => call('write', VALVE_RC, text)).catch(err => status(`Couldn't write ${VALVE_RC}: ${err.message}`));
   }
   const cfg = hudFile(CVAR_CFG, '');
-  commit(cfg, id, () => `// Game settings the HUD sets (scoreboard name colours, radar), run at startup from cfg/valve.rc (HUD editor)\n${cvarLines().join('\n')}\n`);
+  commit(cfg, id, () => `// Game settings the HUD sets (scoreboard name colours, radar, net graph, position text), run at startup from cfg/valve.rc (HUD editor)\n${cvarLines().join('\n')}\n`);
 }
 // Puts the running game's name colours to what a cfg text says (after an undo, or a discard), else to config.cfg's.
 function applyCvars(text) {
@@ -2463,7 +2478,7 @@ async function select(sel) {
   if (sel) sel.res = await uiFile(resPath(sel));
   if (sel && sel.thing.key === 'loadingdialog') await Promise.all([uiFile(UI_RES.loadingdialog), uiFile(LOADING_VAC)]); // (both written together)
   if (sel && STARTUP_RES.has(sel.thing.key)) await uiFile(UI_RES[sel.thing.key]); // (its Custom tab: the buy menu's own file, whatever page's control is clicked)
-  if (sel && (sel.thing.key === 'scores' || sel.info.id === 'HudRadar')) await loadCvars();
+  if (sel && (sel.thing.key === 'scores' || sel.info.id === 'HudRadar' || HUD[sel.info.id]?.cvars)) await loadCvars();
   if (sel && CLASS_PAGES[sel.thing.key]) await Promise.all(CLASS_PAGES[sel.thing.key].map(async n => { // (Class picture)
     await uiFile(classPage(n));
     if (!classGame[n] && host) try { const t = await call('vanilla', `${n}.res`); classGame[n] = { text: t, parsed: parse(t), bases: [] }; } catch {}
@@ -2481,10 +2496,11 @@ function clickRects(p, info, W, H) {
   if (p !== p.thing || !info.hud) return [p];
   // a wide panel whose text is drawn in its middle: just that area (in 480-line units)
   if (info.hud.middle) { const [w, h] = info.hud.middle.map(n => n * H / 480); return [{ x: p.x + (p.w - w) / 2, y: p.y + (p.h - h) / 2, w, h }]; }
-  if (info.hud.hit) {
+  const hit = info.hud.hitAt ? info.hud.hitAt() : info.hud.hit;
+  if (hit) {
     // a full-screen panel draws at a fixed place inside itself, so its areas move with the panel (xpos/ypos)
     const ox = p.w >= W * 0.95 ? p.x : 0, oy = p.h >= H * 0.95 ? p.y : 0;
-    return (Array.isArray(info.hud.hit[0]) ? info.hud.hit : [info.hud.hit]).map(h => { const r = rectOf({}, W, H, h); return { ...r, x: r.x + ox, y: r.y + oy }; });
+    return (Array.isArray(hit[0]) ? hit : [hit]).map(h => { const r = rectOf({}, W, H, h); return { ...r, x: r.x + ox, y: r.y + oy }; });
   }
   const kids = info.hud.fit && live ? live.panels.filter(q => q.parent === p && q.w * q.h > 0) : [];
   if (!kids.length) return [p];
@@ -3235,6 +3251,7 @@ function kindRows() {
 
 // Rows for a HUD part: its colours, HudLayout colours, box and position/size.
 function hudRows(id, hud) {
+  if (hud.cvars) return [...(hud.fixed ? [noteRow(hud.fixed)] : []), ...cvarRows(hud.cvars), ...fixedFontRows()];
   // colours the part's own settings only take from the scheme at startup: name them in HudLayout so a reload looks again
   const link = ks => {
     const lay = F(L), p = lay ? layoutProps(lay, id) : {};
@@ -3261,6 +3278,41 @@ function hudRows(id, hud) {
   if (!hud.noPos) for (const [k, label] of [['xpos', 'X position'], ['ypos', 'Y position'], ['wide', 'Width'], ['tall', 'Height']])
     if ((k in p || ((hud.pos || canHide(id)) && k.endsWith('pos'))) && !(hud.lockX && k === 'xpos') && !(hud.square && k === 'tall') && !(hud.noWide && k === 'wide')) rows.push(numRow(lay, id, k, label, p[k]));
   return rows;
+}
+
+// The net graph draws DefaultFixedOutline scaled with the screen (proportional), the position text at its size in pixels:
+// 10 px, tiny at 1440. Entries for screen heights (yres: pixels at that height, NOTES) make both one size, tall x the
+// range's start / 480 (10 is 30 px at 1440, the net graph's).
+const FIXED_FONT = 'DefaultFixedOutline', FIXED_RANGES = [[480, 599], [600, 767], [768, 899], [900, 1023], [1024, 1079], [1080, 1199], [1200, 1439], [1440, 2159], [2160, 10000]];
+const fixedRanged = () => !!F(S) && [...fontVariants(F(S), FIXED_FONT).values()].some(p => p.yres);
+function fixedFontByHeight() {
+  const base = { ...(fontVariants(F(S), FIXED_FONT).values().next().value || { name: 'Lucida Console', outline: '1' }) }, tall = +base.tall || 10;
+  for (const k of ['yres', 'tall', 'tall_lodef', 'tall_hidef']) delete base[k];
+  save(F(S), FIXED_FONT, FIXED_RANGES.map(([lo, hi], i) => [String(i + 1), [...Object.entries(base), ['tall', String(Math.round(tall * lo / 480))], ['yres', `${lo} ${hi}`]]]), ['Fonts']);
+  refreshSoon();
+}
+function fixedFontRows() {
+  if (!F(S)) return [];
+  if (fixedRanged()) return [noteRow(`${FIXED_FONT} has a size for each screen height, so the position text and the net graph match. Its sizes are under Fonts (All resolutions copies this height's to the others).`)];
+  const r = el('div', { className: 'row action' });
+  r.append(el('button', { textContent: 'Same size at every resolution', title: `Gives ${FIXED_FONT} a size for each screen height (as the net graph's), so the position text isn't tiny`, onclick: fixedFontByHeight }));
+  r.dataset.q = 'size font resolution yres screen height showpos net graph';
+  return [noteRow(`The position text draws ${FIXED_FONT} at its size in pixels (tiny on big screens), the net graph scaled with the screen.`), r];
+}
+
+// A part drawn from game settings (hud.cvars: [label, cvar, options | 'num' | 'onoff', note]), kept in the HUD's cfg.
+function cvarRows(list) {
+  if (!cvarValues) loadCvars().then(() => render()); // (reached through the search before the part was clicked)
+  return list.map(([label, k, kind, note = '']) => {
+    const now = cvarValue(k), def = GAME_CVARS[k], set = v => setCvars([[k, v]], k), at = `cvar/${k}`;
+    const row = kind === 'onoff' ? toggleRow(label, now !== '0', on => set(on ? '1' : '0'), note, at, def !== '0')
+      : kind === 'num' ? inputRow(label, now, set, { type: 'number', step: 1, undoId: at, dflt: def })
+      : selectRow(label, kind.some(([v]) => v === now) ? kind : [...kind, [now, now]], now, set, [k], at, def);
+    if (note && Array.isArray(kind)) row.querySelector('.meta').textContent = note;
+    row.dataset.keys = k;
+    row.dataset.q += ` ${k}`;
+    return row;
+  });
 }
 
 // A part's own settings (hud.settings, see INSIDE), each at the HUD's value or the game's default.
@@ -3316,7 +3368,7 @@ function visibilityRows(id) {
   const lay = F(L), p = layoutProps(lay, id);
   if (id === 'HudRadar') {
     if (!cvarValues) loadCvars().then(() => render()); // (reached through the search before the radar was clicked)
-    const r = rangeRow('Opacity', cvarValue('cl_radaralpha'), v => setCvars([['cl_radaralpha', v]], 'cl_radaralpha'), 'cvar/cl_radaralpha', RADAR_CVARS.cl_radaralpha);
+    const r = rangeRow('Opacity', cvarValue('cl_radaralpha'), v => setCvars([['cl_radaralpha', v]], 'cl_radaralpha'), 'cvar/cl_radaralpha', GAME_CVARS.cl_radaralpha);
     return [r, noteRow('A game setting (cl_radaralpha): the HUD keeps it in cfg/hudeditor_colours.cfg, which the game runs at startup. A player\'s own autoexec.cfg runs after it and wins.')];
   }
   if (SELF_FADING.has(id)) return [noteRow('The game fades this one in and out itself, so it can only be shown or hidden (the button at the top).')];
@@ -3657,7 +3709,7 @@ const FIXED_SIZE = new Set(['resource/ui/spectator.res|ctscorevalue', 'resource/
 // Fonts a HUD part draws with by default (HudLayout font keys, when set, win). From telehud's comments and the SDK.
 const HUD_FONTS = { HudHealth: ['HudNumbers'], HudArmor: ['HudNumbers'], HudAmmo: ['HudNumbers'], HudAccount: ['HudNumbers'], HudRoundTimer: ['HudNumbers'],
   HudHintDisplay: ['HudHintText'], HudHintKeyDisplay: ['HudHintTextSmall'], CCenterStringLabel: ['Trebuchet24'], HudMessage: ['CenterPrintText'], TargetID: ['TargetID'],
-  HudWeaponSelection: ['HudSelectionNumbers', 'HudSelectionText'], HudMenu: ['Default'], HudDeathNotice: ['Default'], HudRadar: ['ChatFont'], HudLocation: ['ChatFont'], HudChat: ['ChatFont'],
+  HudWeaponSelection: ['HudSelectionNumbers', 'HudSelectionText'], HudMenu: ['Default'], HudDeathNotice: ['Default'], HudRadar: ['ChatFont'], HudLocation: ['ChatFont'], CNetGraphPanel: ['DefaultFixedOutline'], CFPSPanel: ['DefaultFixedOutline'], HudChat: ['ChatFont'],
   WinPanel_Round: ['WinPanelLarge', 'WinPanelTiny', 'WinPanelClock'], FreezePanel: ['FreezeSmall', 'FreezeMedium', 'FreezeLarge'], C4Screen: ['Default'] };
 
 // Fonts a selection draws with, as [scheme file, font, what for]: the control's own .res "font", HudLayout font keys
@@ -5564,6 +5616,7 @@ function inGameRow() {
     $('scores').setAttribute('aria-pressed', 'false');
     $('keepchat').setAttribute('aria-pressed', 'false');
   }
+  if (!on) for (const id of ['netgraphbtn', 'showposbtn']) $(id).setAttribute('aria-pressed', 'false');
 }
 // the sidebar's top strip only while it holds something (On screen now over a selection)
 const topBar = () => { $('top').hidden = !$('parts').childElementCount; };
@@ -5899,6 +5952,13 @@ if (host) {
     keepChat = !keepChat;
     $('keepchat').setAttribute('aria-pressed', keepChat);
     call('cmd', '', `schemereload_chat ${keepChat ? 1 : 0}`);
+  };
+  // the net graph and the position text, shown in the editor's game to edit them (the HUD's own values are their rows')
+  for (const [id, cvar] of [['netgraphbtn', 'net_graph'], ['showposbtn', 'cl_showpos']]) $(id).onclick = () => {
+    if (!live) return status('Start the game first.');
+    const on = $(id).getAttribute('aria-pressed') !== 'true', mode = cvarValue(cvar);
+    $(id).setAttribute('aria-pressed', String(on));
+    call('cmd', '', `${cvar} ${on ? (mode !== '0' ? mode : '1') : '0'}`);
   };
   $('texts').onclick = e => { const b = e.target.closest('button'); if (b) toggleText(+b.dataset.bit); };
   $('textchips').onclick = e => { const b = e.target.closest('button'); if (b) toggleText(+b.dataset.bit); };
@@ -6445,7 +6505,12 @@ if (host && location.hash === '#hosttest') (async () => {
         cvarValues = {}; cvarHud = new Set(['cl_radaralpha']); cvarValues.cl_radaralpha = '90';
         const lines = cvarLines(), all = cvarLines(true);
         check(readCvars('cl_radaralpha "90"\ncl_scoreboard_ct_color_red 1').cl_radaralpha === '90' && lines.join() === 'cl_radaralpha 90'
-          && all.length === 19 && all.includes('cl_radaralpha 90'), `the radar's opacity is a cvar of the HUD's cfg (${lines})`);
+          && all.filter(l => l.startsWith('cl_scoreboard_')).length === 18 && all.includes('cl_radaralpha 90') && !all.some(l => l.startsWith('net_graph ')),
+          `the radar's opacity is a cvar of the HUD's cfg; the net graph's only once set (${lines})`);
+        const ng = cvarRows(HUD.CNetGraphPanel.cvars), full = { x: 0, y: 0, w: 1920, h: 1080 }; full.thing = full;
+        const at = clickRects(full, { hud: HUD.CNetGraphPanel }, 1920, 1080)[0];
+        check(at.x > 1300 && at.y > 850 && at.w < 600, `the net graph's full-screen panel is clicked only at the bottom right (${JSON.stringify(at)})`);
+        check(ng.length === 8 && ng[0].dataset.keys === 'net_graph' && HUD_FONTS.CFPSPanel[0] === 'DefaultFixedOutline' && readCvars('net_graphpos "2"\ncl_showpos 1').net_graphpos === '2', `the net graph and position text rows (${ng.map(r => r.dataset.keys)})`);
       } finally { [cvarValues, cvarHud] = keep; }
       const t = bdText('vgui/white', [255, 0, 255]), keepBd = F(BD_PATH('solid_background'));
       files.push({ name: BD_PATH('solid_background'), path: BD_PATH('solid_background'), text: t, parsed: parse(''), bases: [] });
