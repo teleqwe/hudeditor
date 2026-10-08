@@ -1447,6 +1447,7 @@ function missingRows(f) {
 // Parts with nothing to show, whose eye would change nothing. (Team select's mapname was here, wrongly: hidden and
 // empty in the game's file, but shown the game fills in the map's name, seen in a fresh game, 2026-10-08.)
 const NOTHING_TO_SHOW = new Set();
+const EDIT_HIDDEN = new Set(['team', 'class_ct', 'class_ter', 'info', 'scores']);
 function showHideRows(sel) {
   const { info } = sel, f = sel.res, rows = [];
   if (info.kind === 'hud' && !sel.control && canHide(info.id))
@@ -1461,8 +1462,19 @@ function showHideRows(sel) {
     if (CODE_MADE.has(k) && LOGO_WINDOWS.has(info.id)) continue; // (a block for these never reaches the game, see CS_LOGO)
     if (NOTHING_TO_SHOW.has(`${info.id}/${k}`)) continue;
     const p = layoutProps(f, b);
-    rows.push(showRow(f, b, /^hudeditor_(pic|text|box)\d+$/i.test(b) ? addedName(f, b) : b === SB_BOX ? 'Colour box behind the scoreboard'
-      : /^hudeditor_cmd/i.test(b) ? `"${p.labeltext || ''}" button` : prettify(b)));
+    const row = showRow(f, b, /^hudeditor_(pic|text|box)\d+$/i.test(b) ? addedName(f, b) : b === SB_BOX ? 'Colour box behind the scoreboard'
+      : /^hudeditor_cmd/i.test(b) ? `"${p.labeltext || ''}" button` : prettify(b));
+    // a button or text the game isn't showing now (Spectate on a server without spectators): Edit picks it as a click
+    // on it would, for its text, colours and font
+    // (the windows whose parts are their file's own blocks, open now: the window itself is the made-up part's parent)
+    const ctl = controlOf(p.controlname || '');
+    if (ctl && /^(Button|Label|MouseOverPanelButton)$/.test(ctl[0]) && EDIT_HIDDEN.has(info.id) && live && sel.thing && sel.thing.cls
+      && !live.panels.some(q => q.thing && q.thing.key === sel.thing.key && q.key === k)) {
+      const node = { key: k, name: b, cls: ctl[0], parent: sel.thing, thing: sel.thing, scheme: sel.thing.scheme, module: sel.thing.module, x: 0, y: 0, w: 0, h: 0 };
+      row.firstElementChild.append(el('button', { className: 'mini', textContent: 'Edit', title: 'Not on screen now: pick it to change its text, colours and font',
+        onclick: e => { e.stopPropagation(); select({ ...sel, control: node, node }); } }));
+    }
+    rows.push(row);
   }
   return rows;
 }
@@ -5458,7 +5470,9 @@ function boxList() {
       for (const r of clickRects(p, info, live.W, live.H))
         if (r.w * r.h <= 0.9 * live.W * live.H && r.x < live.W && r.y < live.H && r.x + r.w > 0 && r.y + r.h > 0) boxes.push({ thing: p, info, r, cls: 'thing' });
     }
-    for (const s of [sel, ...also]) if (s && s.control) boxes.push({ thing: s.thing, info: s.info, r: s.control, cls: 'sel', label: controlIn(s.control, s.thing)[1] });
+    // (a part picked with Edit while the game isn't showing it has no place on screen: no box)
+    for (const s of [sel, ...also]) if (s && s.control && s.control.w + s.control.h === 0) continue;
+      else if (s && s.control) boxes.push({ thing: s.thing, info: s.info, r: s.control, cls: 'sel', label: controlIn(s.control, s.thing)[1] });
       else if (s && partName(s) && partPanel(s)) boxes.push({ thing: s.thing, info: s.info, r: partPanel(s), cls: 'sel', label: partName(s) }); // (a window's picture, box...)
     return { W: live.W, H: live.H, boxes };
   }
