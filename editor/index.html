@@ -3773,7 +3773,22 @@ function resRows(f, block, defaults, schemeFile, ctl) {
       for (const r of separateFontRows(schemeFile, p.font || deflt, g.font || deflt, (v, group) => save(f, 'font', v, block, group), `${f.name}/${block}/font`, ['font'])) tag(r, 'font', 'Separate font');
     // where a text sits in its box: a right-aligned one grows leftwards from its right edge
     const align = v => (v || 'west').toLowerCase().replace(/^(north|south)(west|east)$/, '$1-$2');
-    if (ctl === 'Label' || 'textalignment' in p) tag(selectRow('Text alignment', TEXT_ALIGN, align(p.textalignment), v => save(f, 'textAlignment', v, block), ['textAlignment'], `${f.name}/${block}/textalignment`, align(g.textalignment)), 'layout', 'Text');
+    if (ctl === 'Label' || /button/i.test(ctl || '') || 'textalignment' in p) tag(selectRow('Text alignment', TEXT_ALIGN, align(p.textalignment), v => save(f, 'textAlignment', v, block), ['textAlignment'], `${f.name}/${block}/textalignment`, align(g.textalignment)), 'layout', 'Text');
+    // what a game control says (labelText; "#..." is the game's own text, in the player's language). Not texts the game
+    // fills in (%mapname%, the MOTD's title, empty ones). Buttons change live (the plugin gives them their text again);
+    // a label in a window the game reads once keeps its text until a restart
+    // (only windows whose texts stay as their file says: the spectator top bar's and the loading box's the game writes)
+    const said = p.labeltext;
+    if (!/^hudeditor_/i.test(block) && said && !said.includes('%') && /label|button/i.test(ctl || '') && block.toLowerCase() !== 'messagetitle'
+      && /UI\/(TeamMenu|ClassMenu_(CT|TER)|TextWindow|scoreboard|bottomspectator|BuyMenu\w*)\.res$/i.test(f.path)) {
+      // (the buy menu: its ⚠ comes with every change to its files, see RESTART_FILES)
+      const buy = /BuyMenu/i.test(f.path), later = buy || (!/button/i.test(ctl) && !/UI\/(scoreboard|bottomspectator)\.res$/i.test(f.path));
+      const r = inputRow('Text', said, v => { save(f, 'labelText', v.replace(/["\\]/g, ''), block); if (later && !buy) needRestart('texts in windows'); },
+        { undoId: `${f.name}/${block}/labeltext`, title: 'Starting with # it is the game\'s own text, in the player\'s language' });
+      if (said.startsWith('#')) r.lastElementChild.textContent = 'The game\'s own text (in the player\'s language) until you type your own';
+      else if (later) r.lastElementChild.textContent = 'Shows after a restart (the ⚠ by Save HUD)';
+      tag(r, 'layout', 'Text');
+    }
   }
   const fixed = FIXED_SIZE.has(`${f.name}|${block}`.toLowerCase());
   // (a scoreboard row's template: the game stacks the rows itself, so its Y does nothing, seen with the board opened

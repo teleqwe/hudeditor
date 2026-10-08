@@ -1171,8 +1171,11 @@ static void ReapplyLayouts()
 				broken = !Q_stricmp( g_ApplyBroken[j], id );
 			if ( broken )
 				continue;
-			for ( const char *k : { "labelText", "text" } ) // the game's texts stay as it set them; the editor's own are the file's
-				if ( KeyValues *t = mine ? NULL : b->FindKey( k ) )
+			// the game's texts stay as it set them (the MOTD's title...); the editor's own are the file's, and so are buttons'
+			// (nothing sets theirs in code: the editor's Text row renames them)
+			bool keepText = mine || Q_stristr( b->GetString( "ControlName" ), "Button" ) != NULL;
+			for ( const char *k : { "labelText", "text" } )
+				if ( KeyValues *t = keepText ? NULL : b->FindKey( k ) )
 					b->RemoveSubKey( t ), t->deleteThis();
 			g_ApplyPanel = panel;
 			g_ApplyKeys = b;
