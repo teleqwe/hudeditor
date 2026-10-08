@@ -63,8 +63,10 @@ and its border with a colour for each side:
 
 - **VAC:** the editor starts the game with `-insecure`, which plugins need. That game can't join VAC-secured servers.
   Starting CS:S from Steam as usual is not affected, and your HUD works there like any other.
-- **The plugin:** the editor puts a small plugin in `cstrike/addons` (`schemereload.dll` and `schemereload.vdf`). It
-  only loads when the game is started with `-insecure`. To remove it, delete those two files.
+- **The plugin:** the editor puts a small plugin in `cstrike/addons` (`schemereload.dll`, and `schemereload.vdf`, which
+  makes the game load it). A game started from Steam would load it too and then couldn't join VAC-secured servers, so
+  the editor puts the `.vdf` in only as it starts the game and moves it aside (`schemereload.vdf.off`) once the plugin
+  is up. To remove the plugin, delete `schemereload.dll` and the `.vdf` / `.vdf.off`.
 - **Game settings in a HUD** (name colours, radar opacity, net graph) run from the HUD's `cfg/valve.rc` before your
   `autoexec.cfg`, so your own autoexec still wins.
 - **Windows warning:** the exe isn't signed, so Windows may say it "protected your PC" the first time. Click

@@ -487,6 +487,17 @@ static wstring InstallPlugin()
 	return wstring();
 }
 
+// The plugin's .vdf is in addons only while the editor starts the game: a game started from Steam without -insecure
+// loads it too ("Loading unsigned module addons\schemereload"), and the engine then turns off access to VAC-secured
+// servers for that session (seen 2026-10-08). So once the plugin is up (its panels file is there), and whenever the
+// editor finds the game not running, the .vdf is moved aside; Launch puts it back.
+static void RetirePluginVdf()
+{
+	wstring vdf = g_game + L"\\addons\\schemereload.vdf";
+	if ( !g_game.empty() && IsFile( vdf ) )
+		MoveFileExW( vdf.c_str(), ( vdf + L".off" ).c_str(), MOVEFILE_REPLACE_EXISTING );
+}
+
 static void MountHud();
 
 // Starts the game with the plugin. -insecure is for this launch only; it is never saved into the Steam launch options.
@@ -919,7 +930,10 @@ static void OnMessage( const wstring &msg )
 		else if ( GameRunning() )
 			out = PluginLoaded() ? L"running" : L"foreign";
 		else
+		{
 			out = L"idle";
+			RetirePluginVdf(); // (left by a build, or a game that crashed before its plugin was up)
+		}
 	}
 	else if ( op == L"launch" )
 	{
@@ -1259,7 +1273,10 @@ static void OnMessage( const wstring &msg )
 		if ( g_game.empty() || !GameRunning() || !ReadAll( g_game + L"\\addons\\schemereload_panels.txt", data ) )
 			fail( L"game not running with the plugin" );
 		else
+		{
 			out = Decode( data );
+			RetirePluginVdf(); // (the plugin is up: a later game from Steam mustn't load it)
+		}
 	}
 	else if ( op == L"fontfamily" ) // arg = a font file in the HUD (the page copies it in): its family name
 	{

@@ -46,5 +46,7 @@ copy /y "%OUT%\schemereload.dll" "%GAME%\addons\schemereload.dll" >nul || (
 	echo Couldn't copy into addons - is the game running? Quit it and build again.
 	exit /b 1
 )
-copy /y "%~dp0schemereload.vdf" "%GAME%\addons\schemereload.vdf" >nul
+rem (the .vdf that loads it is put in by the editor as it starts the game, and moved aside once the plugin is up:
+rem a game started from Steam without -insecure loads it too, and then can't join VAC-secured servers)
+if exist "%GAME%\addons\schemereload.vdf" move /y "%GAME%\addons\schemereload.vdf" "%GAME%\addons\schemereload.vdf.off" >nul
 echo Installed to %GAME%\addons
