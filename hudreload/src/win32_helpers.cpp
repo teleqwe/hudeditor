@@ -142,3 +142,13 @@ extern "C" void *SR_ModuleBase( const char *name )
 {
 	return (void *)GetModuleHandleA( name );
 }
+
+// Whether a window of this process (the game) is the one in front.
+extern "C" bool SR_GameInFront()
+{
+	HWND fg = GetForegroundWindow();
+	DWORD pid = 0;
+	if ( fg )
+		GetWindowThreadProcessId( fg, &pid );
+	return pid == GetCurrentProcessId();
+}

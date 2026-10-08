@@ -1878,10 +1878,26 @@ static void SendTestTexts()
 	}
 }
 
+// In a map the game keeps the mouse in the middle of its window, also while that window isn't in front (the user lost
+// their cursor while the editor played on the test server, 2026-10-08); its menus free it by asking for the cursor. So
+// while no window of the game is in front, it asks for the cursor too; clicked into, the game has the mouse as usual.
+extern "C" bool SR_GameInFront();
+static void FreeMouseWhileBehind()
+{
+	static bool s_bFreed;
+	bool behind = !SR_GameInFront();
+	if ( g_pSurface && behind != s_bFreed )
+	{
+		g_pSurface->SetCursorAlwaysVisible( behind );
+		s_bFreed = behind;
+	}
+}
+
 static void TimerTick()
 {
 	if ( g_bDisabled )
 		return;
+	SR_SafeCall( FreeMouseWhileBehind );
 	// the editor reloads pictures it changed (menu background, MVP star, box corners) with mat_reloadmaterial, which the
 	// game counts as a cheat: without a server that has sv_cheats 1 (the main menu) it wouldn't run. Only with the editor,
 	// which is the only thing that loads this plugin.

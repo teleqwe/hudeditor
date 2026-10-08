@@ -501,6 +501,8 @@ static void RetirePluginVdf()
 }
 
 static void MountHud();
+static HWND g_launchFront; // the window in front as the editor started the game (see WM_TIMER 5)
+static ULONGLONG g_launchUntil;
 
 // Starts the game with the plugin. -insecure is for this launch only; it is never saved into the Steam launch options.
 static wstring Launch()
@@ -516,6 +518,11 @@ static wstring Launch()
 	WIN32_FILE_ATTRIBUTE_DATA a;
 	if ( GetFileAttributesExW( log.c_str(), GetFileExInfoStandard, &a ) && ( (unsigned long long)a.nFileSizeHigh << 32 | a.nFileSizeLow ) > 8ull << 20 )
 		MoveFileExW( log.c_str(), ( g_game + L"\\console.old.log" ).c_str(), MOVEFILE_REPLACE_EXISTING );
+	// the game comes to the front as it starts, and in a map the game in front locks the mouse in its window: once its
+	// window is up the front goes back to whatever the user had (see WM_TIMER 5), once, so a click into it stays theirs
+	g_launchFront = GetForegroundWindow();
+	g_launchUntil = GetTickCount64() + 180000;
+	SetTimer( g_hwnd, 5, 500, NULL );
 	ShellExecuteW( NULL, L"open", g_steamExe.c_str(), L"-applaunch 240 -insecure -windowed -noborder -novid -condebug", NULL, SW_SHOWNORMAL );
 	return wstring();
 }
@@ -888,14 +895,18 @@ static wstring StartCapture()
 static UINT g_keyVk;
 static POINT g_keyMouse;
 static bool g_keyMouseSaved;
-static void BringEditorBack()
+static void FrontTo( HWND target )
 {
 	HWND fg = GetForegroundWindow();
 	DWORD fgThread = fg ? GetWindowThreadProcessId( fg, NULL ) : 0, me = GetCurrentThreadId();
 	bool attach = fgThread && fgThread != me && AttachThreadInput( me, fgThread, TRUE );
-	SetForegroundWindow( g_hwnd );
+	SetForegroundWindow( target );
 	if ( attach )
 		AttachThreadInput( me, fgThread, FALSE );
+}
+static void BringEditorBack()
+{
+	FrontTo( g_hwnd );
 	if ( g_ctl )
 		g_ctl->MoveFocus( COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC );
 	if ( g_keyMouseSaved )
@@ -1374,6 +1385,15 @@ static void OnMessage( const wstring &msg )
 	{
 		if ( g_game.empty() || !GameCommand( body ) )
 			fail( L"couldn't reach the game" );
+		// a new size brings the game's window to the front (seen 2026-10-08), and in a map it then locks the mouse: the
+		// front goes back to what had it (see WM_TIMER 5)
+		// (not when the game had the front already: the user's choice)
+		else if ( body.find( L"mat_setvideomode" ) != wstring::npos && GetForegroundWindow() != GameWindow() )
+		{
+			g_launchFront = GetForegroundWindow();
+			g_launchUntil = GetTickCount64() + 20000;
+			SetTimer( g_hwnd, 5, 250, NULL );
+		}
 	}
 	else if ( op == L"explore" )
 	{
@@ -1525,6 +1545,18 @@ static LRESULT CALLBACK WndProc( HWND h, UINT m, WPARAM w, LPARAM l )
 				KillTimer( h, 3 );
 				BringEditorBack();
 			}
+			return 0;
+		}
+		if ( w == 5 ) // the game the editor started came to the front: the front goes back to the window the user had
+		{
+			HWND game = GameWindow();
+			if ( game && GetForegroundWindow() == game )
+			{
+				KillTimer( h, 5 );
+				FrontTo( g_launchFront && IsWindow( g_launchFront ) && g_launchFront != game ? g_launchFront : g_hwnd );
+			}
+			else if ( GetTickCount64() > g_launchUntil )
+				KillTimer( h, 5 );
 			return 0;
 		}
 		// --selftest took too long
