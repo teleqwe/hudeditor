@@ -4220,7 +4220,13 @@ function fontRows(file, font) {
   const vars = f && fontVariants(f, font);
   if (!vars || !vars.size) return [];
   const H = live ? live.H : 1080, v = activeVariant(vars, H), p = vars.get(v);
-  const put = (key, val) => save(f, key, val, ['Fonts', font, v]), id = key => `${file}/fonts/${font}/${v}/${key}`.toLowerCase();
+  // a symbol font (Marlett: arrows, ticks, window buttons) looks the same at every height: its face and options go to
+  // every screen height's entry, only the sizes stay this height's (the chat's Marlett has five; changing one left the
+  // others Marlett). (Not entries without yres: HudNumbers' second is a fallback face, not another height.)
+  const symbolic = !!p.yres && (/^marlett/i.test(font) || SYMBOL_FACES.has((p.name || '').toLowerCase()) || +(p.symbol || 0) > 0);
+  const heights = [...vars].filter(([, q]) => q.yres).map(([w]) => w);
+  const put = (key, val) => { for (const w of symbolic && !['tall', 'yres', 'range', 'blur', 'scanlines'].includes(key) ? heights : [v]) save(f, key, val, ['Fonts', font, w]); };
+  const id = key => `${file}/fonts/${font}/${v}/${key}`.toLowerCase();
   // the game's own font of that name, its entry for this screen height (null: the game hasn't this font)
   const gv = gameOf(file) && fontVariants(gameOf(file), font), gp = gv && gv.size ? gv.get(activeVariant(gv, H)) : null, dv = (key, d = null) => gp ? gp[key] ?? d : null;
   const flags = {};
@@ -4275,7 +4281,7 @@ function fontRows(file, font) {
       : 'Gives every resolution its own size, scaled from how it looks now' }));
   split.dataset.q = 'split resolutions yres screen size';
   return [
-    pickRow('Face', p.name || '', () => fontFaces, val => put('name', val), { faces: true, id: id('name'), note: vars.size > 1 ? `Entry "${v}", for ${H}p screens` : '', dflt: dv('name') }),
+    pickRow('Face', p.name || '', () => fontFaces, val => put('name', val), { faces: true, id: id('name'), note: vars.size > 1 ? symbolic ? `Every screen height's entry (a symbol font); Size is ${H}p's` : `Entry "${v}", for ${H}p screens` : '', dflt: dv('name') }),
     size,
     inputRow('Weight', p.weight || '400', val => put('weight', val), { type: 'number', step: 100, min: 0, slider: 1000, undoId: id('weight'), dflt: dv('weight', '400') }),
     inputRow('Blur', p.blur || '0', val => put('blur', val), { type: 'number', step: 1, min: 0, undoId: id('blur'), dflt: dv('blur', '0') }),
