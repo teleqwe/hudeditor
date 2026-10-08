@@ -242,6 +242,13 @@ static void GatherCandidates( SchemeFile &f, CUtlVector< HScheme > &candidates )
 	if ( hDefault && candidates.Find( hDefault ) == -1 )
 		candidates.AddToTail( hDefault );
 	CollectPanelSchemes( TopPanel(), candidates, 0 );
+	// the bomb's screen loads C4Panel.res under the tag "ClientScheme" (client.dll x64 0x230088, 2026-10-08), so its
+	// tag finds the real ClientScheme, and its panels aren't under the root: every scheme loaded is a candidate, the
+	// best match by content wins as for the others (GetIScheme answers NULL past the last)
+	if ( !Q_stricmp( f.label, "C4Panel" ) )
+		for ( HScheme h = 1; h < 64 && g_pSchemeMgr->GetIScheme( h ); ++h )
+			if ( candidates.Find( h ) == -1 )
+				candidates.AddToTail( h );
 }
 
 static bool IsTaken( SchemeFile &f, HScheme h )
