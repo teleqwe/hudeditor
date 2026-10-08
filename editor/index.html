@@ -5125,6 +5125,10 @@ function renderList() {
             waiting.delete('window reset');
             for (const f of back) {
               for (const pic of f.text.match(/replay\/thumbnails\/[^"\s]+/gi) || []) dropPicture(pic); // (on Save, if nothing names it)
+              // the edge lines of boxes added since: borders of their own in the scheme (see setEdge), unused once they go
+              const sf = F(resScheme(f)), had = new Set((f.opened.match(/HudEditorEdge_\w+/gi) || []).map(n => n.toLowerCase()));
+              for (const name of new Set(f.text.match(/HudEditorEdge_\w+/gi) || []))
+                if (sf && !had.has(name.toLowerCase())) commit(sf, `${sf.name}/${name}/remove`, () => dropBlock(sf, ['Borders'], name), group);
               commit(f, `${f.name}/reset`, () => f.opened, group);
             }
             if (!waiting.size && renderAfterSave) writing.then(() => { renderAfterSave = false; render(); });
