@@ -1322,9 +1322,13 @@ async function uiFile(path) {
   if (!path) return null;
   const have = F(path);
   if (have) return have;
-  const text = (await readHud(path)) ?? (host ? await call('vanilla', path.split('/').pop()).catch(() => null) : null);
+  const own = await readHud(path), text = own ?? (host ? await call('vanilla', path.split('/').pop()).catch(() => null) : null);
   if (text == null) return null;
-  const f = { name: path, path, text, parsed: parse(text), bases: [] };
+  // (gameCopy: the game's text, for a file the HUD hadn't: changed and back to it, Save leaves it out, see dropUnused;
+  // not for one that's there but couldn't be read)
+  // (the chat's BaseChat.res isn't one: the editor's copy leaves out the game's chat block, which would move the chat)
+  const made = own == null && host && path !== UI_RES.hudchat && await call('exists', path).catch(() => '1') === '0';
+  const f = { name: path, path, text, parsed: parse(text), bases: [], ...(made ? { gameCopy: text } : {}) };
   files.push(f);
   return f;
 }
@@ -1946,6 +1950,9 @@ async function dropUnused() {
   for (const p of SQUARE_CORNERS) if (!dropped.has(p)) dropped.set(p, () => sq ??= squareUsed());
   for (const [path, used] of dropped) if (!(await used())) await call('remove', path).catch(err => status(`Couldn't remove ${path}: ${err.message}`));
   dropped.clear();
+  // a window's file the HUD didn't have, changed and changed back: the game's own again, so not kept as a copy (the
+  // game reads its own; one not written yet isn't there, which remove leaves alone)
+  for (const f of files) if (f.gameCopy != null && f.opened != null && f.text === f.gameCopy) await call('remove', f.path).catch(err => status(`Couldn't remove ${f.path}: ${err.message}`));
 }
 const CUSTOM = {
   imagepanel: { word: 'Picture', layoutColours: [['Tint', 'drawcolor', '255 255 255 255']], settings: [['Layer', 'zpos', 'num', '1', 'Higher is in front']] },
