@@ -2307,7 +2307,10 @@ function addRows(lay = F(L)) {
     el('button', { textContent: '+ Text', onclick: () => addToHud('text', null, lay) }), el('button', { textContent: '+ Colour box', onclick: () => addToHud('box', null, lay) }));
   if (lay !== F(L)) {
     r.dataset.q = 'add picture gif text box window';
-    return [...addedList(lay), r, ...(lay.name === UI_RES.buy_ct ? [noteRow('The buy menu reads its file when the game makes it: what\'s added shows after a game restart (the ⚠ by Save HUD).')] : []),
+    return [...addedList(lay), r, ...(lay.name === UI_RES.buy_ct ? [noteRow('What\'s added goes into both sides\' buy menu and every page, and shows straight away while the buy menu is open.')] : []),
+      // (a Label whose text starts and ends with one of its window's dialog variables shows the values, every %name% in
+      // it; one starting or ending with a word prints as typed, seen 2026-10-09)
+      ...(lay.name === UI_RES.scores ? [noteRow('A text that starts and ends with one of the scoreboard\'s values shows them live: %mapname%, %ct_teamname%, %t_teamname%, %ct_totalteamscore%, %t_totalteamscore%, %ct_alivecount%, %t_alivecount%, %spectators%, %sourcetv% ("%ct_totalteamscore% - %t_totalteamscore%" works; "CT %ct_totalteamscore%" prints as typed: put the word in a text of its own).')] : []),
       ...(lay.name === UI_RES.specgui ? [noteRow('These show only while spectating, with the bars. The bars\' own grey is fixed by the game: hide them under Show or hide and put a colour box in their place.')] : [])];
   }
   r.dataset.q = 'add picture image gif logo text label box colour background';
