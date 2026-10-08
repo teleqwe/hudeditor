@@ -2788,6 +2788,7 @@ function colorRow(label, note, value, onChange, keys = [], dflt = null, where = 
   if (note) meta.append(renameable(note));
   row.dataset.keys = keys.join(' + '); // shown over the section's title (see card)
   row.append(name, rgb, undo, meta);
+  row.show = c => { rgba = toRgba(c); show(); }; // (a value set elsewhere, shown without writing it)
   show();
   row.dataset.q = `${label} ${note} ${keys.join(' ')}`.toLowerCase();
   return row;
@@ -3593,9 +3594,11 @@ function borderRows(file, name) {
     for (const s of SIDES) boxes[s].checked = cur.on[s] = true;
     undo.update(on()); status(`The border had no sides: all four are ticked now, so the ${what} shows. Untick the ones you don't want.`);
   };
+  const sideRows = {};
   const colour = v => {
     cur.colour = v;
-    cur.side = {}; // (every side this colour)
+    cur.side = {}; // (every side this colour: their rows show it)
+    for (const r of Object.values(sideRows)) r.show(v);
     if (toRgba(v)[3] > 0) allOn('colour');
     write();
   };
@@ -3604,7 +3607,7 @@ function borderRows(file, name) {
     inputRow('Thickness', String(cur.n), v => { if (+v !== +cur.n) allOn('thickness'); cur.n = v; write(); }, { type: 'number', min: 1, max: 8, step: 1, title: 'pixels', undoId: `${file}/${name}/thickness`, dflt: game ? String(game.n) : null }),
     sides,
     // each ticked side's own colour (the game draws every side's lines in their own colour: its raised borders are two)
-    ...['Top', 'Right', 'Bottom', 'Left'].filter(s => cur.on[s]).map(s => colorRow(`${s} side`, 'This side only', cur.side[s] || cur.colour,
+    ...['Top', 'Right', 'Bottom', 'Left'].filter(s => cur.on[s]).map(s => sideRows[s] = colorRow(`${s} side`, 'This side only', cur.side[s] || cur.colour,
       v => { cur.side = { ...cur.side, [s]: v }; write(); }, [name], game && (game.side[s] || game.colour), file))];
   const notes = [cur.mixed && 'The HUD gives this border more than one colour: Border colour makes every side one colour, the side rows change one each.',
     b && b.name.toLowerCase() !== name.toLowerCase() && `Now the same as ${b.name}; a change here gives this one its own.`,
@@ -6557,6 +6560,15 @@ if (host && location.hash === '#hosttest') (async () => {
     check(/HudHealth\s*\{\s*"xpos"\t\t"20"/.test(await readHud('scripts/HudLayout.res') || ''), 'position written into the HUD');
     check(await call('save') === '3' && !(await call('save').then(n => +n)), 'Save HUD keeps the 3 changed files, then has nothing to keep');
     setDirty(false);
+    { // Border colour shows on every side row at once (they'd keep their old colours until the list was drawn again)
+      const realSave = save;
+      try {
+        save = () => {};
+        const rows = borderRows(C, 'ButtonBorder'), sides = rows.filter(r => / side$/.test(r.querySelector('input[aria-label]')?.getAttribute('aria-label').split(':')[0] || ''));
+        const red = rows[0].querySelector('input[type=number]'); red.value = '7'; red.oninput();
+        check(sides.length && sides.every(r => r.querySelector('input[type=number]').value === '7'), `the side rows follow Border colour (${sides.length} sides)`);
+      } finally { save = realSave; }
+    }
     { // team select's map info box: its own Text colour (does nothing) left out, with a note
       const rows = deadOwn({ name: 'resource/UI/TeamMenu.res' }, 'MapInfo', [colorRow('Text', '', '1 2 3 255', () => {}, []), colorRow('Background', '', '1 2 3 255', () => {}, [])]);
       check(rows.length === 2 && rows[0].querySelector('.rename').textContent === 'Background' && rows[1].classList.contains('note'), `the map info box has no own Text row (${rows.map(r => r.className)})`);
