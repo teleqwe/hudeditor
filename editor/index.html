@@ -1972,12 +1972,12 @@ function dropPicture(image) {
   if (!/^replay\/thumbnails\//i.test(image || '')) return; // the editor's own pictures only
   for (const ext of ['vtf', 'vmt']) dropped.set(`materials/vgui/${image}.${ext}`, namedAnywhere(image));
 }
-const SQUARE_CORNERS = [1, 2, 3, 4].flatMap(i => ['vmt', 'vtf'].map(ext => `materials/vgui/hudeditor/square_corner${i}.${ext}`));
+const SQUARE_CORNERS = [1, 2, 3, 4].flatMap(i => ['vmt', 'vtf'].map(ext => `materials/vgui/replay/thumbnails/hudeditor_square_corner${i}.${ext}`));
 async function dropUnused() {
   // the square corner images (setCorners) once no box is square, however the last one went: back to rounded, undone,
   // removed, in an earlier session (a file that isn't there is left alone)
   let sq = null;
-  const squareUsed = namedAnywhere('hudeditor/square_corner');
+  const squareUsed = namedAnywhere('hudeditor_square_corner');
   for (const p of SQUARE_CORNERS) if (!dropped.has(p)) dropped.set(p, () => sq ??= squareUsed());
   for (const [path, used] of dropped) if (!(await used())) await call('remove', path).catch(err => status(`Couldn't remove ${path}: ${err.message}`));
   dropped.clear();
@@ -2404,7 +2404,7 @@ const LOGO_WINDOWS = new Set(['team', 'class_ct', 'class_ter', 'info', 'buy_ct',
 // alpha; trans_background is clear), drawn by the game. The HUD's own materials of those names, white and tinted
 // ($color), colour it; the game reads a material's texture once, so it shows after a restart (seen 2026-10-08). The
 // corners are the exe's "round" corner textures (a quarter circle, as the game's).
-const BD_PIECES = [['solid_background', 'vgui/white'], ...['nw', 'ne', 'se', 'sw'].map((k, i) => [`round_corner_${k}`, `vgui/hudeditor/round_corner${i + 1}`])];
+const BD_PIECES = [['solid_background', 'vgui/white'], ...['nw', 'ne', 'se', 'sw'].map((k, i) => [`round_corner_${k}`, `vgui/replay/thumbnails/hudeditor_round_corner${i + 1}`])];
 const BD_PATH = n => `materials/vgui/gfx/vgui/${n}.vmt`;
 const bdGame = n => `UnlitGeneric\n{\n\t"$translucent" 1\n\t"$basetexture" "vgui/gfx/vgui/${n}"\n\t"$vertexcolor" 1\n\t"$vertexalpha" 1\n\t"$no_fullbright" 1\n\t"$ignorez" 1\n}\n`;
 const bdText = (tex, rgb) => `// The box behind the in-game windows, tinted (HUD editor)\nUnlitGeneric\n{\n\t"$translucent" 1\n\t"$basetexture" "${tex}"\n`
@@ -6758,7 +6758,7 @@ if (host && location.hash === '#hosttest') (async () => {
       const back = backdropColour();
       files.splice(files.indexOf(F(BD_PATH('solid_background'))), 1);
       if (keepBd) files.push(keepBd);
-      check(back === '255 0 255 255' && /"\$color" "\[1\.000 0\.000 1\.000\]"/.test(t) && BD_PIECES[3][1] === 'vgui/hudeditor/round_corner3',
+      check(back === '255 0 255 255' && /"\$color" "\[1\.000 0\.000 1\.000\]"/.test(t) && BD_PIECES[3][1] === 'vgui/replay/thumbnails/hudeditor_round_corner3',
         `the windows' box is tinted through its materials (${back})`);
       const saved = [], realSave = save, spec = { name: UI_RES.specgui, path: UI_RES.specgui, bases: [], text: '"r"\n{\n"topbar"\n{\n"tall" "52"\n}\n}' };
       spec.parsed = parse(spec.text);
@@ -6820,7 +6820,7 @@ if (host && location.hash === '#hosttest') (async () => {
     }
     { // (after Save: the corners are files of their own) the windows' box corners, a quarter circle as the game's
       const corners = await call('corners', 'round').catch(e => e.message);
-      check(corners === 'vgui/hudeditor/round_corner' && (await call('exists', 'materials/vgui/hudeditor/round_corner4.vtf')) === '1', `round corners for the windows' box (${corners})`);
+      check(corners === 'vgui/replay/thumbnails/hudeditor_round_corner' && (await call('exists', 'materials/vgui/replay/thumbnails/hudeditor_round_corner4.vtf')) === '1', `round corners for the windows' box (${corners})`);
     }
     await openHud(path); // fresh copy of the saved HUD
     check((await readHud('resource/ClientScheme.res')).includes('"Panel.FgColor"\t\t"1 2 3 255"') && layoutProps(F(L), 'HudHealth').xpos === '20', 'saved changes are in the HUD');
@@ -6882,7 +6882,7 @@ if (host && location.hash === '#hosttest') (async () => {
     }
     {
       // square corner images: named while a box is square, let go (to go on Save) once none is
-      const used = namedAnywhere('hudeditor/square_corner');
+      const used = namedAnywhere('hudeditor_square_corner');
       await setCorners(F(L), 'HudHealth', true); await sleep(400); await writing;
       const made = await call('exists', SQUARE_CORNERS[1]), usedSquare = await used();
       await setCorners(F(L), 'HudHealth', false); await sleep(400); await writing;

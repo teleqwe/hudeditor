@@ -290,6 +290,8 @@ static bool CornerInside( const wstring &shape, double u, double v )
 }
 
 // VTF 7.2, BGRA8888, 64x64 with its mipmaps, plus the material. Returns the name for Texture1-4 without the number.
+// (in vgui/replay/thumbnails, the folder the game lets past sv_pure: in vgui/hudeditor a server at sv_pure 2 refused
+// them, "error loading vmt file", 2026-10-08)
 static wstring WriteCorners( const wstring &shape )
 {
 	const int S = 64, MIPS = 7, AA = 4;
@@ -335,7 +337,7 @@ static wstring WriteCorners( const wstring &shape )
 		for ( int m = MIPS - 1; m >= 0; --m ) // smallest first
 			for ( unsigned char a : mips[m] )
 				vtf += string( 3, '\xff' ) + (char)a;
-		wstring name = L"vgui\\hudeditor\\" + shape + L"_corner" + std::to_wstring( c );
+		wstring name = L"vgui\\replay\\thumbnails\\hudeditor_" + shape + L"_corner" + std::to_wstring( c );
 		string vmt = "\"UnlitGeneric\"\r\n{\r\n\t\"$basetexture\" \"" + Utf8( name ) + "\"\r\n\t\"$translucent\" \"1\"\r\n\t\"$vertexcolor\" \"1\"\r\n"
 			"\t\"$vertexalpha\" \"1\"\r\n\t\"$ignorez\" \"1\"\r\n\t\"$no_fullbright\" \"1\"\r\n}\r\n";
 		std::replace( vmt.begin(), vmt.end(), '\\', '/' );
@@ -344,7 +346,7 @@ static wstring WriteCorners( const wstring &shape )
 		if ( !WriteAll( path + L".vtf", vtf ) || !WriteAll( path + L".vmt", vmt ) )
 			return L"";
 	}
-	return L"vgui/hudeditor/" + shape + L"_corner";
+	return L"vgui/replay/thumbnails/hudeditor_" + shape + L"_corner";
 }
 
 // ---------- settings: recent HUD folders ----------
@@ -1248,7 +1250,7 @@ static void OnMessage( const wstring &msg )
 		else
 			out = Decode( data );
 	}
-	else if ( op == L"corners" ) // box corner textures in a shape: "vgui/hudeditor/<shape>_corner" (+ 1-4)
+	else if ( op == L"corners" ) // box corner textures in a shape: "vgui/replay/thumbnails/hudeditor_<shape>_corner" (+ 1-4)
 	{
 		if ( arg != L"bevel" && arg != L"scoop" && arg != L"tight" && arg != L"square" && arg != L"round" )
 			fail( L"unknown corner shape" );
