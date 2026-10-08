@@ -1930,8 +1930,9 @@ function loadingShowRows(f) {
 // ---------- things added to the HUD ----------
 // Pictures, texts and colour boxes: HudLayout blocks named hudeditor_<kind><n>. The game makes any control a HudLayout
 // block names (ControlName) when it reloads the HUD. Pictures go in materials/vgui/replay/thumbnails, where HUD makers
-// put theirs (TF2 lets that folder past sv_pure; CS:S's pure_server_full.txt doesn't name it, so on sv_pure 1/2
-// servers pictures are blocked like any material). An animated one (GIF) plays with the AnimatedTexture proxy.
+// put theirs: the game lets that folder past sv_pure as TF2 does (seen 2026-10-08: a player's game, no plugin, showed
+// a HUD's pictures on a server at sv_pure 2, whose pure_server_full.txt doesn't name the folder). An animated one (GIF)
+// plays with the AnimatedTexture proxy.
 const PICTURES = 'materials/vgui/replay/thumbnails';
 // Files the editor made that may be used by nothing now (a removed or changed picture, an old menu background): they
 // go (to the Recycle Bin) when the HUD is saved, unless something uses them again by then (an undo). path -> used()
@@ -2242,7 +2243,7 @@ function addRows(lay = F(L)) {
   }
   r.dataset.q = 'add picture image gif logo text label box colour background';
   return [...addedList(), r, noteRow('These go on the HUD you see while playing, in the middle of the screen, over the game (HudLayout). For a window (scoreboard, team select, class select, MOTD), open it, click it in the preview and use its Custom tab.'),
-    noteRow('Pictures are materials, which servers with sv_pure 1 or 2 replace with the game\'s own, so there they don\'t show. Texts, boxes, colours and fonts show everywhere.')];
+    noteRow('These show on every server, sv_pure ones too (pictures are kept where the game lets them past sv_pure: seen on a fully pure server).')];
 }
 
 // ---------- scoreboard: everything it draws, in one place ----------
