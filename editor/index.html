@@ -949,7 +949,7 @@ async function loadAll() {
 // what ↺ puts back. Loaded once, at start.
 const GAME = {};
 async function loadGame() {
-  const put = (name, text) => { GAME[name.toLowerCase()] = { name, parsed: parse(text), bases: [] }; };
+  const put = (name, text) => { GAME[name.toLowerCase()] = { name, text, parsed: parse(text), bases: [] }; };
   put(GM, GAME_MENU);
   if (!host) return;
   const res = [...new Set([...Object.values(UI_RES), ...Object.values(BUY_PAGES), ...SB_PAGES, LOADING_VAC, C4])];
@@ -1325,6 +1325,31 @@ const BUY_PAGES = { buysubmenu_ct: 'resource/UI/BuyMenu_CT.res', buysubmenu_ter:
 // screen's VAC one, the buy menu's main page, the class pages.
 const windowFiles = sel => [UI_RES[sel.info.id], sel.info.id === 'loadingdialog' && LOADING_VAC, BUY_PAGES[`buysubmenu_${sel.info.id.replace(/^buy_/, '')}`],
   ...(CLASS_PAGES[sel.info.id] || []).map(classPage)].filter(Boolean).map(p => F(p)).filter(Boolean);
+// The game's window: its files as the game has them (every part, the added ones gone), one Ctrl+Z. Reset window goes back
+// to how the HUD was opened, which for a HUD that had the window already is its own look.
+function gameWindowRows(sel) {
+  const fs = windowFiles(sel).filter(f => gameOf(f.name)?.text != null);
+  if (!fs.length) return [];
+  const go = el('button', { className: 'ghost', textContent: 'The game\'s window', onclick: () => {
+    const change = fs.filter(f => f.text !== gameOf(f.name).text);
+    if (!change.length) return status('This window is the game\'s already.');
+    if (!confirm('Put this whole window back as the game has it? Every part goes back to the game\'s place and colours, and what was added to it goes (Ctrl+Z brings it all back).')) return;
+    const group = burstGroup();
+    for (const f of change) {
+      for (const pic of f.text.match(/replay\/thumbnails\/[^"\s]+/gi) || []) dropPicture(pic); // (on Save, if nothing names it)
+      // the edge lines of its added boxes: borders of their own in the scheme (see setEdge), unused once they go
+      const sf = F(resScheme(f));
+      for (const name of new Set(f.text.match(/HudEditorEdge_\w+/gi) || [])) if (sf) commit(sf, `${sf.name}/${name}/remove`, () => dropBlock(sf, ['Borders'], name), group);
+      commit(f, `${f.name}/gamewindow`, () => gameOf(f.name).text, group);
+    }
+    writing.then(() => { status('The window is the game\'s again (Ctrl+Z brings yours back).'); render(); });
+    refreshSoon();
+  } });
+  const row = el('div', { className: 'row action' });
+  row.append(go);
+  row.dataset.q = 'game window default start over reset';
+  return [row, noteRow('Every part of this window as the game has it, the parts added to it gone: to start it over. (↺ Reset window at the bottom goes back to how it was when the HUD was opened.)')];
+}
 function resPath(sel) {
   for (let p = sel.node || sel.control; p; p = p.parent) if (BUY_PAGES[p.key]) return BUY_PAGES[p.key];
   return sel.thing.key === 'loadingdialog' && loadingVac ? LOADING_VAC : UI_RES[sel.thing.key];
@@ -5074,6 +5099,7 @@ function selectionSections(sel) {
     if (EXTRA[info.id]) add('colour', `Colours: ${info.name.toLowerCase()}`, schemeRows(S, EXTRA[info.id]).concat(info.file === C ? schemeRows(C, EXTRA[info.id]) : []));
     if (info.id === 'specgui' && sel.res) add('border', 'Border: spectator bars', panelBorderRows(sel.res, ['topbar', 'bottombarblank'], SPEC_BORDER));
     if (info.id === 'specmenu') add('custom', 'Drop-down menus', specMenuRows());
+    if (!control && !sel.node && UI_RES[info.id]) add('other', 'Start over', gameWindowRows(sel));
     if (CMD_WINDOWS.has(info.id)) add('custom', 'Command buttons', commandRows(sel));
     if (CMD_WINDOWS.has(info.id) && sel.res) add('layout', 'Button places', buttonPlaceRows(sel.res));
     // the MOTD's parts: its message boxes are empty (so not there to click) until a server sends one
