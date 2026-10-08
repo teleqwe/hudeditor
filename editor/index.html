@@ -1061,6 +1061,8 @@ function setDirty(d) {
 
 // Changes the game only reads when it starts: a ⚠ by Save until the game restarts (see poll); a click lists them, with a
 // button that restarts the game.
+// A .res file's settings without the editor's own blocks (hudeditor_...): what the game's own controls get.
+const gameBlocks = text => parse(text).entries.filter(e => !/^hudeditor/i.test(e.path[1] || '')).map(e => `${e.path.join('/')}|${e.key}|${e.value}`).join('\n');
 const RESTART_FILES = [[/^resource\/GameMenu\.res$/i, 'main menu buttons'], [/^servers\//i, 'server browser'], [/^resource\/UI\/BuyMenu/i, 'buy menu']];
 const restartFor = new Set();
 // (kept for the HUD while the game runs, so the editor opened again over a running game still shows it)
@@ -1232,7 +1234,9 @@ function commit(f, id, edit, group = null, force = false) {
       Object.assign(f, { text: next, parsed: parse(next) });
       setDirty(true);
       const later = RESTART_FILES.find(([re]) => re.test(f.path));
-      if (later) needRestart(later[1]);
+      // (the buy menu's own file: what the editor adds to it is made and placed live by the plugin; only the game's
+      // own controls in it wait for a restart)
+      if (later && !(/BuyMenu\.res$/i.test(f.path) && gameBlocks(step.text) === gameBlocks(next))) needRestart(later[1]);
       // (class select's ClassInfo: copied to each class's page as the menu is made, see classPictureRows)
       if (/ClassMenu_(CT|TER)\.res$/i.test(f.path) && /\bclassinfo\b/i.test(id)) needRestart('class pictures');
       status('Changed in game. Click Done or Save HUD to keep it.');
@@ -2149,7 +2153,6 @@ async function addToHud(kind, file, lay = F(L)) {
   await writing;
   if (!inWindow) return select({ thing: { name, key: name.toLowerCase() }, info: customInfo(name), control: null });
   if (box && !loadingUp()) { status('Added: its settings are under Custom and Layout here. Show the box (top of this page) to see it.'); return refreshSoon(); }
-  if (STARTUP_RES.has(win.info.id)) { status('Added: the buy menu shows it after a game restart (the ⚠ by Save HUD). Then click it in the preview to change it.'); return select({ ...win, control: null, node: null }); }
   // in a window: selected as if clicked (clicked again until it's the one, if something is over its middle), once the
   // game has made it
   for (let i = 0; i < 20; i++) {
@@ -2222,9 +2225,7 @@ function addedList(lay = F(L)) {
     // (a window's part as the game shows it now, else none: the window is closed or the part is off screen)
     const panel = live && (inWindow ? win && live.panels.find(q => q.thing && q.thing.key === win.key && q.key === id.toLowerCase())
       : live.panels.find(q => q === q.thing && q.key === id.toLowerCase()));
-    const later = inWindow && STARTUP_RES.has(win && win.key); // (the buy menu: made with the menu, at game start)
     const pickIt = el('button', { textContent: 'Select', disabled: inWindow && !panel, title: panel || !inWindow ? 'Select it, as a click on it in the preview would'
-      : later ? 'Open the buy menu to select it. One added since the game started shows after a restart: its settings are listed under the buy menu meanwhile'
       : 'Open the window in the game to select it' });
     pickIt.onclick = () => { $('search').value = ''; select(inWindow ? { thing: panel.thing, info: thingInfo(panel.thing), control: controlIn(panel, panel.thing) ? panel : null, node: panel } : { thing: panel || { name: id, key: id.toLowerCase() }, info: customInfo(id), control: null }); };
     r.setAttribute('aria-current', String(!!selected && (inWindow ? !!selected.node && selected.node.key === id.toLowerCase() : selected.info.id === id)));
@@ -4871,7 +4872,7 @@ function selectionSections(sel) {
     const p = layoutProps(sel.res, own.block), name = partName(sel) || (/^hudeditor/i.test(own.block) && p.labeltext ? `"${p.labeltext}"` : prettify(own.block));
     add('colour', `${name}: this ${own.what} only`, [
       noteRow(`Only ${name}${name !== own.block ? ` (${own.block})` : ''} in ${sel.res.name.split('/').pop()} changes here. Further down: the colours ${own.what === 'part' ? 'it shares with others like it' : `every ${own.what} shares`}.`),
-      ...(STARTUP_RES.has(info.id) ? [noteRow('The buy menu reads its own settings when the game makes it: these show after a game restart. The shared colours and fonts below change straight away.')] : []),
+      ...(STARTUP_RES.has(info.id) && !/^hudeditor/i.test(own.block) ? [noteRow('The buy menu reads its own settings when the game makes it: these show after a game restart. The shared colours and fonts below change straight away.')] : []),
       ...mine(deadOwn(sel.res, own.block, resRows(sel.res, own.block, own.defaults, schemeOf(sel.thing), own.ctl)))]);
   }
   if (own && /^hudeditor_(pic|text|box)/i.test(own.block)) add('colour', `What this ${own.block.replace(/^hudeditor_|\d+$/gi, '').replace('pic', 'picture')} shows`, mine(customRows(own.block, sel.res)));
@@ -4936,7 +4937,7 @@ function selectionSections(sel) {
       // what's added that isn't on screen to be clicked (the box is closed, or it's hidden: moved off)
       if (sel.res && !control && !sel.node) addedSections(sel.res, S, add, b => partHidden(sel.res, b) || !(live && live.panels.some(q => q.thing && q.thing.key === 'loadingdialog' && q.key === b.toLowerCase())));
     }
-    // the buy menu makes what's added only when the game makes the menu: until a restart it can't be clicked
+    // what's added to the buy menu while it's closed: listed here, as it can't be clicked
     if (STARTUP_RES.has(info.id) && addLay && !control && !sel.node)
       addedSections(addLay, C, add, b => !(live && live.panels.some(q => q.thing && q.thing.key === sel.thing.key && q.key === b.toLowerCase())));
   }

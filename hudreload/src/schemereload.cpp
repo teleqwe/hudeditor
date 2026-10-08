@@ -1081,8 +1081,11 @@ static void ReapplyLayouts()
 	// inside FreezePanelBG, which applies them to its own children)
 	static const char *s_Res[][2] = { { "team", "Resource/UI/TeamMenu.res" }, { "class_ct", "Resource/UI/ClassMenu_CT.res" },
 		{ "class_ter", "Resource/UI/ClassMenu_TER.res" }, { "info", "Resource/UI/TextWindow.res" },
-		{ "WinPanel_Round", "Resource/UI/Win_Round.res" }, { "FreezePanel", "Resource/UI/FreezePanel_Basic.res" } };
-	// (not the buy menus: re-applying BuyMenu_CT.res's blocks to the open buy menu made the next panel refresh crash)
+		{ "WinPanel_Round", "Resource/UI/Win_Round.res" }, { "FreezePanel", "Resource/UI/FreezePanel_Basic.res" },
+		{ "buy_ct", "Resource/UI/BuyMenu.res" }, { "buy_ter", "Resource/UI/BuyMenu.res" } };
+	// (the buy menus (from FIRST_ONLY_MINE on): only the editor's own blocks, the pictures, texts and boxes it adds;
+	// re-applying the game's own, BuyMenu_CT.res's, to the open buy menu made the next panel refresh crash, 2026-10-02)
+	const int FIRST_ONLY_MINE = 6;
 	int slot = g_ApplySlot = SlotApplySettings();
 	if ( slot <= 0 || SlotLabelSetFont() != 0x710 / 8 )
 		return;
@@ -1100,7 +1103,7 @@ static void ReapplyLayouts()
 		}
 		for ( KeyValues *b = res ? res->GetFirstTrueSubKey() : NULL; b; b = b->GetNextTrueSubKey() )
 		{
-			if ( i < 4 && IsCodeMade( b->GetName() ) )
+			if ( ( i < 4 && IsCodeMade( b->GetName() ) ) || ( i >= FIRST_ONLY_MINE && !IsEditorBlock( b->GetName() ) ) )
 				continue;
 			VPANEL p = FindNamed( win, b->GetName(), 0 );
 			void *panel = p ? g_pVPanel->GetPanel( p, "ClientDLL" ) : NULL;
