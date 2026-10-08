@@ -3523,13 +3523,14 @@ function readBorder(f, n) {
   return { props, sides, base };
 }
 
-// The border as tick boxes: which sides draw, how many pixels thick and one colour (mixed: the HUD's sides differ).
+// The border as tick boxes: which sides draw, how many pixels thick, one colour (mixed: the HUD's sides differ) and each
+// drawn side's own (side: its first line's; null for one that doesn't draw).
 function borderState(b, t) {
   const col = l => resolve(t, l.color || '') || '0 0 0 0';
   const shown = SIDES.map(s => (b ? b.sides[s] : []).filter(l => toRgba(col(l))[3] > 0));
   const colours = [...new Set(shown.flat().map(col))];
   return { on: Object.fromEntries(SIDES.map((s, i) => [s, shown[i].length > 0])), n: Math.max(1, ...shown.map(v => v.length)),
-    colour: colours[0] || '255 255 255 255', mixed: colours.length > 1 };
+    colour: colours[0] || '255 255 255 255', mixed: colours.length > 1, side: Object.fromEntries(SIDES.map((s, i) => [s, shown[i].length ? col(shown[i][0]) : null])) };
 }
 
 // Whether any border in a scheme (its own blocks over #base's, as the game merges them) still draws with one of these
@@ -3549,8 +3550,8 @@ function borderBody(st, b) {
   const body = [['inset', SIDES.map(s => st.on[s] ? n : 0).join(' ')]]; // left top right bottom
   if (b && b.props.backgroundtype) body.push(['backgroundtype', b.props.backgroundtype]);
   for (const s of SIDES) {
-    const count = Math.max(n, (b && b.base[s]) || 0, (b && b.sides && b.sides[s].length) || 0);
-    body.push([s, Array.from({ length: count }, (_, i) => [String(i + 1), [['color', st.on[s] && i < n ? st.colour : `${toRgba(st.colour).slice(0, 3).join(' ')} 0`], ['offset', '0 0']]])]);
+    const count = Math.max(n, (b && b.base[s]) || 0, (b && b.sides && b.sides[s].length) || 0), c = (st.side && st.side[s]) || st.colour;
+    body.push([s, Array.from({ length: count }, (_, i) => [String(i + 1), [['color', st.on[s] && i < n ? c : `${toRgba(c).slice(0, 3).join(' ')} 0`], ['offset', '0 0']]])]);
   }
   return body;
 }
@@ -3579,7 +3580,7 @@ function borderRows(file, name) {
   const sides = el('div', { className: 'row sides' }), opts = el('div', { className: 'opts' }), on = () => sidesOf(cur);
   const boxes = {}, undo = undoArrow(`${file}/${name}/sides`, on(), v => v, v => { for (const s of SIDES) boxes[s].checked = cur.on[s] = v.split(', ').includes(s); write(); }, true);
   opts.append(...['Top', 'Right', 'Bottom', 'Left'].map(s => {
-    const l = el('label'), box = boxes[s] = el('input', { type: 'checkbox', checked: cur.on[s], onchange: () => { cur.on[s] = box.checked; undo.update(on()); write(); } });
+    const l = el('label'), box = boxes[s] = el('input', { type: 'checkbox', checked: cur.on[s], onchange: () => { cur.on[s] = box.checked; undo.update(on()); write(); refreshSoon(); } }); // (its colour row comes and goes)
     l.append(box, s);
     return l;
   }));
@@ -3594,14 +3595,18 @@ function borderRows(file, name) {
   };
   const colour = v => {
     cur.colour = v;
+    cur.side = {}; // (every side this colour)
     if (toRgba(v)[3] > 0) allOn('colour');
     write();
   };
   const rows = [colorRow('Border colour', 'The ticked sides', cur.colour, colour, [name], game && game.colour, file),
     // (allOn only for a new value: − at 1 and + at 8 change nothing)
     inputRow('Thickness', String(cur.n), v => { if (+v !== +cur.n) allOn('thickness'); cur.n = v; write(); }, { type: 'number', min: 1, max: 8, step: 1, title: 'pixels', undoId: `${file}/${name}/thickness`, dflt: game ? String(game.n) : null }),
-    sides];
-  const notes = [cur.mixed && 'The HUD gives this border more than one colour; a change here makes every side this colour.',
+    sides,
+    // each ticked side's own colour (the game draws every side's lines in their own colour: its raised borders are two)
+    ...['Top', 'Right', 'Bottom', 'Left'].filter(s => cur.on[s]).map(s => colorRow(`${s} side`, 'This side only', cur.side[s] || cur.colour,
+      v => { cur.side = { ...cur.side, [s]: v }; write(); }, [name], game && (game.side[s] || game.colour), file))];
+  const notes = [cur.mixed && 'The HUD gives this border more than one colour: Border colour makes every side one colour, the side rows change one each.',
     b && b.name.toLowerCase() !== name.toLowerCase() && `Now the same as ${b.name}; a change here gives this one its own.`,
     BORDER_SHARED[name] && `Also changes ${BORDER_SHARED[name]}.`].filter(Boolean);
   if (notes.length) rows.push(noteRow(notes.join(' ')));
@@ -6136,6 +6141,11 @@ async function parserCheck() {
     const rs = borderState(raised, bt), none = borderState(borderOf('b', 'FrameBorder'), bt);
     check(SIDES.every(s => rs.on[s]) && rs.n === 1 && rs.colour === '200 200 200 255' && rs.mixed, 'border sides, thickness and colours read from its lines');
     check(!SIDES.some(s => none.on[s]), 'empty border: no sides');
+    // each side its own colour: read from its first line, written per side (a side without one takes the border's)
+    const own = borderBody({ on: { Left: true, Top: true, Right: true, Bottom: true }, n: 1, colour: '1 2 3 255', side: { ...rs.side, Top: '9 9 9 255', Left: null } }, raised);
+    const first = s => own.find(([k]) => k === s)[1][0][1][0][1];
+    check(rs.side.Top && rs.side.Right && first('Top') === '9 9 9 255' && first('Right') === rs.side.Right && first('Left') === '1 2 3 255',
+      `each border side keeps its own colour (${SIDES.map(first)})`);
     const body = borderBody({ on: { Left: true, Top: true, Right: true, Bottom: false }, n: 1, colour: '1 2 3 255' }, raised);
     const side = s => body.find(([k]) => k === s)[1];
     check(side('Right').length === 2 && side('Right')[1][1][0][1] === '1 2 3 0', 'lines #base has beyond the thickness are written clear');
