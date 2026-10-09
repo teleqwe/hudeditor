@@ -2037,7 +2037,7 @@ async function dropUnused() {
 }
 const CUSTOM = {
   imagepanel: { word: 'Picture', layoutColours: [['Tint', 'drawcolor', '255 255 255 255']], settings: [['Layer', 'zpos', 'num', '1', 'Higher is in front']] },
-  label: { word: 'Text', layoutColours: [['Text', 'fgcolor_override', '255 255 255 255']], fontKeys: [['Font', 'font', 'Default']],
+  label: { word: 'Text', layoutColours: [['Text', 'fgcolor_override', '255 255 255 255']], fontKeys: [['Font group', 'font', 'Default']],
     settings: [['Align', 'textAlignment', [['west', 'Left'], ['center', 'Centre'], ['east', 'Right']], 'west'], ['Layer', 'zpos', 'num', '2', 'Higher is in front']] },
   editablepanel: { word: 'Colour box', settings: [['Layer', 'zpos', 'num', '-1', 'Higher is in front; below 0 is behind most HUD parts']] },
 };
@@ -3829,8 +3829,8 @@ function resRows(f, block, defaults, schemeFile, ctl) {
     const deflt = CONTROL_FONTS[ctl] && CONTROL_FONTS[ctl][0][1];
     // (its font goes under Fonts, its alignment under Layout: see selectionSections)
     const tag = (r, cat, head) => { Object.assign(r.dataset, { cat, head }); rows.push(r); };
-    if (/^hudeditor_/i.test(block) && (p.font || deflt)) tag(pickRow('Font', p.font || deflt, () => fontNames(schemeFile), v => save(f, 'font', v, block),
-      { id: `${f.name}/${block}/font`, note: `Any font in ${schemeFile}`, keys: ['font'], dflt: g.font || deflt || null }), 'font', 'Its font');
+    if (/^hudeditor_/i.test(block) && (p.font || deflt)) tag(pickRow('Font group', p.font || deflt, () => fontNames(schemeFile), v => save(f, 'font', v, block),
+      { id: `${f.name}/${block}/font`, note: `A font of ${schemeFile}: parts with the same one change together (its look is below)`, keys: ['font'], dflt: g.font || deflt || null }), 'font', 'Its font');
     else if (!CODE_FONTS[block.toLowerCase()] && (p.font || deflt))
       for (const r of separateFontRows(schemeFile, p.font || deflt, g.font || deflt, (v, group) => save(f, 'font', v, block, group), `${f.name}/${block}/font`, ['font'])) tag(r, 'font', 'Separate font');
     // where a text sits in its box: a right-aligned one grows leftwards from its right edge
@@ -5064,7 +5064,7 @@ function selectionSections(sel) {
   if (info.id === 'menubg') return [['Menu background', backgroundRows(), 'other']];
   if (info.id === 'gamelogo') {
     add('colour', info.name, logoRows(info.title));
-    for (const [f, font, what] of fonts) add('font', 'Font (a change shows everywhere the font is used)', [fontFold(f, font, what, true)]);
+    for (const [f, font, what] of fonts) add('font', 'Font', [fontFold(f, font, what, true)]);
     return byKind(groups);
   }
   // what was clicked, on its own: its position and its own colours over the shared ones below, named as it is in its
@@ -5100,7 +5100,10 @@ function selectionSections(sel) {
     add('missing', 'HUD parts HudLayout leaves out', missingRows(F(L)));
     if (sel.res) add('missing', `${info.name}: parts its file leaves out`, missingRows(sel.res));
   } else {
-    if (info.id !== 'gamemenu') { // the main menu isn't a window frame
+    // (a picture, text or box added to the window: its own settings and the window's list of parts, not the window's own,
+    // which looked like its own: the window edge under Borders changed every window, 2026-10-09)
+    const added = !!own && /^hudeditor_(pic|text|box|loadingbox)/i.test(own.block);
+    if (info.id !== 'gamemenu' && !added) { // the main menu isn't a window frame
       // menu windows paint their frame's background and edge; in-game ones (team select...) draw their own panels
       const frame = info.file === S;
       // the Borders colours only while some border still draws with them (see bordersUse)
@@ -5111,6 +5114,7 @@ function selectionSections(sel) {
       if (frame) { const [colour, ...rest] = borderRows(S, 'FrameBorder'); add('border', 'Border: window edge (every window)', [colour, windowCornerRow(S), ...rest]); }
       add('other', `Fading (every ${frame ? 'menu' : 'in-game'} window)`, fadeRows(info.file));
     }
+    if (!added) {
     if (EXTRA[info.id]) add('colour', `Colours: ${info.name.toLowerCase()}`, schemeRows(S, EXTRA[info.id]).concat(info.file === C ? schemeRows(C, EXTRA[info.id]) : []));
     if (info.id === 'specgui' && sel.res) add('border', 'Border: spectator bars', panelBorderRows(sel.res, ['topbar', 'bottombarblank'], SPEC_BORDER));
     if (info.id === 'specmenu') add('custom', 'Drop-down menus', specMenuRows());
@@ -5122,11 +5126,13 @@ function selectionSections(sel) {
       const p = layoutProps(sel.res, b), what = { MessageTitle: 'Title', HTMLMessage: 'Web page message', TextMessage: 'Text message', ok: 'OK' }[b];
       return Object.keys(p).length ? POS.map(([k, l]) => numRow(sel.res, b, k, `${what}: ${l.replace(' position', '')}`, p[k])) : [];
     }));
+    }
     // (the buy menu's go into BuyMenu.res, both sides and every page: a main page button's own file is its page's)
     const addLay = STARTUP_RES.has(info.id) ? F(UI_RES[info.id]) : sel.res;
     if (ADD_WINDOWS.has(info.id) && addLay) add('custom', 'Pictures, texts and boxes', addRows(addLay));
     if (info.id !== 'loadingdialog') add('show', 'Show or hide', showHideRows(sel)); // (the loading screen's own rows do both files)
-    if (sel.res) add('missing', 'Parts its file leaves out', missingRows(sel.res));
+    if (sel.res && !added) add('missing', 'Parts its file leaves out', missingRows(sel.res));
+    if (!added) {
     // the MOTD, team and class select: the game places them itself when it makes them, whatever their .res says (their
     // 640 x 480 area in the middle of the screen), checked without the plugin, whose reload puts them there too (NOTES)
     if (['info', 'team', 'class_ct', 'class_ter'].includes(info.id) && sel.res)
@@ -5134,9 +5140,10 @@ function selectionSections(sel) {
     if (CLASS_PAGES[info.id]) add('layout', 'Class picture', classPictureRows(info.id));
     if (info.id === 'scores') for (const [t, r] of scoreboardSections(sel, fonts.map(([, n]) => n))) add(/fonts$/.test(t) ? 'font' : 'colour', t, r);
     if (info.id === 'gamemenu') for (const [t, r] of mainMenuSections()) add(/(position|items)$/.test(t) ? 'layout' : 'other', t, r);
+    }
     if (info.id === 'loadingdialog' && F(UI_RES.loadingdialog)) {
       add('show', 'Show or hide', loadingShowRows(F(UI_RES.loadingdialog)));
-      add('layout', 'Loading screen: layout', loadingRows(F(UI_RES.loadingdialog)));
+      if (!added) add('layout', 'Loading screen: layout', loadingRows(F(UI_RES.loadingdialog)));
       // what's added that isn't on screen to be clicked (the box is closed, or it's hidden: moved off)
       if (sel.res && !control && !sel.node) addedSections(sel.res, S, add, b => partHidden(sel.res, b) || !(live && live.panels.some(q => q.thing && q.thing.key === 'loadingdialog' && q.key === b.toLowerCase())));
     }
@@ -5144,7 +5151,7 @@ function selectionSections(sel) {
     if (STARTUP_RES.has(info.id) && addLay && !control && !sel.node)
       addedSections(addLay, C, add, b => !(live && live.panels.some(q => q.thing && q.thing.key === sel.thing.key && q.key === b.toLowerCase())));
   }
-  if (fonts.length) add('font', `${fonts.length > 1 ? 'Fonts' : 'Font'} (a change shows everywhere the font is used)`,
+  if (fonts.length) add('font', fonts.length > 1 ? 'Fonts' : 'Font',
     fonts.map(([file, font, what]) => fontFold(file, font, what, fonts.length <= 2 && (control || info.kind === 'hud'))));
   // a font the game asks for by name that its own scheme never defines (the right-side text's HudHintTextSmall): it
   // falls back to something else until the HUD has one of that name
