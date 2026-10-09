@@ -1144,7 +1144,8 @@ function save(f, key, value, section = null, inGroup = null) { // (inGroup: an a
   // after this file's write, so a value worked out when written is what this file ended with.
   const twin = !mirroring && loadingTwin(f), whole = Array.isArray(section) && !section.length;
   const block = whole ? key : typeof section === 'string' ? section : Array.isArray(section) && section.length === 1 ? section[0] : null;
-  if (twin && block && !(/^loadingdialog$/i.test(block) && /^tall$/i.test(key)) && (Object.keys(layoutProps(twin, block)).length || whole && /^hudeditor_/i.test(key))) {
+  // (nor, with parts anywhere on the screen, the colour box's height: it is the box, see setLoadingFree)
+  if (twin && block && !(/^(loadingdialog|hudeditor_loadingbox)$/i.test(block) && /^tall$/i.test(key)) && (Object.keys(layoutProps(twin, block)).length || whole && /^hudeditor_/i.test(key))) {
     mirroring = true;
     try { save(twin, key, typeof value === 'function' && !whole ? () => layoutProps(f, block)[key.toLowerCase()] ?? null : value, section, group); } finally { mirroring = false; }
   }
@@ -1951,22 +1952,76 @@ function holdLoading(on, again = false) {
   if (want) setTimeout(() => { if (selected && selected.thing.key === 'loadingdialog' && !loadingUp()) $('list').contains(document.activeElement) && document.activeElement.tagName === 'INPUT' ? pendingRender = true : render(); }, 2600);
   return live && call('cmd', '', `schemereload_loading ${want || 'hide'}`).catch(() => {});
 }
+// The game cuts what's in the loading box at its window's edge, so a picture or text around the box didn't show
+// (2026-10-09). "Parts anywhere on the screen": the window made bigger than any screen (the game centres it, so it
+// covers the whole screen and its title and edge are off it), its own background off, and a colour box of the
+// editor's (LOADING_BOX) where the box was, as the box you see; every part moved with it, so nothing jumps. Both files
+// take the normal box's offsets (a part the two share stays put in both); the VAC one's colour box keeps its own
+// height, as its window did. Off again: the window is the colour box's size and place, the parts moved back.
+const LOADING_FREE = [5120, 2880], LOADING_BOX = 'hudeditor_loadingbox';
+const loadingFree = f => !!f && Object.keys(layoutProps(f, LOADING_BOX)).length > 0;
+// (where the colour box sits in the window: what the parts' places are counted from in the rows)
+const loadingOff = f => loadingFree(f) ? ['xpos', 'ypos'].map(k => parseInt(layoutProps(f, LOADING_BOX)[k], 10) || 0) : [0, 0];
+function setLoadingFree(on) {
+  const nf = F(UI_RES.loadingdialog), files = [nf, F(LOADING_VAC)].filter(Boolean), group = Symbol();
+  if (!nf || loadingFree(nf) === on) return;
+  const num = v => /^\s*-?\d+\s*$/.test(String(v ?? '')) ? +v : null, own = layoutProps(nf, 'LoadingDialog');
+  const [dx, dy] = on ? [Math.round((LOADING_FREE[0] - (num(own.wide) ?? 400)) / 2), Math.round((LOADING_FREE[1] - (num(own.tall) ?? 100)) / 2)]
+    : loadingOff(nf).map(v => -v);
+  const bg = (F(S) && resolve(tables(F(S)), 'Frame.BgColor')) || '46 43 42 255';
+  for (const x of files) commit(x, `${x.name}/free`, () => {
+    let cur = x;
+    const put = (b, k, v) => { const t = setAt(cur, [b], k, String(v)); cur = { ...cur, text: t, parsed: parse(t) }; };
+    const win = layoutProps(x, 'LoadingDialog'), box = layoutProps(x, LOADING_BOX);
+    for (const s of x.parsed.sections.filter(s => s.path.length === 2 && !/^(loadingdialog|hudeditor_loadingbox)$/i.test(s.path[1]))) {
+      const p = layoutProps(x, s.path[1]);
+      // (a hidden part's place is kept in xpos_hudeditor, its xpos off at 9999: both move, it stays off the window)
+      for (const [k, d] of [['xpos', dx], ['ypos', dy], ['xpos_hudeditor', dx], ['ypos_hudeditor', dy]]) if (num(p[k]) !== null && !(k === 'xpos' && 'xpos_hudeditor' in p)) put(s.path[1], k, num(p[k]) + d);
+    }
+    if (on) {
+      put('LoadingDialog', 'wide', LOADING_FREE[0]); put('LoadingDialog', 'tall', LOADING_FREE[1]); put('LoadingDialog', 'paintbackground', '0');
+      const t = setBlock(cur, [], LOADING_BOX, [['ControlName', 'EditablePanel'], ['fieldName', LOADING_BOX], ['xpos', String(dx)], ['ypos', String(dy)],
+        ['wide', String(num(win.wide) ?? 400)], ['tall', String(num(win.tall) ?? 100)], ['zpos', '-5'], ['visible', '1'], ['enabled', '1'],
+        ['paintbackground', '1'], ['PaintBackgroundType', '2'], ['bgcolor_override', bg]]);
+      cur = { ...cur, text: t, parsed: parse(t) };
+    } else {
+      put('LoadingDialog', 'wide', num(box.wide) ?? 400); put('LoadingDialog', 'tall', num(box.tall) ?? 100); put('LoadingDialog', 'paintbackground', '1');
+      const t = dropBlock(cur, [], LOADING_BOX); cur = { ...cur, text: t, parsed: parse(t) };
+    }
+    return cur.text;
+  }, group);
+  writing.then(() => { status(on ? 'Parts can go anywhere on the screen now: the box you see is a colour box (its colour under Colours when you click it).' : 'The parts are in the box again: what\'s outside it is cut off.'); render(); });
+  refreshSoon();
+}
 function loadingRows(f) {
   const both = [f, F(LOADING_VAC)].filter(Boolean), has = (x, block) => Object.keys(layoutProps(x, block)).length > 0;
   const set = (block, key, v) => { const x = both.find(x => has(x, block)); if (x) save(x, key, v, block); }; // (save copies it into the other)
+  // (parts anywhere: the box is the colour box, and the parts' places are shown counted from its corner)
+  const free = loadingFree(f), [ox, oy] = loadingOff(f), boxBlock = free ? LOADING_BOX : 'LoadingDialog';
+  const off = (block, key) => block === boxBlock || /^(wide|tall)$/i.test(key) ? 0 : /^x/i.test(key) ? ox : oy;
   // (at: the file the row shows and, with only, the one it writes: the VAC box has its own height and notice)
   const n = (block, key, label, note = '', only = false, at = f) => {
-    const r = inputRow(label, layoutProps(at, block)[key.toLowerCase()] || '0', v => only ? save(at, key, v, block) : set(block, key, v), { type: 'number', step: 1, dflt: gameProps(at.name, block)[key.toLowerCase()] ?? null, ...(note ? { title: note } : {}) });
+    const d = off(block, key), shown = String((parseInt(layoutProps(at, block)[key.toLowerCase()], 10) || 0) - d);
+    const write = v => { const w = String((parseInt(v, 10) || 0) + d); return only ? save(at, key, w, block) : set(block, key, w); };
+    const r = inputRow(label, shown, v => {
+      write(v);
+      // (the colour box stays in the middle of the window as it gets wider)
+      if (free && block === LOADING_BOX && /^wide$/i.test(key)) set(LOADING_BOX, 'xpos', String(Math.round((LOADING_FREE[0] - (+v || 0)) / 2)));
+    }, { type: 'number', step: 1, dflt: free ? null : gameProps(at.name, block)[key.toLowerCase()] ?? null, ...(note ? { title: note } : {}) });
     r.dataset.keys = key;
     return r;
   };
+  const freeRow = checkRow('Parts anywhere on the screen', free, on => setLoadingFree(on), `${f.name}/free`);
+  freeRow.append(el('div', { className: 'meta', textContent: free
+    ? 'The box you see is a colour box (click it for its colour); pictures and texts can go anywhere around it.'
+    : 'The game cuts what\'s in the box at its edge: on, pictures and texts can go anywhere around it (the box you see becomes a colour box).' }));
   // the VAC notice's text and shield move together (the shield 10 below the text's top, as in the game's file)
   const vac = F(LOADING_VAC), gv = gameProps(LOADING_VAC, 'VACImage').ypos - gameProps(LOADING_VAC, 'VACInfoLabel').ypos || 10;
-  const vacRows = vac && has(vac, 'VACInfoLabel') ? [n('LoadingDialog', 'tall', 'Box height on VAC servers', 'Taller than the other, for the VAC notice under the bar', true, vac),
-    inputRow('VAC notice Y', layoutProps(vac, 'VACInfoLabel').ypos || '100', v => { save(vac, 'ypos', v, 'VACInfoLabel'); save(vac, 'ypos', String(+v + gv), 'VACImage'); },
-      { type: 'number', step: 1, dflt: gameProps(LOADING_VAC, 'VACInfoLabel').ypos ?? null, title: 'The VAC shield and its text, from the top of the box' }),
+  const vacRows = vac && has(vac, 'VACInfoLabel') ? [n(boxBlock, 'tall', 'Box height on VAC servers', 'Taller than the other, for the VAC notice under the bar', true, vac),
+    inputRow('VAC notice Y', String((parseInt(layoutProps(vac, 'VACInfoLabel').ypos, 10) || 100) - oy), v => { save(vac, 'ypos', String(+v + oy), 'VACInfoLabel'); save(vac, 'ypos', String(+v + oy + gv), 'VACImage'); },
+      { type: 'number', step: 1, dflt: free ? null : gameProps(LOADING_VAC, 'VACInfoLabel').ypos ?? null, title: 'The VAC shield and its text, from the top of the box' }),
     n('TimeRemainingLabel', 'ypos', 'Time left Y', 'The time left to load, under the bar')] : [];
-  return [n('LoadingDialog', 'wide', 'Box width'), n('LoadingDialog', 'tall', 'Box height', 'On VAC-secured servers the box has its own height (below)', true),
+  return [freeRow, n(boxBlock, 'wide', 'Box width'), n(boxBlock, 'tall', 'Box height', 'On VAC-secured servers the box has its own height (below)', true),
     n('InfoLabel', 'xpos', 'Text X', 'From the box\'s left edge'), n('InfoLabel', 'ypos', 'Text Y'),
     n('progress', 'xpos', 'Progress bar X'), n('progress', 'ypos', 'Progress bar Y'), n('progress', 'wide', 'Progress bar width'), n('progress', 'tall', 'Progress bar height'),
     n('CancelButton', 'xpos', 'Cancel X'), n('CancelButton', 'ypos', 'Cancel Y'), ...vacRows, noteRow('The game centres the box.')];
@@ -2002,7 +2057,9 @@ function loadingShowRows(f) {
     save(f, 'paintbackground', on ? '1' : '0', 'LoadingDialog');
     status(on ? 'The window draws its background again.' : 'The window\'s background is off: add a colour box (Custom) as the box.');
   });
-  return [show('InfoLabel', 'The loading text'), show('progress', 'The progress bar'), show('CancelButton', 'The Cancel button'), back, ...added];
+  // (with parts anywhere on the screen the window is bigger than the screen, see-through: the box is the colour box)
+  const box = show(LOADING_BOX, 'The box');
+  return [show('InfoLabel', 'The loading text'), show('progress', 'The progress bar'), show('CancelButton', 'The Cancel button'), loadingFree(f) ? box : back, ...added];
 }
 
 // ---------- things added to the HUD ----------
@@ -2182,8 +2239,9 @@ async function addToHud(kind, file, lay = F(L)) {
   // (the loading screen's box is placed by the game, so its parts count from its corner: "c" would be the screen's middle)
   // a window narrower than the screen (team select, the MOTD) takes "c" as half the screen from its own left edge, so
   // on a wide screen a part there goes in the middle of what shows of it in plain numbers (see windowShows)
-  const box = !!LOADING_TWIN[lay.name], span = k => inWindow && !box ? windowShows(lay, 'hudeditor_new', k) : null;
-  const place = (k, n) => box ? '8' : span(k) !== null ? `${Math.round((span(k) - n) / 2)}` : `c${-Math.round(n / 2)}`;
+  // (with parts anywhere on the screen, the box's corner is its colour box's)
+  const box = !!LOADING_TWIN[lay.name], span = k => inWindow && !box ? windowShows(lay, 'hudeditor_new', k) : null, boxAt = box ? loadingOff(lay) : [0, 0];
+  const place = (k, n) => box ? `${(k === 'xpos' ? boxAt[0] : boxAt[1]) + 8}` : span(k) !== null ? `${Math.round((span(k) - n) / 2)}` : `c${-Math.round(n / 2)}`;
   const name = `hudeditor_${kind}${n}`, at = (w, h) => [['xpos', place('xpos', w)], ['ypos', place('ypos', h)], ['wide', `${w}`], ['tall', `${h}`]];
   let body;
   try {
@@ -2240,6 +2298,8 @@ function customRows(id, lay = F(L)) {
     r.append(pick, el('button', { textContent: 'Change picture...', title: 'PNG, JPG, GIF (animated too) or WebP', onclick: () => pick.click() }));
     rows.push(r);
   }
+  // (the loading box's own colour box isn't removed this way: Parts anywhere on the screen, off, puts the box back)
+  if (id.toLowerCase() === LOADING_BOX) return rows;
   const r = el('div', { className: 'row action' });
   r.append(el('button', { className: 'ghost', textContent: inWindow ? 'Remove from the window' : 'Remove from the HUD', onclick: () => removeAdded(lay, id) }));
   rows.push(r);
@@ -2315,6 +2375,7 @@ function addRows(lay = F(L)) {
   if (lay !== F(L)) {
     r.dataset.q = 'add picture gif text box window';
     return [...addedList(lay), r, ...(lay.name === UI_RES.buy_ct ? [noteRow('What\'s added goes into both sides\' buy menu and every page, and shows straight away while the buy menu is open.')] : []),
+      ...(LOADING_TWIN[lay.name] && !loadingFree(lay) ? [noteRow('The game cuts what\'s outside the box: Layout > Parts anywhere on the screen lets pictures and texts go around it.')] : []),
       // (a Label whose text starts and ends with one of its window's dialog variables shows the values, every %name% in
       // it; one starting or ending with a word prints as typed, seen 2026-10-09)
       ...(lay.name === UI_RES.scores ? [noteRow('A text that starts and ends with one of the scoreboard\'s values shows them live: %mapname%, %ct_teamname%, %t_teamname%, %ct_totalteamscore%, %t_totalteamscore%, %ct_alivecount%, %t_alivecount%, %spectators%, %sourcetv% ("%ct_totalteamscore% - %t_totalteamscore%" works; "CT %ct_totalteamscore%" prints as typed: put the word in a text of its own).')] : []),
@@ -5076,7 +5137,7 @@ function selectionSections(sel) {
       ...(STARTUP_RES.has(info.id) && !/^hudeditor/i.test(own.block) ? [noteRow('The buy menu reads its own settings when the game makes it: these show after a game restart. The shared colours and fonts below change straight away.')] : []),
       ...mine(deadOwn(sel.res, own.block, resRows(sel.res, own.block, own.defaults, schemeOf(sel.thing), own.ctl)))]);
   }
-  if (own && /^hudeditor_(pic|text|box)/i.test(own.block)) add('colour', `What this ${own.block.replace(/^hudeditor_|\d+$/gi, '').replace('pic', 'picture')} shows`, mine(customRows(own.block, sel.res)));
+  if (own && /^hudeditor_(pic|text|box|loadingbox)/i.test(own.block)) add('colour', own.block.toLowerCase() === LOADING_BOX ? 'The box' : `What this ${own.block.replace(/^hudeditor_|\d+$/gi, '').replace('pic', 'picture')} shows`, mine(customRows(own.block, sel.res)));
   if (control) {
     const [ctl, what, keys] = controlIn(control, sel.thing);
     const file = schemeOf(control), where = file === C ? 'in-game windows' : file === CH ? 'the chat' : 'menus';
@@ -7126,6 +7187,18 @@ if (host && location.hash === '#hosttest') (async () => {
       check(both && ld.text === l0 && vac.text === v0 && ld.opened === l0 && windowFiles({ info: { id: 'loadingdialog' } }).length === 2,
         'a loading screen setting writes both its files, one Ctrl+Z puts both back, and Reset window knows them as opened');
       delete opened['|Box width'];
+      // parts anywhere on the screen: the window bigger than the screen, the colour box where the box was (the VAC one
+      // its own height), every part moved with it; off again puts the window and parts back
+      const lp = (f, b) => layoutProps(f, b), w0 = +lp(ld, 'LoadingDialog').wide, h0 = +lp(ld, 'LoadingDialog').tall, hv = +lp(vac, 'LoadingDialog').tall;
+      const tx = +lp(ld, 'InfoLabel').xpos, ty = +lp(ld, 'InfoLabel').ypos, vty = +lp(vac, 'InfoLabel').ypos;
+      setLoadingFree(true); await sleep(400); await writing;
+      const dx = (LOADING_FREE[0] - w0) / 2, dy = (LOADING_FREE[1] - h0) / 2, b = lp(ld, LOADING_BOX), bv = lp(vac, LOADING_BOX);
+      const on = loadingFree(ld) && +lp(ld, 'LoadingDialog').wide === LOADING_FREE[0] && lp(ld, 'LoadingDialog').paintbackground === '0' && +b.wide === w0 && +b.tall === h0
+        && Math.abs(+b.xpos - dx) <= 1 && +bv.tall === hv && Math.abs(+lp(ld, 'InfoLabel').xpos - (tx + dx)) <= 1 && Math.abs(+lp(vac, 'InfoLabel').ypos - (vty + dy)) <= 1; // (the VAC box: the normal one's offsets)
+      setLoadingFree(false); await sleep(400); await writing;
+      check(on && !loadingFree(ld) && !loadingFree(vac) && +lp(ld, 'LoadingDialog').wide === w0 && +lp(vac, 'LoadingDialog').tall === hv && +lp(ld, 'InfoLabel').xpos === tx && +lp(ld, 'InfoLabel').ypos === ty,
+        'parts anywhere on the screen: the window covers the screen with a colour box as the box, and off puts it all back');
+      await undo(); await undo();
     }
     {
       // a block both loading screen files have is kept the same in both, from either (a part clicked in the VAC box), but
