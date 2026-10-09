@@ -1477,6 +1477,9 @@ function showHideRows(sel) {
   const { info } = sel, f = sel.res, rows = [];
   if (info.kind === 'hud' && !sel.control && canHide(info.id))
     rows.push(eyeRow(info.name, !isHidden(info.id), on => { setHidden(info.id, !on); refreshSoon(); writing.then(render); }));
+  // the main menu: its logo's two lines (a hidden one has no box in the preview to click, see seenInGame)
+  if ((info.id === 'gamemenu' || info.id === 'gamelogo') && F(C))
+    for (const [n, label] of [[1, 'Logo'], [2, 'Logo, second line']]) rows.push(eyeRow(label, logoShown(n), on => { setLogoShown(n, on); refreshSoon(); writing.then(render); }));
   if (!f || info.id === 'FreezePanel') return rows; // (the killer panel's parts are nested: its own rows, see freezeRows)
   const parts = WINDOW_PARTS[info.id] || [], grouped = new Set(parts.flatMap(([, b]) => b.toLowerCase().split('|')));
   rows.push(...parts.map(([label, block]) => showRow(f, block, label)));
@@ -1933,6 +1936,10 @@ const loadingTwin = f => (f && LOADING_TWIN[f.name] && F(LOADING_TWIN[f.name])) 
 let loadingVac = false; // the box as VAC-secured servers show it (its file is the one clicked parts write first)
 let loadingHeld = null, loadingAsked = 0; // what the plugin was last asked for ('show', 'vac' or null: closed), and when
 const loadingUp = () => !!live && live.panels.some(p => p === p.thing && p.key === 'loadingdialog');
+// A box in front of everything that takes every click while it's up: the loading screen, or a question the menu asks
+// (Quit's CQuitQueryBox, any QueryBox or MessageBox): only its own boxes in the preview (the other windows' showed through)
+// (the window itself, its panel: Quit's box has no name)
+const frontOnly = () => !live ? null : live.panels.find(p => p === p.thing && (p.key === 'loadingdialog' || /(QueryBox|MessageBox)$/i.test(p.cls || ''))) || null;
 // Only to a running game (a command written while it's down would run when it next starts). again: asked for even if it
 // was already (the box went: a map load took it over, or its Cancel was clicked).
 function holdLoading(on, again = false) {
@@ -2632,10 +2639,10 @@ function pickAll(fx, fy) {
   // parts thinner than a few screen pixels (1-unit lines) get that much room round them, or no click lands on them
   const tol = 3 * live.W / Math.max(1, $('boxes').getBoundingClientRect().width);
   const inside = r => { const ex = r.w < 2 * tol ? tol : 0, ey = r.h < 2 * tol ? tol : 0; return x >= r.x - ex && y >= r.y - ey && x <= r.x + r.w + ex && y <= r.y + r.h + ey; };
-  const found = [], cover = covered(), loading = loadingUp();
+  const found = [], cover = covered(), front = frontOnly();
   for (const p of live.panels) {
     if (!p.thing || p.w * p.h <= 0 || CONTAINERS.has(p.key) || p.key.startsWith('frame_') && p.key.endsWith('grip')) continue;
-    if (loading && p.thing.key !== 'loadingdialog') continue; // (it's in front of everything: only its parts)
+    if (front && p.thing !== front) continue; // (it's in front of everything: only its parts)
     const info = thingInfo(p.thing);
     if (!info || (p === p.thing && NO_CLICK.has(p.key)) || (cover && info.kind === 'hud')) continue;
     if (!seenInGame(info)) continue;
@@ -5506,12 +5513,15 @@ function renderList() {
 // What the preview offers to click and outlines: not a part hidden with its eye (still laid out by the game, not seen),
 // nor one drawn from game settings while they're off (the net graph, the position text)
 const pressed = id => $(id).getAttribute('aria-pressed') === 'true';
-const seenInGame = info => info.kind !== 'hud' || !((canHide(info.id) && isHidden(info.id)) || (info.hud.shownBy && !info.hud.shownBy()));
+// (a main menu logo line hidden by its colour is still laid out: no box, like a hidden HUD part; its eye is in the main
+// menu's Show/hide)
+const seenInGame = info => info.id === 'gamelogo' ? !F(C) || logoShown(info.title)
+  : info.kind !== 'hud' || !((canHide(info.id) && isHidden(info.id)) || (info.hud.shownBy && !info.hud.shownBy()));
 function boxList() {
   if (live) {
-    const boxes = [], sel = selected, cover = covered(), loading = loadingUp();
+    const boxes = [], sel = selected, cover = covered(), front = frontOnly();
     for (const p of live.panels) {
-      if (!p.thing || p !== p.thing || (loading && p.key !== 'loadingdialog')) continue; // (the loading screen: only its box)
+      if (!p.thing || p !== p.thing || (front && p !== front)) continue; // (the loading screen, a question box: only its box)
       const info = thingInfo(p);
       if (!info || NO_CLICK.has(p.key) || (cover && info.kind === 'hud') || !seenInGame(info)) continue;
       for (const r of clickRects(p, info, live.W, live.H))
@@ -6081,14 +6091,18 @@ async function restartGame(between = null) {
 
 // ---------- HUD picker ----------
 let pickerCancel = false; // (the picker as it was last shown: Refresh shows it again the same way)
-async function showPicker(canCancel, keepImport = false) {
+// (ifChanged: coming back to the editor rebuilds the list only if it changed: a click into the window from another one
+// fires focus between the button's press and release, and a list rebuilt then lost the click, 2026-10-09)
+async function showPicker(canCancel, keepImport = false, ifChanged = false) {
   closeRestartPop(); // (it would sit over the list)
   pickerCancel = canCancel;
   if (!keepImport) $('importlist').replaceChildren(); // (an import's message from last time)
-  const lines = (await call('huds')).split('\n');
+  const raw = await call('huds'), lines = raw.split('\n');
   const current = lines.pop().split('\t')[2] || '';
   const huds = lines.filter(Boolean).map(l => l.split('\t'));
-  const box = $('hudlist');
+  const box = $('hudlist'), key = `${raw}|${hudName || ''}|${canCancel}`;
+  if (ifChanged && box.dataset.key === key) return;
+  box.dataset.key = key;
   box.innerHTML = '';
   for (const [name, path] of huds) {
     // (mine: the HUD open in the editor; at startup the exe's current one isn't open in it yet)
@@ -6291,7 +6305,7 @@ if (host) {
   $('pickclose').onclick = () => { $('picker').hidden = true; };
   // Refresh, and coming back to the editor (from Explorer, say): the custom folder read again, an import's rows kept;
   // not while a name is being typed in a rename
-  const repick = () => { if (!$('picker').hidden && !$('hudlist').contains(document.activeElement)) showPicker(pickerCancel, true); };
+  const repick = () => { if (!$('picker').hidden && !$('hudlist').contains(document.activeElement)) showPicker(pickerCancel, true, true); };
   $('pickrefresh').onclick = async () => {
     const b = $('pickrefresh');
     await showPicker(pickerCancel, true);
@@ -6866,6 +6880,25 @@ if (host && location.hash === '#hosttest') (async () => {
     const path = await call('new', 'myhud');
     await openHud(path);
     check(hudName === 'myhud' && F(C) && F(S) && F(L) && F(L).defaultText && F(L).bases.length === 1 && F(CH).defaultText && F(CH).bases.length === 1, 'new HUD opens, with the game\'s HudLayout and ChatScheme');
+    {
+      // coming back to the editor keeps the HUD list's buttons when nothing changed (a rebuilt list lost the click
+      // that brought the window to the front); Refresh still rebuilds it
+      await showPicker(true);
+      const b1 = $('hudlist').querySelector('button.hud');
+      await showPicker(true, true, true);
+      const kept = $('hudlist').querySelector('button.hud') === b1;
+      await showPicker(true, true);
+      check(b1 && kept && $('hudlist').querySelector('button.hud') !== b1, 'the HUD list isn\'t rebuilt on coming back unless it changed');
+      $('picker').hidden = true;
+    }
+    {
+      // a hidden logo line has no box in the preview (like a hidden HUD part), and the main menu's Show/hide shows it again
+      const logo = { kind: 'window', id: 'gamelogo', title: 1 }, seen = seenInGame(logo);
+      setLogoShown(1, false); await sleep(400); await writing;
+      const gone = !seenInGame(logo), rows = showHideRows({ info: { id: 'gamemenu', kind: 'window' }, thing: { key: 'gamemenu' } });
+      setLogoShown(1, true); await sleep(400); await writing;
+      check(seen && gone && seenInGame(logo) && rows.length === 2 && rows[0].classList.contains('hidden'), 'a hidden logo line has no box, and its eye is in the main menu\'s Show/hide');
+    }
     {
       // a key taken out of a window's block (Ctrl+Z, Reset window) is first set to what the game falls back to, as the
       // game keeps what a block no longer says: a button's own background goes to Button.BgColor, an alignment to west;
