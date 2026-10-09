@@ -3,17 +3,17 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Tele HUD Editor</title>
+<title>Tele HUD Editor (dev)</title>
 <style>
-  /* Graphite Rose: charcoal surfaces, pink kept for the chosen tab, the main action, what's selected and focus */
-  :root { --base: #111013; --surface: #19171b; --raised: #252127; --field: #0e0d10; --text: #e6dfe4; --muted: #a99ba4; --line: #423941;
-    --accent: #e8a2c7; --soft: #382333; --radius: 6px; --thin: color-mix(in srgb, var(--line) 40%, transparent); --side: 408px;
-    --check: repeating-conic-gradient(#3b3439 0 25%, #1d1a1f 0 50%); color-scheme: dark; }
+  /* Graphite Blue (the dev build): charcoal surfaces with a cool cast, blue kept for the main action, what's selected and focus */
+  :root { --base: #0f1216; --surface: #161a20; --raised: #1f252d; --field: #0c0f13; --text: #e3e8ef; --muted: #98a4b3; --line: #313a46;
+    --accent: #7cb1ff; --soft: #1a2a40; --radius: 6px; --thin: color-mix(in srgb, var(--line) 40%, transparent); --side: 408px;
+    --check: repeating-conic-gradient(#2c333d 0 25%, #161a20 0 50%); --accent-a: rgba(124, 177, 255, .14); color-scheme: dark; }
   @media (min-width: 1500px) { :root { --side: 440px; } }
   @media (max-width: 1050px) { :root { --side: 370px; } }
   * { box-sizing: border-box; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
   [hidden] { display: none !important; }
-  body { margin: 0; height: 100vh; display: grid; grid-template-columns: minmax(0, 1fr) var(--side); grid-template-rows: auto minmax(0, 1fr);
+  body { margin: 0; height: 100vh; display: grid; grid-template-columns: minmax(0, 1fr) 7px var(--side); grid-template-rows: auto minmax(0, 1fr);
     background: var(--base); color: var(--text); font: 13px/1.5 "Segoe UI", system-ui, sans-serif; }
   button, input, select { font: inherit; color: inherit; }
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -39,7 +39,7 @@
   input[type=range] { padding: 0; border: 0; background: none; cursor: pointer; }
   input[type=range]:focus-visible { box-shadow: none; outline: 2px solid var(--accent); outline-offset: 2px; }
   input[type=number] { font-variant-numeric: tabular-nums; }
-  select option:disabled { color: #6f646b; }
+  select option:disabled { color: #66707d; }
   .meta { font-size: 11px; color: var(--muted); line-height: 1.4; }
   .key { font-family: ui-monospace, Consolas, monospace; overflow-wrap: anywhere; }
 
@@ -53,13 +53,13 @@
   .app-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
   /* ⚠: changes the game shows only after a restart (a click lists them); Discard: back to the HUD as last saved */
   #restartmark { padding: 4px 9px; font-size: 14px; }
-  #discard:disabled { display: none; } /* (gone, not a gap: the buttons beside it close up) */
+  /* (Undo all stays in its place while there's nothing to undo, greyed out: the bar doesn't shift) */
   #explore { margin-left: -10px; } /* (beside the HUD button: its folder) */
   .app-actions .sep { width: 1px; height: 24px; margin: 0 6px; background: var(--line); }
 
   /* the game: test tools over it (when open), messages under it */
   .preview-area { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
-  :root { --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23e6dfe4' stroke-width='1.3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); } /* the top bar's drop-down arrow (HUD, Game, Grid) */
+  :root { --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23e3e8ef' stroke-width='1.3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); } /* the top bar's drop-down arrow (HUD, Game, Grid) */
   .zoombtn { padding: 4px 10px; border-color: var(--accent); color: var(--accent); font-size: 12px; }
   /* fonts that don't scale between some screen sizes: a yellow caution by Game resolution, and what it says */
   #res { width: 190px; text-overflow: ellipsis; }
@@ -102,7 +102,7 @@
   #status.show { opacity: 1; }
   #status.show + #hint { opacity: 0; }
   #gamestate { white-space: nowrap; }
-  /* boxes over the game: light while the mouse is over one, pink when selected */
+  /* boxes over the game: light while the mouse is over one, blue when selected */
   #boxes { position: absolute; inset: 0; cursor: crosshair; overflow: hidden; user-select: none; } /* a part moved off screen mustn't widen the page */
   /* (zoomed in, lines and labels keep their size on screen: --z is the zoom) */
   .box { position: absolute; border: calc(1px / var(--z)) dashed rgba(230, 223, 228, .4); opacity: 0; transition: opacity .1s; pointer-events: none; }
@@ -110,13 +110,16 @@
   .box.thing { opacity: 0; }
   #stage:hover .box.thing, .schematic .box.thing { opacity: 1; }
   .box.hover { opacity: 1; border: calc(2px / var(--z)) solid rgba(230, 223, 228, .85); background: rgba(230, 223, 228, .08); }
-  .box.hover.drag { border-style: dashed; background: rgba(232, 162, 199, .14); }
-  .box.sel { opacity: 1; border: calc(2px / var(--z)) solid var(--accent); background: rgba(232, 162, 199, .14); }
-  .box.sel span { color: var(--accent); }
+  .box.hover.drag { border-style: dashed; background: var(--accent-a); }
+  /* picked: its name lit, no outline over its own edge (the outline shows while the mouse is over it, as .hover) */
+  .box.sel { opacity: 1; border-color: transparent; background: none; }
+  .box.sel span { color: var(--base); background: var(--accent); font-weight: 600; }
+  .box.pin { opacity: 1; border-color: transparent; }
+  .box.pin span { display: block; color: var(--accent); border: calc(1px / var(--z)) solid var(--accent); }
   .box.hover span, .box.sel span { display: block; }
 
   /* the sidebar: search and parts, the selection's header, a rail of categories beside one category's settings */
-  aside { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--base); border-left: 1px solid var(--line); }
+  aside { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--base); }
   .sidebar-top { flex: none; display: grid; gap: 10px; padding: 14px 16px; background: var(--surface); border-bottom: 1px solid var(--line); }
   #search { width: 100%; padding: 8px 10px; }
   #parts:empty { display: none; }
@@ -302,6 +305,7 @@
   .eye:hover { color: var(--accent); }
   .thing-btn .eye { width: 28px; height: 22px; flex: none; border: 1px solid transparent; border-radius: 5px; }
   .thing-btn .eye:hover { border-color: var(--line); }
+  .thing-btn .eye.none, .thing-btn .eye.none:hover { border-color: transparent; }
   .hidebtn.eye { width: 36px; height: 32px; }
   .eyerow > .eye { width: 30px; height: 26px; justify-self: end; background: none; border-color: transparent; }
   .eyerow > .eye:hover { border-color: var(--line); }
@@ -322,7 +326,7 @@
   .unrename:hover { color: var(--accent); border-color: var(--line); background: transparent; }
 
   /* which HUD to edit */
-  #picker { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, .6); }
+  #picker { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, .6); }
   #picker > div { width: min(520px, 92vw); max-height: 80vh; overflow: auto; padding: 20px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 12px 40px #0008; }
   #picker h2 { margin: 0 0 4px; font-size: 16px; font-weight: 550; }
   #picker .pickhead { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
@@ -349,14 +353,122 @@
   #importlist .pick .meta { grid-column: 1 / -1; overflow-wrap: anywhere; }
   #importlist .err { color: var(--accent); }
 
-  @media (max-width: 860px) { body { grid-template-columns: 1fr; grid-template-rows: auto 50vh minmax(0, 1fr); } aside { border-left: 0; border-top: 1px solid var(--line); } }
+  /* ---------- the dev build's frame: Dock (the panel beside the game) or Float (a card over it, more pinned) ----------
+     One size scale throughout: controls 30px tall (32 in the top bar), icon buttons square, gaps 4/6/8, cards 10px round. */
+  .i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .app-header { gap: 8px; padding: 9px 14px; }
+  .app-header button, .app-header select { height: 32px; }
+  .app-header button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 0 11px; white-space: nowrap; }
+  .app-header .ib, .viewbar .ib { width: 32px; padding: 0; }
+  .app-actions { gap: 6px; }
+  .app-actions .sep { margin: 0 4px; }
+  #explore { margin-left: 0; }
+  #restartmark, #rescaution { padding: 0 10px; }
+  .seg { display: inline-flex; flex: none; padding: 0; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--field); }
+  .app-header .seg button { height: 30px; border: 0; border-radius: 0; background: transparent; color: var(--muted); }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button:hover { color: var(--text); background: var(--raised); }
+  .seg button[aria-pressed="true"] { color: var(--accent); background: var(--soft); }
+  #discard:disabled, #undobtn:disabled { background: transparent; }
+
+  /* under the game: what the game is told to hold open, the loading screen, and (Float) the element list and show/hide */
+  .viewbar { flex: none; display: flex; align-items: center; gap: 6px; min-height: 46px; padding: 7px 12px; background: var(--surface); border-top: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; }
+  .viewbar button { flex: none; height: 30px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; font-size: 12.5px; white-space: nowrap; }
+  .viewbar .ib { width: 30px; }
+  .viewbar .vlabel { flex: none; margin-right: 2px; font-size: 11px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+  .viewbar .vsep { flex: none; width: 1px; height: 20px; margin: 0 4px; background: var(--line); }
+  .viewbar .grow { flex: 1 0 8px; }
+  .viewbar .count { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--raised); color: var(--muted); font-size: 11px; line-height: 18px; text-align: center; }
+  .viewbar #ingame, .viewbar .ingame { display: flex; align-items: center; gap: 6px; padding: 0; flex-wrap: nowrap; }
+  .viewbar .ingame button { flex: none; padding: 0 10px; overflow: visible; }
+  .viewbar .ingame.chips button { height: 26px; padding: 0 9px; border-radius: 13px; }
+  .viewbar .ingame.chips[hidden] { display: none; }
+  body:not(.float) .float-only { display: none !important; }
+
+  /* the bar between the game and the panel (Dock): drag it to give either more room; double-click: the usual width */
+  .preview-area { grid-column: 1; grid-row: 2; }
+  aside { grid-column: 3; grid-row: 2; }
+  #divider { grid-column: 2; grid-row: 2; position: relative; cursor: col-resize; background: var(--surface); border-left: 1px solid var(--line); border-right: 1px solid var(--line); touch-action: none; }
+  #divider::after { content: ''; position: absolute; left: 50%; top: 50%; width: 1px; height: 28px; margin: -14px 0 0 -1px; background: var(--muted); box-shadow: 2px 0 0 var(--muted); opacity: .6; }
+  #divider:hover, #divider.drag, #divider:focus-visible { background: var(--soft); outline: none; }
+
+  /* Float: no column for the panel; the card goes over the game (by what's picked, or where it was dragged) */
+  body.float { grid-template-columns: minmax(0, 1fr); }
+  body.float #divider { display: none; }
+  body.float aside { position: fixed; z-index: 12; left: var(--fx, 60vw); top: var(--fy, 90px); width: var(--fw, 360px); height: var(--fh, auto);
+    min-width: 290px; min-height: 160px; max-width: calc(100vw - 16px); max-height: calc(100vh - var(--fy, 90px) - 96px); overflow: hidden; resize: both;
+    border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 18px 50px rgba(0, 0, 0, .55); }
+  body.float aside.nx-empty { display: none; }
+  body.float #top, body.float #foot { display: none !important; }
+  #top, #foot { display: none !important; } /* (the old strip over a selection and the old footer: their jobs are in the heading now) */
+
+  /* a selection: its heading (name, then eye, ↺ as opened, the game's default, pin, close), then the tabs */
+  .nx-head { flex: none; display: flex; align-items: center; gap: 8px; min-height: 64px; padding: 10px 10px 10px 14px; background: var(--surface); border-bottom: 1px solid var(--line); }
+  .nx-head .grip { display: none; color: var(--muted); }
+  body.float .nx-head, .nx-pin .nx-head { padding-left: 6px; cursor: move; user-select: none; }
+  body.float .nx-head .grip, .nx-pin .nx-head .grip { display: block; }
+  .nx-head .titles { flex: 1; min-width: 0; }
+  .nx-head h2 { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .nx-head p { margin: 1px 0 0; color: var(--muted); font-size: 11px; line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .nx-head .back.nx-up { display: inline-flex; align-items: center; height: auto; margin: 0 0 2px; padding: 0; border: 0; background: none; color: var(--accent); font-size: 11.5px; cursor: pointer; }
+  .nx-head .back.nx-up:hover { text-decoration: underline; background: none; }
+  .nx-tools { flex: none; display: flex; align-items: center; gap: 2px; }
+  .nx-tools > button { width: 30px; height: 30px; padding: 0; display: inline-grid; place-items: center; border-color: transparent; background: transparent; color: var(--muted); }
+  .nx-tools > button:hover:not(:disabled) { color: var(--text); background: var(--raised); border-color: var(--line); }
+  .nx-tools > button:disabled { opacity: .35; }
+  .nx-tools > .hidebtn.eye { width: 30px; height: 30px; color: var(--text); }
+  .nx-tools > .eye svg { width: 16px; height: 16px; }
+  .nx-tools > .nx-pinbtn[aria-pressed="true"] { color: var(--accent); background: var(--soft); border-color: var(--accent); }
+  .nx-tools .tsep { width: 1px; height: 18px; margin: 0 3px; background: var(--line); }
+  #list.picked > .nx-body, .nx-pin > .nx-body { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 8px; padding: 10px 10px 24px; }
+
+  /* the five tabs, always in this order, each closed until opened; inside: the first section, then Show more */
+  .nx-cat { flex: none; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+  .nx-cath { width: 100%; display: flex; align-items: center; gap: 8px; height: 42px; padding: 0 12px 0 10px; border: 0; border-radius: 9px; background: transparent; color: var(--text); font-weight: 600; text-align: left; }
+  .nx-cath:hover { background: var(--raised); border: 0; }
+  .nx-cat.open > .nx-cath { border-bottom: 1px solid var(--line); border-radius: 9px 9px 0 0; }
+  .nx-cath .i { width: 14px; height: 14px; color: var(--muted); transition: transform .15s; }
+  .nx-cat.open > .nx-cath .i { transform: rotate(90deg); }
+  .nx-cath small { margin-left: auto; min-width: 0; max-width: 62%; font-size: 11.5px; font-weight: 400; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .nx-catb { padding: 0 12px 4px; }
+  .nx-catb > .card > .sub { margin: 14px 0 2px; font-size: 11.5px; font-weight: 600; color: var(--muted); }
+  .nx-catb > .card:first-child > .sub { margin-top: 10px; }
+  .nx-catb > .card:first-child > .row:first-child { border-top: 0; }
+  .nx-more { width: calc(100% + 24px); display: flex; align-items: center; justify-content: center; gap: 6px; height: 36px; margin: 6px -12px -4px; padding: 0; border: 0; border-top: 1px dashed var(--line); border-radius: 0 0 9px 9px; background: none; color: var(--accent); font-size: 12px; }
+  .nx-more:hover { background: var(--raised); border-color: var(--line); }
+  .nx-more .i { width: 14px; height: 14px; }
+  .i.flip { transform: rotate(180deg); }
+  .nx-note { margin: 10px 0 2px; padding: 8px 10px; border-radius: 8px; background: var(--raised); color: var(--muted); font-size: 12px; line-height: 1.45; }
+  .nx-note b { color: var(--text); font-weight: 600; }
+
+  /* Float's simple settings first: colours, the font and its size, named for what they change */
+  .nx-quick { flex: none; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+  .nx-quick > .row:first-child { border-top: 0; }
+  .nx-all { flex: none; height: 34px; display: flex; align-items: center; justify-content: center; gap: 6px; color: var(--accent); background: transparent; border-style: dashed; }
+  .nx-all .i { width: 14px; height: 14px; }
+
+  /* pinned cards (Float): open on their own part while other parts are clicked */
+  .nx-pin { position: fixed; z-index: 13; display: flex; flex-direction: column; min-width: 290px; min-height: 200px; max-width: calc(100vw - 16px); max-height: calc(100vh - 16px);
+    overflow: hidden; resize: both; background: var(--base); border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--line)); border-radius: 12px; box-shadow: 0 18px 50px rgba(0, 0, 0, .55); }
+  .nx-pin.active, body.float aside.active { z-index: 14; border-color: var(--accent); } /* (the card in use: over the others) */
+
+  /* small lists that open from the bar under the game (Float): the element list, show/hide */
+  .nx-pop { position: fixed; z-index: 30; width: 310px; max-height: min(62vh, 560px); overflow: auto; padding: 6px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 14px 40px rgba(0, 0, 0, .5); }
+  .nx-pop h3 { display: flex; align-items: center; justify-content: space-between; margin: 6px 8px; font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+  .nx-pop h3 button { height: 24px; padding: 0 8px; font-size: 11px; letter-spacing: 0; text-transform: none; }
+  .nx-pop .thing-btn { border-radius: 6px; }
+  .nx-pop .meta.empty { padding: 4px 10px 8px; }
+
+  @media (max-width: 860px) { body, body.float { grid-template-columns: 1fr; grid-template-rows: auto 50vh minmax(0, 1fr); } #divider { display: none; } aside { grid-column: 1; grid-row: 3; border-top: 1px solid var(--line); }
+    body.float aside { position: static; width: auto; height: auto; max-height: none; resize: none; border-radius: 0; box-shadow: none; border: 0; border-top: 1px solid var(--line); } }
   @media (max-width: 440px) { .settings-layout { grid-template-columns: 80px minmax(0, 1fr); } .section-stack { padding: 6px 10px 15px; } .category-button { padding: 8px 4px; font-size: 12px; } }
 </style>
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" /> <circle cx="12" cy="12" r="3" /></symbol><symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49" /> <path d="M14.084 14.158a3 3 0 0 1-4.242-4.242" /> <path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143" /> <path d="m2 2 20 20" /></symbol><symbol id="i-rotate-ccw" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /> <path d="M3 3v5h5" /></symbol><symbol id="i-factory" viewBox="0 0 24 24"><path d="M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8l-7 5V8l-7 5V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z" /> <path d="M17 18h1" /> <path d="M12 18h1" /> <path d="M7 18h1" /></symbol><symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18" /> <path d="m6 6 12 12" /></symbol><symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 17v5" /> <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" /></symbol><symbol id="i-pin-off" viewBox="0 0 24 24"><path d="M12 17v5" /> <path d="M15 9.34V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H7.89" /> <path d="m2 2 20 20" /> <path d="M9 9v1.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h11" /></symbol><symbol id="i-grip-vertical" viewBox="0 0 24 24"><circle cx="9" cy="12" r="1" /> <circle cx="9" cy="5" r="1" /> <circle cx="9" cy="19" r="1" /> <circle cx="15" cy="12" r="1" /> <circle cx="15" cy="5" r="1" /> <circle cx="15" cy="19" r="1" /></symbol><symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" /></symbol><symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6" /></symbol><symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6" /></symbol><symbol id="i-undo-2" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5" /> <path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11" /></symbol><symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /> <path d="M3 3v5h5" /> <path d="M12 7v5l4 2" /></symbol><symbol id="i-panel-right" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" /> <path d="M15 3v18" /></symbol><symbol id="i-picture-in-picture-2" viewBox="0 0 24 24"><path d="M21 9V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v10c0 1.1.9 2 2 2h4" /> <rect width="10" height="7" x="12" y="13" rx="2" /></symbol><symbol id="i-list" viewBox="0 0 24 24"><path d="M3 12h.01" /> <path d="M3 18h.01" /> <path d="M3 6h.01" /> <path d="M8 12h13" /> <path d="M8 18h13" /> <path d="M8 6h13" /></symbol><symbol id="i-image" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" ry="2" /> <circle cx="9" cy="9" r="2" /> <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" /></symbol><symbol id="i-type" viewBox="0 0 24 24"><polyline points="4 7 4 4 20 4 20 7" /> <line x1="9" x2="15" y1="20" y2="20" /> <line x1="12" x2="12" y1="4" y2="20" /></symbol><symbol id="i-square" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" /></symbol><symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14" /> <path d="M12 5v14" /></symbol><symbol id="i-save" viewBox="0 0 24 24"><path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" /> <path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7" /> <path d="M7 3v4a1 1 0 0 0 1 1h7" /></symbol><symbol id="i-folder-open" viewBox="0 0 24 24"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2" /></symbol><symbol id="i-play" viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3" /></symbol><symbol id="i-triangle-alert" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" /> <path d="M12 9v4" /> <path d="M12 17h.01" /></symbol><symbol id="i-toggle-right" viewBox="0 0 24 24"><rect width="20" height="12" x="2" y="6" rx="6" ry="6" /> <circle cx="16" cy="12" r="2" /></symbol><symbol id="i-message-square" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></symbol><symbol id="i-table-2" viewBox="0 0 24 24"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18" /></symbol><symbol id="i-loader" viewBox="0 0 24 24"><path d="M12 2v4" /> <path d="m16.2 7.8 2.9-2.9" /> <path d="M18 12h4" /> <path d="m16.2 16.2 2.9 2.9" /> <path d="M12 18v4" /> <path d="m4.9 19.1 2.9-2.9" /> <path d="M2 12h4" /> <path d="m4.9 4.9 2.9 2.9" /></symbol></svg>
 <header class="app-header">
   <button id="hudbtn" title="The HUD you're editing: click to pick another, rename one, or add one">No HUD open</button>
-  <button id="explore" title="Open the HUD's folder">Folder</button>
+  <button id="explore" class="ib" title="Open the HUD's folder" aria-label="Open the HUD's folder"><svg class="i" aria-hidden="true"><use href="#i-folder-open"/></svg></button>
   <div class="app-actions">
     <button id="capture" hidden>Capture game</button>
     <button id="launch" hidden>Launch game</button>
@@ -364,10 +476,15 @@
     <select id="res" class="gridbtn" aria-label="Game resolution" disabled title="The game's resolution, and so the preview's: see how the HUD looks on other screens. Your own comes back when the editor closes."><option>Game: -</option></select>
     <button id="rescaution" class="caution" hidden aria-haspopup="dialog">⚠</button>
     <select id="grid" class="gridbtn" aria-label="Grid" title="Dragged parts land on a grid this many units apart (a unit is the screen height / 480)"><option value="0">Grid: off</option><option value="2">Grid: 2</option><option value="4">Grid: 4</option><option value="5">Grid: 5</option><option value="8">Grid: 8</option><option value="10">Grid: 10</option><option value="16">Grid: 16</option><option value="20">Grid: 20</option></select>
+    <button id="testserver" title="Offline game with a frozen bot and bhop/surf-style timer texts on screen"><svg class="i" aria-hidden="true"><use href="#i-play"/></svg>Test server</button>
     <span class="sep" aria-hidden="true"></span>
-    <button id="testserver" title="Offline game with a frozen bot and bhop/surf-style timer texts on screen">Test server</button>
+    <div class="seg" role="group" aria-label="Where the settings go">
+      <button id="dockbtn" aria-pressed="true" title="Dock: the settings in a panel beside the game (drag the bar between them to resize)"><svg class="i" aria-hidden="true"><use href="#i-panel-right"/></svg>Dock</button>
+      <button id="floatbtn" aria-pressed="false" title="Float: the settings in a card over the game, by what you click; pin a card to keep it open"><svg class="i" aria-hidden="true"><use href="#i-picture-in-picture-2"/></svg>Float</button>
+    </div>
     <span class="sep" aria-hidden="true"></span>
-    <button id="discard" class="ghost" disabled title="Put the HUD back to how it was last saved: every unsaved change goes">Discard changes</button>
+    <button id="undobtn" class="ib" disabled title="Undo (Ctrl+Z)" aria-label="Undo"><svg class="i" aria-hidden="true"><use href="#i-undo-2"/></svg></button>
+    <button id="discard" class="ib" disabled title="Undo all: put the HUD back to how it was last saved (every unsaved change goes)" aria-label="Undo all"><svg class="i" aria-hidden="true"><use href="#i-history"/></svg></button>
     <button id="restartmark" class="caution" hidden aria-haspopup="dialog">⚠</button>
     <button id="save" class="primary" disabled>Save HUD</button>
   </div>
@@ -410,11 +527,10 @@
       <div id="boxes"></div>
     </div>
   </main>
-  <footer class="preview-footer"><div class="msg"><span id="status">Starting...</span><span id="hint">Click a part of the game to edit it (again: the one under it); Ctrl+click adds more. The wheel zooms.</span></div><span id="gamestate"></span></footer>
-</section>
-<aside>
-  <!-- In-game Toggles, a panel at the top of the list in a map (see renderList); kept here while it isn't shown -->
-  <div id="ingamehold" hidden>
+  <!-- under the game: what the game holds open for editing (in a map), the loading screen, and in Float the element list
+       and show/hide (in Dock the panel lists them) -->
+  <div class="viewbar" id="viewbar">
+    <span class="vlabel">Show</span>
     <div id="ingame">
       <div class="ingame">
         <button id="scores" aria-pressed="false" title="Keep the scoreboard open to edit it. Click again (or press Tab in the game) to close it.">Scoreboard</button>
@@ -431,7 +547,16 @@
         <button data-bit="4" title="Large speed text under it, like jhud (font CenterPrintText, ClientScheme)">Large speed</button>
       </div>
     </div>
+    <span class="vsep" aria-hidden="true"></span>
+    <button id="loadbtn" aria-pressed="false" title="The box that shows while a map loads: the game holds it open while you edit it">Loading screen</button>
+    <span class="grow"></span>
+    <button id="elembtn" class="float-only" aria-haspopup="dialog" title="Every part on screen now, and the ones that show now and then"><svg class="i" aria-hidden="true"><use href="#i-list"/></svg>Element list</button>
+    <button id="showhidebtn" class="float-only" aria-haspopup="dialog" title="Hidden and shown parts, each with its eye"><svg class="i" aria-hidden="true"><use href="#i-eye"/></svg>Show/hide<span class="count" id="hiddencount" hidden></span></button>
   </div>
+  <footer class="preview-footer"><div class="msg"><span id="status">Starting...</span><span id="hint">Click a part of the game to edit it (again: the one under it); Ctrl+click adds more. The wheel zooms.</span></div><span id="gamestate"></span></footer>
+</section>
+<div id="divider" role="separator" aria-orientation="vertical" aria-label="Panel width" tabindex="0" title="Drag to give the game or the panel more room; double-click: the usual width"></div>
+<aside>
   <div class="sidebar-top" id="top">
     <!-- (search: off the screen, 10-02; the dev harness still types in it, ut.setKey) -->
     <input type="search" id="search" hidden placeholder="Find a HUD part or setting…" aria-label="Find a HUD part or setting">
@@ -443,7 +568,7 @@
 <input type="file" id="fontfile" accept=".ttf,.otf" hidden>
 <div id="picker" hidden><div>
   <div class="pickhead"><h2>Which HUD do you want to edit?</h2><button id="pickrefresh" class="ghost" title="Look in the custom folder again (a HUD moved, deleted or copied in since)">↻ Refresh</button></div>
-  <p class="meta">The HUDs in your custom folder (cstrike/custom). Changes show in game straight away. They are kept when you click Done or Save HUD.</p>
+  <p class="meta">The HUDs in your custom folder (cstrike/custom). Changes show in game straight away. They are kept when you click Save HUD.</p>
   <div id="hudlist"></div>
   <div id="importhud" class="drop">Add a HUD: drop it here<span class="meta">Its folder, or the .zip, .rar or .7z as downloaded. A copy goes in your custom folder.</span>
     <div class="dropbtns"><button id="pickfolder">Choose a folder...</button><button id="pickarchive">Choose a .zip, .rar or .7z...</button></div></div>
@@ -1062,6 +1187,7 @@ async function undo() {
 function setDirty(d) {
   dirty = d;
   $('save').disabled = $('discard').disabled = !d;
+  $('undobtn').disabled = !undoSteps.length;
   $('save').textContent = d ? 'Save HUD *' : 'Save HUD';
   $('savestate').textContent = d ? 'Unsaved changes' : 'No unsaved changes';
 }
@@ -1246,7 +1372,7 @@ function commit(f, id, edit, group = null, force = false) {
       if (later && !(/BuyMenu\.res$/i.test(f.path) && gameBlocks(step.text) === gameBlocks(next))) needRestart(later[1]);
       // (class select's ClassInfo: copied to each class's page as the menu is made, see classPictureRows)
       if (/ClassMenu_(CT|TER)\.res$/i.test(f.path) && /\bclassinfo\b/i.test(id)) needRestart('class pictures');
-      status('Changed in game. Click Done or Save HUD to keep it.');
+      status('Changed in game. Click Save HUD to keep it.');
       drawBoxes();
     } catch (err) {
       status(`Couldn't apply: ${err.message}`);
@@ -1328,28 +1454,29 @@ const windowFiles = sel => [UI_RES[sel.info.id], sel.info.id === 'loadingdialog'
   ...(CLASS_PAGES[sel.info.id] || []).map(classPage)].filter(Boolean).map(p => F(p)).filter(Boolean);
 // The game's window: its files as the game has them (every part, the added ones gone), one Ctrl+Z. Reset window goes back
 // to how the HUD was opened, which for a HUD that had the window already is its own look.
+function toGameWindow(fs) {
+  const change = fs.filter(f => f.text !== gameOf(f.name).text);
+  if (!change.length) return status('This window is the game\'s already.');
+  if (!confirm('Put this whole window back as the game has it? Every part goes back to the game\'s place and colours, and what was added to it goes (Ctrl+Z brings it all back).')) return;
+  const group = burstGroup();
+  for (const f of change) {
+    for (const pic of f.text.match(/replay\/thumbnails\/[^"\s]+/gi) || []) dropPicture(pic); // (on Save, if nothing names it)
+    // the borders of its added boxes: borders of their own in the scheme (see setEdge), unused once they go
+    const sf = F(resScheme(f));
+    for (const name of new Set(f.text.match(/HudEditorEdge_\w+/gi) || [])) if (sf) commit(sf, `${sf.name}/${name}/remove`, () => dropBlock(sf, ['Borders'], name), group);
+    commit(f, `${f.name}/gamewindow`, () => gameOf(f.name).text, group);
+  }
+  writing.then(() => { status('The window is the game\'s again (Ctrl+Z brings yours back).'); render(); });
+  refreshSoon();
+}
 function gameWindowRows(sel) {
   const fs = windowFiles(sel).filter(f => gameOf(f.name)?.text != null);
   if (!fs.length) return [];
-  const go = el('button', { className: 'ghost', textContent: 'The game\'s window', onclick: () => {
-    const change = fs.filter(f => f.text !== gameOf(f.name).text);
-    if (!change.length) return status('This window is the game\'s already.');
-    if (!confirm('Put this whole window back as the game has it? Every part goes back to the game\'s place and colours, and what was added to it goes (Ctrl+Z brings it all back).')) return;
-    const group = burstGroup();
-    for (const f of change) {
-      for (const pic of f.text.match(/replay\/thumbnails\/[^"\s]+/gi) || []) dropPicture(pic); // (on Save, if nothing names it)
-      // the edge lines of its added boxes: borders of their own in the scheme (see setEdge), unused once they go
-      const sf = F(resScheme(f));
-      for (const name of new Set(f.text.match(/HudEditorEdge_\w+/gi) || [])) if (sf) commit(sf, `${sf.name}/${name}/remove`, () => dropBlock(sf, ['Borders'], name), group);
-      commit(f, `${f.name}/gamewindow`, () => gameOf(f.name).text, group);
-    }
-    writing.then(() => { status('The window is the game\'s again (Ctrl+Z brings yours back).'); render(); });
-    refreshSoon();
-  } });
+  const go = el('button', { className: 'ghost', textContent: 'The game\'s window', onclick: () => toGameWindow(fs) });
   const row = el('div', { className: 'row action' });
   row.append(go);
   row.dataset.q = 'game window default start over reset';
-  return [row, noteRow('Every part of this window as the game has it, the parts added to it gone: to start it over. (↺ Reset window at the bottom goes back to how it was when the HUD was opened.)')];
+  return [row, noteRow('Every part of this window as the game has it, the parts added to it gone: to start it over (the factory at the top does the same). ↺ at the top goes back to how it was when the HUD was opened.')];
 }
 function resPath(sel) {
   for (let p = sel.node || sel.control; p; p = p.parent) if (BUY_PAGES[p.key]) return BUY_PAGES[p.key];
@@ -1450,7 +1577,7 @@ function addMissing(f, names) {
   });
   checkup = null;
   refreshSoon();
-  writing.then(() => { render(); status(`Added ${names.length > 1 ? `${names.length} parts` : missingName(f, names[0])} as the game has ${names.length > 1 ? 'them' : 'it'}. Click Done or Save HUD to keep it.`); });
+  writing.then(() => { render(); status(`Added ${names.length > 1 ? `${names.length} parts` : missingName(f, names[0])} as the game has ${names.length > 1 ? 'them' : 'it'}. Click Save HUD to keep it.`); });
 }
 function missingRows(f) {
   const names = missingBlocks(f);
@@ -1626,7 +1753,7 @@ function commandRows(sel) {
     row.append(t, tu, c, cu, el('button', { textContent: '✕', title: 'Remove this button', onclick: () => {
       commit(f, `${f.name}/${block}/remove`, () => dropBlock(f, [], block));
       // the button was the selection: the window is, now
-      if (selected && (selected.control?.name || '').toLowerCase() === block.toLowerCase()) select({ ...selected, control: null, node: null });
+      if (selected && (selected.control?.name || '').toLowerCase() === block.toLowerCase()) replaceSel({ ...selected, control: null, node: null });
       else refreshSoon();
     } }));
     row.dataset.q = `command button ${p.labeltext || ''} ${p.command || ''}`.toLowerCase();
@@ -1934,6 +2061,8 @@ const LOADING_SEL = () => ({ thing: { name: 'LoadingDialog', key: 'loadingdialog
 // the other of its two files, when f is one of them
 const LOADING_TWIN = { [UI_RES.loadingdialog]: LOADING_VAC, [LOADING_VAC]: UI_RES.loadingdialog };
 const loadingTwin = f => (f && LOADING_TWIN[f.name] && F(LOADING_TWIN[f.name])) || null;
+// a number being typed in the panel or a card (a re-render would take it away)
+function typingInCard() { const a = document.activeElement; return !!a && a.tagName === 'INPUT' && !!a.closest('#list, .nx-pin'); }
 let loadingVac = false; // the box as VAC-secured servers show it (its file is the one clicked parts write first)
 let loadingHeld = null, loadingAsked = 0; // what the plugin was last asked for ('show', 'vac' or null: closed), and when
 const loadingUp = () => !!live && live.panels.some(p => p === p.thing && p.key === 'loadingdialog');
@@ -1949,7 +2078,7 @@ function holdLoading(on, again = false) {
   loadingHeld = want;
   loadingAsked = want ? Date.now() : 0;
   // ("Opening it" becomes Show it again if it never came; not while a number is being typed, as poll)
-  if (want) setTimeout(() => { if (selected && selected.thing.key === 'loadingdialog' && !loadingUp()) $('list').contains(document.activeElement) && document.activeElement.tagName === 'INPUT' ? pendingRender = true : render(); }, 2600);
+  if (want) setTimeout(() => { if (selected && selected.thing.key === 'loadingdialog' && !loadingUp()) typingInCard() ? pendingRender = true : render(); }, 2600);
   return live && call('cmd', '', `schemereload_loading ${want || 'hide'}`).catch(() => {});
 }
 // The game cuts what's in the loading box at its window's edge, so a picture or text around the box didn't show
@@ -2186,7 +2315,7 @@ async function setMvpStar(file) {
     for (const star of MVP_STARS) await call('write', `materials/${star}.vmt`, pic ? starVmt(pic.material, pic.proxies) : starVmt(star.replace(/^hud/, 'HUD')));
     await call('cmd', '', 'mat_reloadmaterial scoreboard_mvp; mat_reloadmaterial win_panel_mvpstar').catch(() => {});
     setDirty(true);
-    status(pic ? 'MVP star changed. Click Done or Save HUD to keep it.' : 'The game\'s MVP star is back.');
+    status(pic ? 'MVP star changed. Click Save HUD to keep it.' : 'The game\'s MVP star is back.');
     render(); // (the star shown in its rows)
   } catch (err) { status(`Couldn't use that picture: ${err.message}`); }
 }
@@ -2221,8 +2350,7 @@ function mvpRows() {
   see.append(el('button', { textContent: 'See it on the scoreboard', disabled: !local, title: 'Gives you three test MVPs and opens the scoreboard', onclick: () => {
       call('cmd', '', 'schemereload_testvalue mvps 3');
       if (!keepScores) $('scores').click();
-    } }),
-    el('button', { textContent: 'See it on the round-end panel', disabled: !local, title: 'The round-end panel, as for a CT win with you as MVP', onclick: () => call('cmd', '', 'schemereload_showpanel win') }));
+    } }));
   see.dataset.q = r.dataset.q;
   return [r, see, noteRow(local ? 'Beside the names of players with MVPs on the scoreboard, and on the round-end panel. Square pictures work best; a GIF plays.'
     : 'Beside the names of players with MVPs on the scoreboard, and on the round-end panel. Start the test game (Test server) to see it on both.')];
@@ -2279,7 +2407,7 @@ function customRows(id, lay = F(L)) {
   const p = layoutProps(lay, id), rows = [], inWindow = lay !== F(L), kind = (p.controlname || '').toLowerCase();
   if (inWindow && kind === 'imagepanel') rows.push(colorRow('Tint', 'For this picture only', p.drawcolor || '255 255 255 255', v => save(lay, 'drawcolor', v, id), ['drawcolor'], null, `${lay.name}/${id}`));
   if (kind === 'editablepanel') {
-    rows.push(colorRow('Edge line', 'A 1-unit line round the box (clear: none)', edgeColour(p.border, resScheme(lay)) || '0 0 0 0', v => setEdge(lay, id, v), ['border'], null, `${lay.name}/${id}`));
+    rows.push(colorRow('Border', 'A 1-unit line round the box (clear: none)', edgeColour(p.border, resScheme(lay)) || '0 0 0 0', v => setEdge(lay, id, v), ['border'], null, `${lay.name}/${id}`));
     if (inWindow) rows.push(checkRow('Rounded corners', p.paintbackgroundtype === '2', on => save(lay, 'PaintBackgroundType', on ? '2' : '0', id), `${lay.name}/${id}|rounded`));
   }
   // (own ↺ ids: a window that can't be clicked lists several added parts in one selection, see addedSections)
@@ -2315,10 +2443,10 @@ function removeAdded(lay, id) {
   if (/^HudEditorEdge_/i.test(p.border || '') && sf) commit(sf, `${sf.name}/${p.border}/remove`, () => dropBlock(sf, ['Borders'], p.border), group);
   dropPicture(p.image);
   const was = selected && (inWindow ? selected.res === lay && (ownBlock(selected) || {}).block?.toLowerCase() === id.toLowerCase() : selected.info.id === id);
-  if (was) select(inWindow ? { ...selected, control: null, node: null } : null);
+  if (was) replaceSel(inWindow ? { ...selected, control: null, node: null } : null);
   else { writing.then(render); refreshSoon(); }
   const what = addedName(lay, id);
-  writing.then(() => status(`${what} removed. Click Done or Save HUD to keep it that way (Ctrl+Z puts it back).`));
+  writing.then(() => status(`${what} removed. Click Save HUD to keep it that way (Ctrl+Z puts it back).`));
 }
 const addedName = (lay, id) => `${CUSTOM[(layoutProps(lay, id).controlname || '').toLowerCase()]?.word || 'Part'} ${/\d+$/.exec(id)?.[0] || ''}`.trim();
 // Everything added (pictures, texts, colour boxes), one row each: Select picks it as a click in the preview would (one
@@ -2598,7 +2726,7 @@ function scoreboardSections(sel, shownFonts) {
     }, null, false)];
   if (boxOn) {
     background.push(colorRow('Box colour', 'The editor\'s own box (HudEditorBackground)', box.bgcolor_override || '0 0 0 200', v => save(f, 'bgcolor_override', v, SB_BOX), ['bgcolor_override']),
-      colorRow('Box edge line', 'A 1-unit line round the box (clear: none)', edgeColour(box.border) || '0 0 0 0', v => setEdge(f, SB_BOX, v), ['border']),
+      colorRow('Box border', 'A 1-unit line round the box (clear: none)', edgeColour(box.border) || '0 0 0 0', v => setEdge(f, SB_BOX, v), ['border']),
       checkRow('Rounded corners', box.paintbackgroundtype === '2', on => save(f, 'paintbackgroundtype', on ? '2' : '0', SB_BOX)));
     for (const [k, label] of POS) background.push(numRow(f, SB_BOX, k, `Box ${label.toLowerCase()}`, box[k]));
   }
@@ -2660,8 +2788,10 @@ async function select(sel) {
     await uiFile(classPage(n));
     if (!classGame[n] && host) try { const t = await call('vanilla', `${n}.res`); classGame[n] = { text: t, parsed: parse(t), bases: [] }; } catch {}
   }));
-  selected = sel;
-  holdLoading(!!sel && sel.thing.key === 'loadingdialog');
+  const pin = sel && layoutMode === 'float' ? pins.find(p => samePart(p.sel, sel)) : null;
+  if (pin) { pin.sel = selected = sel; holdShown(); render(); drawBoxes(); return; } // (picked again: its pinned card is the one in use)
+  selected = cardSel = sel;
+  holdShown();
   render();
   drawBoxes();
   scroller().scrollTop = 0;
@@ -2705,7 +2835,7 @@ function pickAll(fx, fy) {
     if (!p.thing || p.w * p.h <= 0 || CONTAINERS.has(p.key) || p.key.startsWith('frame_') && p.key.endsWith('grip')) continue;
     if (front && p.thing !== front) continue; // (it's in front of everything: only its parts)
     const info = thingInfo(p.thing);
-    if (!info || (p === p.thing && NO_CLICK.has(p.key)) || (cover && info.kind === 'hud')) continue;
+    if (!info || DEV_OUT.has(info.id) || (p === p.thing && NO_CLICK.has(p.key)) || (cover && info.kind === 'hud')) continue;
     if (!seenInGame(info)) continue;
     const r = clickRects(p, info, live.W, live.H).find(inside);
     if (!r) continue;
@@ -3630,7 +3760,7 @@ function removeSquareAll() {
         + '\t"$translucent" "1"\n\t"$vertexcolor" "1"\n\t"$vertexalpha" "1"\n\t"$ignorez" "1"\n\t"$no_fullbright" "1"\n}\n');
       await call('cmd', '', 'mat_reloadmaterial 8x800corner');
       setDirty(true);
-      status('Changed in game. Click Done or Save HUD to keep it.');
+      status('Changed in game. Click Save HUD to keep it.');
     } catch (err) { status(`Couldn't apply: ${err.message}`); }
     render();
   });
@@ -5060,7 +5190,7 @@ async function setBackground(file) {
       }
       await call('cmd', '', 'mat_reloadmaterial background01').catch(() => {});
       setDirty(true);
-      status('The game\'s background is back. Click Done or Save HUD to keep it.');
+      status('The game\'s background is back. Click Save HUD to keep it.');
     } catch (err) { status(`Couldn't change the background: ${err.message}`); }
     return;
   }
@@ -5095,7 +5225,7 @@ async function setBackground(file) {
     imgs.forEach(i => i.close?.());
     await call('cmd', '', 'mat_reloadmaterial background01').catch(() => {});
     setDirty(true);
-    status(`Background set: ${made}${anim ? `, ${imgs.length} frames at ${fps} a second` : ''}${shrunk ? ' (the most the game takes for that many frames; 63 or fewer keep 1080p)' : ''}, ${Math.round(mb / 1e6)} MB. Click Done or Save HUD to keep it.`);
+    status(`Background set: ${made}${anim ? `, ${imgs.length} frames at ${fps} a second` : ''}${shrunk ? ' (the most the game takes for that many frames; 63 or fewer keep 1080p)' : ''}, ${Math.round(mb / 1e6)} MB. Click Save HUD to keep it.`);
   } catch (err) {
     status(`Couldn't use that picture: ${err.message}`);
   }
@@ -5266,10 +5396,10 @@ function onScreen() {
     }
     // windows first (they are what you are looking at), then HUD parts in a fixed order; skip parts that are always "visible" but rarely draw
     const order = Object.keys(HUD);
-    return [...seen].map(([thing, info]) => ({ thing, info })).filter(t => !(t.info.hud && t.info.hud.quiet))
+    return [...seen].map(([thing, info]) => ({ thing, info })).filter(t => !(t.info.hud && t.info.hud.quiet) && !DEV_OUT.has(t.info.id))
       .sort((a, b) => (a.info.kind === 'hud') - (b.info.kind === 'hud') || order.indexOf(a.info.id) - order.indexOf(b.info.id));
   }
-  return Object.entries(HUD).filter(([id]) => Object.keys(layoutProps(F(L), id)).length)
+  return Object.entries(HUD).filter(([id]) => !DEV_OUT.has(id) && Object.keys(layoutProps(F(L), id)).length)
     .map(([id, hud]) => ({ thing: { name: id, key: id.toLowerCase() }, info: { kind: 'hud', id, name: hud.name, hud } }));
 }
 
@@ -5299,16 +5429,21 @@ function render() {
   // a row drawn now would show the value from before an edit still waiting to be written (a tick box would untick)
   if (waiting.size) { renderAfterSave = true; return; }
   // emptying the list scrolls it to the top; keep the reader's place (select() scrolls up itself)
-  const top = scroller().scrollTop;
-  renderList();
-  topBar();
-  scroller().scrollTop = top;
+  const top = scroller().scrollTop, act = selected;
+  if (layoutMode === 'float') selected = cardSel; // (the main card's part; the pinned cards' are drawn after it)
+  try {
+    renderList();
+    topBar();
+    scroller().scrollTop = top;
+    if (layoutMode === 'float') renderPins(act);
+  } finally { selected = act; }
   if (fpop && !document.contains(fpop.owner)) closeFontPop(); // its row has gone
   if (cpop && !document.contains(cpop.owner)) closePicker();
   updateResCaution();
+  fillNxPop();
 }
-// What scrolls: the list, or with a selection its settings beside the categories.
-const scroller = () => document.querySelector('#list .section-stack') || $('list');
+// What scrolls: the list, or with a selection its settings under its heading.
+const scroller = () => document.querySelector('#list .nx-body') || $('list');
 
 // A heading over rows. In the list, a click on it unfolds them (all folded when the editor starts; the ones opened stay
 // open while it runs), like every fold here with the triangle at its left; a search shows everything it finds anyway.
@@ -5341,10 +5476,6 @@ function keysTip(head, rows) {
   if (keys.length && name) name.title = `${keys.join('\n')}\n\nDouble-click to rename`;
 }
 
-// A selection's settings come in six categories, one shown at a time (remembered); Custom holds what was added.
-const CATEGORIES = [['show', 'Show/hide'], ['colour', 'Colours'], ['font', 'Fonts'], ['border', 'Borders'], ['layout', 'Layout'], ['custom', 'Custom'], ['missing', 'Missing'], ['other', 'Extras']];
-let category = 'colour', openParts = false;
-try { category = localStorage.getItem('category') || 'colour'; } catch {}
 // A part of a window picked on its own (an added picture or box, the scoreboard's background box): its name, as the
 // list of added things calls it, for the selection's heading.
 function partName(s) {
@@ -5363,22 +5494,6 @@ function sectionTitle(t) {
   const name = selected.info.name, rest = t === name ? '' : t.startsWith(`${name}: `) ? t.slice(name.length + 2) : t.replace(/^(Colours|Border): /, '');
   return rest && rest[0].toUpperCase() + rest.slice(1);
 }
-// On screen now, folded over the selection: the other parts, a click away.
-function partsFold() {
-  const d = el('details', { className: 'parts', open: openParts }), grid = el('div', { className: 'part-grid' });
-  d.ontoggle = () => { openParts = d.open; };
-  const things = onScreen();
-  if (menuUp()) things.push({ thing: BG_SEL().thing, info: BG_SEL().info });
-  for (const t of things) {
-    const b = el('button', { className: 'part-button', title: t.info.name, onclick: () => select({ thing: t.thing, info: t.info, control: null }) });
-    b.setAttribute('aria-pressed', String(!selected.control && selected.info.id === t.info.id));
-    b.append(el('span', { textContent: t.info.name }));
-    grid.append(b);
-  }
-  d.append(el('summary', { textContent: live ? 'On screen now' : 'HUD parts' }), grid);
-  return d;
-}
-
 // A selection's font sections, each a panel of its own like the other categories' (they were one card, each under a
 // line: it wasn't clear where one ended).
 function fontsCards(sections) {
@@ -5392,12 +5507,13 @@ function fontsCards(sections) {
 function renderList() {
   pendingRender = false;
   const list = $('list'), q = $('search').value.trim().toLowerCase();
-  $('ingamehold').append(ingameEl); // (out of the list before it empties: its buttons are found by id)
   list.innerHTML = '';
   list.classList.remove('picked');
   $('parts').replaceChildren();
   $('footbtns').replaceChildren();
   $('foot').hidden = true;
+  document.querySelector('aside').classList.toggle('nx-empty', layoutMode === 'float' && !selected);
+  viewBar();
   if (!files.length) return;
   if (q) {
     // search: every HUD part, window type and control type, plus all other colours
@@ -5426,155 +5542,427 @@ function renderList() {
   }
   if (selected) {
     list.classList.add('picked');
-    $('parts').append(partsFold());
-    const head = el('div', { className: 'selected-head' }), titles = el('div', { className: 'titles' });
-    // (from a part of a window: back to the window)
-    const up = (selected.control || selected.node) && selected.info.kind === 'window';
-    const back = el('button', { className: 'back', textContent: '‹', title: up ? `Back to ${selected.info.name}` : 'Back to the list (changes stay unsaved until Save HUD)',
-      onclick: () => select(up ? { ...selected, control: null, node: null } : null) });
-    back.setAttribute('aria-label', 'Back to the list');
-    titles.append(el('h2', { textContent: partName(selected) || selected.info.name }), el('p', { textContent: subtitle(selected) }));
-    head.append(back, titles);
-    const hide = hideButton(selected);
-    if (hide) head.append(hide);
-    // ✕: closes it, back to the list from anywhere (as ‹ does from a window: the loading screen closes in the game too)
-    const close = el('button', { className: 'back close', textContent: '✕', title: 'Close (back to the list; changes stay unsaved until Save HUD)', onclick: () => select(null) });
-    close.setAttribute('aria-label', 'Close');
-    head.append(close);
-    list.append(head);
-    rowScope = [selected.thing.key, selected.control?.key, selected.node?.key].filter(Boolean).join('/');
-    const sections = selectionSections(selected);
-    rowScope = '';
-    // one category at a time (the one picked last, else the first this selection has)
-    const has = k => sections.some(s => s[2] === k), shown = has(category) ? category : (CATEGORIES.find(([k]) => has(k)) || ['colour'])[0];
-    const nav = el('nav', { className: 'category-nav' }), stack = el('div', { className: 'section-stack' }), layout = el('div', { className: 'settings-layout' });
-    nav.setAttribute('aria-label', 'Settings');
-    for (const [k, name] of CATEGORIES) {
-      const b = el('button', { className: 'category-button', textContent: name, disabled: !has(k), onclick: () => {
-        category = k;
-        try { localStorage.setItem('category', k); } catch {}
-        closePicker();
-        render();
-        scroller().scrollTop = 0;
-      } });
-      b.setAttribute('aria-pressed', String(k === shown));
-      nav.append(b);
-    }
-    if (also.length) stack.append(card(`Line up ${also.length + 1} parts`, lineUpRows(), false));
-    if (selected.thing.key === 'loadingdialog') stack.append(card('', loadingHoldRows(), false)); // (on every tab: which box)
-    const mine = sections.filter(s => s[2] === shown).map(([t, r]) => [sectionTitle(t), r]);
-    // each section a panel of its own (fonts: + Add font on the first)
-    if (mine.length) stack.append(...(shown === 'font' ? fontsCards(mine) : mine.map(([t, r]) => card(t, r, false))));
-    else stack.append(el('p', { className: 'meta', textContent: 'Nothing to edit here yet.' }));
-    layout.append(nav, stack);
-    list.append(layout);
-    // at the bottom: ↺ for this selection at once (the ones lit when clicked, in every category), and Done. A part of a
-    // window: its own settings only. A window: every setting it shows, then its files as they were opened (every part
-    // in it, added and hidden ones too).
-    const rows = sections.flatMap(s => s[1]), part = (selected.control || selected.node) && rows.some(r => r.dataset.own);
-    const win = !part && selected.info.kind === 'window' && !selected.control && !selected.node && !['menubg', 'gamelogo'].includes(selected.info.id);
-    const reset = el('button', { textContent: `↺ Reset ${part || selected.info.kind === 'hud' && !selected.control ? 'part' : win ? 'window' : 'all'}`,
-      title: part ? 'Put this part\'s own settings back to how they were when the HUD was opened (the colours it shares with others stay)'
-        : win ? `Put this window back to how it was when the HUD was opened: every setting here${UI_RES[selected.info.id] ? ' and every part in it' : ''}`
-        : 'Put every setting here back to how it was when the HUD was opened', onclick: () => {
-        const undos = rows.filter(r => !part || r.dataset.own).flatMap(r => [...r.querySelectorAll('.undo:not(.off)')]);
-        const back = win ? windowFiles(selected).filter(f => f.opened != null && f.text !== f.opened) : [];
-        // a part hidden since the HUD was opened is shown again: hiding keeps its place aside (see moveOff), which no ↺
-        // puts back; first, so a lit ↺ of its place below still puts the place as it was opened
-        const own = part && ownBlock(selected), rf = own && selected.res;
-        const unhide = !!rf && rf.opened != null && partHidden(rf, own.block) && !partHidden({ parsed: parse(rf.opened), bases: [] }, own.block);
-        if (!undos.length && !back.length && !unhide) return status('Nothing here has changed since the HUD was opened.');
-        // one Ctrl+Z for all of it: every write until it's done (some ↺ write later, or in a group of their own)
-        const group = resetGroup = burstGroup();
-        setTimeout(() => writing.then(() => { if (resetGroup === group) resetGroup = null; }), 1500);
-        if (unhide) setPartHidden(rf, own.block, false);
-        for (const u of undos) u.onclick();
-        // (after the settings above are written, so the files end as they were opened)
-        if (back.length) {
-          waiting.add('window reset');
-          setTimeout(() => {
-            waiting.delete('window reset');
-            for (const f of back) {
-              for (const pic of f.text.match(/replay\/thumbnails\/[^"\s]+/gi) || []) dropPicture(pic); // (on Save, if nothing names it)
-              // the edge lines of boxes added since: borders of their own in the scheme (see setEdge), unused once they go
-              const sf = F(resScheme(f)), had = new Set((f.opened.match(/HudEditorEdge_\w+/gi) || []).map(n => n.toLowerCase()));
-              for (const name of new Set(f.text.match(/HudEditorEdge_\w+/gi) || []))
-                if (sf && !had.has(name.toLowerCase())) commit(sf, `${sf.name}/${name}/remove`, () => dropBlock(sf, ['Borders'], name), group);
-              commit(f, `${f.name}/reset`, () => f.opened, group);
-            }
-            if (!waiting.size && renderAfterSave) writing.then(() => { renderAfterSave = false; render(); });
-          }, 300);
-        }
-        refreshSoon();
-      } });
-    const done = el('button', { className: 'primary', textContent: 'Done', title: 'Save the changes into the HUD and go back to the list' });
-    done.onclick = async () => {
-      await sleep(300); // a change still being typed
-      await writing;
-      if (dirty) await saveHud();
-      await select(null);
-    };
-    // this selection's fonts as they are at this screen height, to every other height's entry
-    // (only fonts with entries for ranges of screen heights: one without "yres" is for every height already)
-    const multi = fontsOf(selected).filter(([file, font]) => F(file) && [...fontVariants(F(file), font).values()].some(p => p.yres)), H = live ? live.H : 1080;
-    const allRes = el('button', { textContent: 'All resolutions', disabled: !multi.length, onclick: () => fontsToAllHeights(multi),
-      title: multi.length ? `Copy ${multi.length > 1 ? `these ${multi.length} fonts` : 'this font'} as ${multi.length > 1 ? 'they are' : 'it is'} at your screen height (${H}) to every other screen height, sizes scaled by height (${multi.map(([, n]) => n).join(', ')})`
-        : 'No font here has entries for other screen heights: it looks the same at every resolution already' });
-    $('footbtns').append(reset, allRes, done);
-    $('foot').hidden = false;
-    return; // one thing at a time: the lists come back with Back or Done
+    buildSelection(list, mainTabs);
+    return;
   }
-  const things = onScreen();
+  list.append(...elementCards()); // (Dock, nothing picked: what's on screen, each with its eye)
+}
+
+// ---------- the dev build's panel: Dock (beside the game) or Float (a card over it, more pinned) ----------
+// A selection's settings in five tabs, always in this order, each closed until opened (again for every part picked);
+// inside one, its first section, then Show more for the rest. Float shows the settings people change most first.
+const TABS = [['colour', 'Colours'], ['font', 'Fonts'], ['border', 'Borders'], ['extra', 'Extra'], ['custom', 'Add custom']];
+const TAB_OF = { colour: 'colour', font: 'font', border: 'border', layout: 'extra', other: 'extra', missing: 'extra', show: 'extra', custom: 'custom' };
+// Out of the dev build for now (the user's ask, 10-09): the killer panel and the round-end panel; the bomb screen and the
+// whole-HUD colours and fonts aren't in the list either
+const DEV_OUT = new Set(['FreezePanel', 'WinPanel_Round']);
+// cardSel: what the main card (Float) or the panel (Dock) shows; pins: Float's pinned cards, each on its own part. The
+// global `selected` is the one in use: what the preview marks and keys and handlers act on (a pinned card's while it's used)
+let layoutMode = 'dock', cardSel = null, pins = [], floatAll = false, floatMoved = false, floatPlaced = '', nxPop = null;
+try { if (localStorage.getItem('layout') === 'float') layoutMode = 'float'; } catch {}
+const mainTabs = { key: '', open: new Set(), more: new Set() };
+unfolded.add('On screen now'); unfolded.add('HUD parts'); // (the element list starts open)
+const icon = (name, cls = '') => {
+  const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'), u = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+  s.setAttribute('class', `i${cls ? ` ${cls}` : ''}`); s.setAttribute('aria-hidden', 'true'); u.setAttribute('href', `#i-${name}`); s.append(u);
+  return s;
+};
+const iconButton = (name, label, onclick, cls = '') => { const b = el('button', { type: 'button', className: cls, title: label, onclick }); b.setAttribute('aria-label', label.split(':')[0]); b.append(icon(name)); return b; };
+const selKey = s => s ? [s.info.id, s.thing.key, s.control?.key, s.node?.key].filter(Boolean).join('/') : '';
+const samePart = (a, b) => !!a && !!b && selKey(a) === selKey(b);
+const rowLabel = r => ((r.querySelector && r.querySelector('.rename') || {}).textContent || '').trim().toLowerCase();
+const shownName = s => partName(s) || s.info.name;
+function nxNote(head, rest) { const d = el('div', { className: 'nx-note' }); d.append(el('b', { textContent: head }), rest); return d; }
+
+// A part in the element list: its name, what it is, and (a HUD part) its eye. close: it's in a pop-out, which closes.
+function partRow(t, close = false) {
+  const hud = t.info.kind === 'hud' && canHide(t.info.id), hidden = hud && isHidden(t.info.id);
+  const b = el('button', { className: 'thing-btn' + (selected && selected.info.id === t.info.id ? ' sel' : '') + (hidden ? ' hidden' : '') });
+  b.append(el('span', { className: 'name', textContent: t.info.name }), el('span', { className: 'meta', textContent: hidden ? 'hidden' : t.info.tag || (t.info.kind === 'hud' ? 'HUD' : 'Window') }));
+  if (hud) {
+    const eye = eyeIcon(el('span', { role: 'button' }), !hidden, 'this part');
+    eye.onclick = e => { e.stopPropagation(); setHidden(t.info.id, !hidden); refreshSoon(); };
+    b.append(eye);
+  } else b.append(el('span', { className: 'eye none' })); // (can't be hidden: the eye's room, so the rows line up)
+  b.onclick = () => { if (close) closeNxPop(); select({ thing: t.thing, info: t.info, control: null }); };
+  return b;
+}
+const hudThing = ([id, hud]) => ({ thing: { name: id, key: id.toLowerCase() }, info: { kind: 'hud', id, name: hud.name, hud } });
+// parts that only show now and then (kill feed, pickup history, weapon selection...), so they can be picked and hidden too
+const otherParts = things => !live || !F(L) ? [] : Object.entries(HUD).filter(([id]) => !things.some(t => t.info.id === id) && canHide(id) && !DEV_OUT.has(id)).map(hudThing);
+function elementCards() {
+  const things = onScreen(), out = [];
   shownKey = things.map(t => t.info.id).join();
-  const partRow = t => {
-    const hud = t.info.kind === 'hud' && canHide(t.info.id), hidden = hud && isHidden(t.info.id);
-    const b = el('button', { className: 'thing-btn' + (selected && selected.info.id === t.info.id ? ' sel' : '') + (hidden ? ' hidden' : '') });
-    b.append(el('span', { className: 'name', textContent: t.info.name }), el('span', { className: 'meta', textContent: hidden ? 'hidden' : t.info.tag || (t.info.kind === 'hud' ? 'HUD' : 'Window') }));
-    if (hud) {
-      const eye = eyeIcon(el('span', { role: 'button' }), !hidden, 'this part');
-      eye.onclick = e => { e.stopPropagation(); setHidden(t.info.id, !hidden); refreshSoon(); };
-      b.append(eye);
-    }
-    b.onclick = () => select({ thing: t.thing, info: t.info, control: null });
-    return b;
-  };
-  const parts = things.length ? things.map(partRow) : [el('p', { className: 'meta', style: 'padding: 8px 12px; margin: 0', textContent: 'Nothing editable on screen right now.' })];
+  const parts = things.length ? things.map(t => partRow(t)) : [el('p', { className: 'meta', style: 'padding: 8px 12px; margin: 0', textContent: 'Nothing editable on screen right now.' })];
   // at the main menu, its background is a thing of its own too (clicking the empty background selects it as well)
   if (menuUp()) parts.push(partRow({ thing: BG_SEL().thing, info: BG_SEL().info }));
-  if (inMap()) list.append(card('In-game Toggles', [ingameEl])); // (the scoreboard and chat held open, the sample texts)
-  list.append(card(live ? 'On screen now' : 'HUD parts', parts));
-  // adding only while playing: what it adds is part of the HUD in a map (windows have their own, see addRows); what's
-  // been added is listed anyway
-  const added = F(L) ? addedList() : [];
-  if (F(L) && live && live.panels.some(p => p.module === 'ClientDLL' && HUD[p.name])) list.append(card('Add to the HUD', addRows()));
-  else if (added.length) list.append(card('Added to the HUD', [...added, noteRow('In a map (Test server) they show, and more can be added.')]));
-  list.append(card('Colours by kind', kindRows())); // (one colour for a whole kind of thing: near the top, the quick way)
-  const loading = el('div', { className: 'row action' });
-  loading.append(el('button', { textContent: 'Edit the loading screen', title: 'The box that shows while a map loads: the game holds it open while you edit it', onclick: () => select(LOADING_SEL()) }));
-  list.append(card('Loading screen', [loading, noteRow('The box that shows while a map loads. The game holds it open while it\'s picked here.')]));
-  const bomb = el('div', { className: 'row action' });
-  bomb.append(el('button', { textContent: 'Edit the bomb screen', title: 'The little screen on the C4', onclick: async () => { await uiFile(C4); select(C4_SEL()); } }));
-  list.append(card('Bomb screen', [bomb, noteRow('The little screen on the C4, on bomb maps: the code typed in as it\'s planted, and the stars while it ticks.')]));
-  // (the MVP star is the scoreboard's: Scoreboard: MVP star, see scoreboardSections)
-  // The HUD check-up, off for now (10-02): its code stays (checkupRows, runCheckup); this line puts it back in the list.
-  // list.append(card('HUD check-up', checkupRows()));
-  // parts that only show now and then (kill feed, pickup history, weapon selection...), so they can be hidden too
-  if (live && F(L)) {
-    const shown = new Set(things.map(t => t.info.id));
-    const rest = Object.entries(HUD).filter(([id]) => !shown.has(id) && canHide(id))
-      .map(([id, hud]) => partRow({ thing: { name: id, key: id.toLowerCase() }, info: { kind: 'hud', id, name: hud.name, hud } }));
-    if (rest.length) {
-      const d = el('details');
-      d.open = openOther;
-      d.ontoggle = () => { openOther = d.open; };
-      d.append(el('summary', { textContent: 'Other HUD parts (not on screen now)' }), ...rest);
-      list.append(d);
-    }
+  out.push(card(live ? 'On screen now' : 'HUD parts', parts));
+  const added = F(L) && !inMap() ? addedList() : [];
+  if (added.length) out.push(card('Added to the HUD', [...added, noteRow('In a map (Test server) they show; pick a HUD part there to add more (its Add custom tab).')]));
+  const rest = otherParts(things).map(t => partRow(t));
+  if (rest.length) {
+    const d = el('details');
+    d.open = openOther;
+    d.ontoggle = () => { openOther = d.open; };
+    d.append(el('summary', { textContent: 'Other HUD parts (not on screen now)' }), ...rest);
+    out.push(d);
   }
-  const other = el('details', { open: openColours });
-  other.ontoggle = () => { openColours = other.open; }; // (stays open over the list's redraws, as the cards do)
-  other.append(el('summary', { textContent: 'All other colours' }), ...otherRows(C, 'In game'), ...otherRows(S, 'Menus'), ...otherRows(CH, 'Chat'));
-  list.append(other, allFonts());
+  return out;
+}
+
+// The settings of the global `selected` into box (the panel's list, or a pinned card): its heading, then its tabs (Float:
+// its simple settings first). tabs: which tabs are open and showing more, kept while it's the same part.
+function buildSelection(box, tabs, pin = null) {
+  const sel = selected, float = layoutMode === 'float', key = selKey(sel);
+  if (tabs.key !== key) { tabs.key = key; tabs.open.clear(); tabs.more.clear(); }
+  const head = el('div', { className: 'selected-head nx-head' }), titles = el('div', { className: 'titles' }), tools = el('div', { className: 'nx-tools' });
+  // (from a part of a window: back to the window)
+  if ((sel.control || sel.node) && sel.info.kind === 'window')
+    titles.append(el('button', { className: 'back nx-up', type: 'button', textContent: `‹ ${sel.info.name}`, title: `Back to ${sel.info.name}`, onclick: () => select({ ...sel, control: null, node: null }) }));
+  titles.append(el('h2', { textContent: shownName(sel), title: shownName(sel) }), el('p', { textContent: subtitle(sel), title: subtitle(sel) }));
+  head.append(icon('grip-vertical', 'grip'), titles, tools);
+  rowScope = [sel.thing.key, sel.control?.key, sel.node?.key].filter(Boolean).join('/');
+  const sections = selectionSections(sel), quick = float && !floatAll ? quickRows(sections, sel) : [];
+  rowScope = '';
+  const eye = hideButton(sel) || el('button', { className: 'eye', type: 'button', disabled: true, innerHTML: EYE_SVG, title: 'This one can\'t be hidden from here' });
+  tools.append(eye, resetButton(sel, sections), defaultButton(sel));
+  if (float) tools.append(pinButton(pin));
+  tools.append(el('span', { className: 'tsep' }), iconButton('x', pin ? 'Close this pinned card' : 'Close (Esc): back to the list; changes stay unsaved until Save HUD', () => pin ? closePin(pin) : select(null), 'close'));
+  if (float) head.addEventListener('pointerdown', e => dragCard(e, pin ? pin.el : document.querySelector('aside'), pin));
+  box.append(head);
+  const body = el('div', { className: 'nx-body' });
+  if (also.length && !pin) body.append(card(`Line up ${also.length + 1} parts`, lineUpRows(), false));
+  if (sel.thing.key === 'loadingdialog') body.append(card('', loadingHoldRows(), false)); // (above the tabs: which box)
+  if (quick.length) {
+    const q = el('section', { className: 'nx-quick' }), all = el('button', { className: 'nx-all', type: 'button', onclick: () => { floatAll = true; render(); } });
+    q.append(...quick);
+    all.append(icon('chevron-down'), 'All settings');
+    body.append(q, all);
+  } else {
+    const cats = tabCards(sections, sel, tabs);
+    body.append(...(cats.length ? cats : [el('p', { className: 'meta', textContent: 'Nothing to edit here yet.' })]));
+    if (float && floatAll) { const fewer = el('button', { className: 'nx-all', type: 'button', onclick: () => { floatAll = false; render(); } }); fewer.append(icon('chevron-down', 'flip'), 'Fewer settings'); body.append(fewer); }
+  }
+  box.append(body);
+}
+
+// The sections in their tabs. Add custom says what it adds to: a window's parts go in that window; a HUD part's are the HUD's.
+function tabCards(sections, sel, tabs) {
+  const by = new Map(TABS.map(([k]) => [k, []]));
+  for (const [t, rows, kind] of sections) if (rows.length) by.get(TAB_OF[kind] || 'extra').push([sectionTitle(t), rows]);
+  // Fonts: the font itself first (its face and size), then the rest (a separate font, the game's missing font)
+  by.get('font').sort((a, b) => !a[1].some(r => r.dataset && r.dataset.file) - !b[1].some(r => r.dataset && r.dataset.file));
+  const custom = by.get('custom');
+  let adds = '';
+  if (sel.info.kind === 'hud' && !sel.control && !DEV_OUT.has(sel.info.id)) {
+    adds = 'Adds to the HUD';
+    const playing = F(L) && live && live.panels.some(p => p.module === 'ClientDLL' && HUD[p.name]);
+    custom.unshift(['', [nxNote('Adds to the HUD', ` you see while playing (HudLayout), not inside ${sel.info.name}: drag what you add wherever you want it.`),
+      ...(playing ? addRows() : [noteRow('In a map (Test server), pictures, texts and colour boxes can be added to the HUD here.')])]]);
+  } else if (custom.length) { adds = `Adds to ${sel.info.name}`; custom[0][1].unshift(nxNote(adds, ': what you add shows in this window only, and moves with it.')); }
+  const out = [];
+  for (const [k, name] of TABS) {
+    const list = by.get(k);
+    if (!list.length) continue;
+    const open = tabs.open.has(k), more = tabs.more.has(k), sec = el('section', { className: `nx-cat${open ? ' open' : ''}` });
+    sec.dataset.tab = k;
+    const head = el('button', { className: 'nx-cath', type: 'button', onclick: () => { tabs.open[open ? 'delete' : 'add'](k); render(); } });
+    head.setAttribute('aria-expanded', String(open));
+    const titles = list.map(([t]) => t).filter(t => t && t.toLowerCase() !== name.toLowerCase()), n = list.reduce((a, [, r]) => a + r.length, 0);
+    head.append(icon('chevron-right'), el('span', { textContent: name }), el('small', { textContent: k === 'custom' && adds ? adds
+      : titles.length ? titles.slice(0, 2).join(' · ') + (titles.length > 2 ? ` +${titles.length - 2}` : '') : `${n} setting${n > 1 ? 's' : ''}` }));
+    sec.append(head);
+    if (open) {
+      const b = el('div', { className: 'nx-catb' }), shown = more ? list : list.slice(0, 1);
+      b.append(...(k === 'font' ? fontsCards(shown) : shown.map(([t, r]) => card(t, r, false))));
+      if (k === 'font') b.append(...allResRows(sel));
+      if (list.length > 1) {
+        const m = el('button', { className: 'nx-more', type: 'button', onclick: () => { tabs.more[more ? 'delete' : 'add'](k); render(); } });
+        m.append(icon('chevron-down', more ? 'flip' : ''), more ? 'Show less' : `Show more (${list.length - 1})`);
+        b.append(m);
+      }
+      sec.append(b);
+    }
+    out.push(sec);
+  }
+  return out;
+}
+// Float's simple settings: the part's own colours (and opacity), then its font and the font's size, named for what they change.
+function quickRows(sections, sel) {
+  const rows = [], first = sections.find(s => s[2] === 'colour');
+  if (first) {
+    rows.push(...first[1].filter(r => r.classList.contains('colour')).slice(0, 3));
+    const op = first[1].find(r => rowLabel(r) === 'opacity');
+    if (op) rows.push(op);
+  }
+  const [file, font] = fontsOf(sel)[0] || [];
+  if (file && F(file)) {
+    const fr = fontRows(file, font), face = fr.find(r => rowLabel(r) === 'face'), size = fr.find(r => rowLabel(r) === 'size');
+    const name = (r, t) => { const n = r.querySelector('.renamed-wrap'); if (n) n.replaceWith(renameable(t)); r.title = `Font ${font} in ${file}: every part that uses it changes`; return r; };
+    if (face) rows.push(name(face, 'Font'));
+    if (size) rows.push(name(size, 'Text size'));
+  }
+  return rows;
+}
+// This selection's fonts as they are at this screen height, to every other height's entry (only fonts with entries for
+// ranges of screen heights: one without "yres" is for every height already)
+function allResRows(sel) {
+  const multi = fontsOf(sel).filter(([file, font]) => F(file) && [...fontVariants(F(file), font).values()].some(p => p.yres)), H = live ? live.H : 1080;
+  if (!multi.length) return [];
+  const r = el('div', { className: 'row action' });
+  r.append(el('button', { textContent: 'All resolutions', onclick: () => fontsToAllHeights(multi),
+    title: `Copy ${multi.length > 1 ? `these ${multi.length} fonts` : 'this font'} as ${multi.length > 1 ? 'they are' : 'it is'} at your screen height (${H}) to every other screen height, sizes scaled by height (${multi.map(([, n]) => n).join(', ')})` }));
+  return [r];
+}
+
+// ↺ (the heading): this selection back to how it was when the HUD was opened. A part of a window: its own settings only. A
+// window: every setting it shows, then its files as they were opened (every part in it, added and hidden ones too).
+function resetButton(sel, sections) {
+  const rows = sections.flatMap(s => s[1]), part = (sel.control || sel.node) && rows.some(r => r.dataset.own);
+  const win = !part && sel.info.kind === 'window' && !sel.control && !sel.node && !['menubg', 'gamelogo'].includes(sel.info.id);
+  const what = part || sel.info.kind === 'hud' && !sel.control ? 'part' : win ? 'window' : 'all';
+  const b = iconButton('rotate-ccw', part ? 'Reset: this part\'s own settings back to how they were when the HUD was opened (the colours it shares with others stay)'
+    : win ? `Reset: this window back to how it was when the HUD was opened, every setting here${UI_RES[sel.info.id] ? ' and every part in it' : ''}`
+    : 'Reset: every setting here back to how it was when the HUD was opened', () => {
+      const undos = rows.filter(r => !part || r.dataset.own).flatMap(r => [...r.querySelectorAll('.undo:not(.off)')]);
+      const back = win ? windowFiles(sel).filter(f => f.opened != null && f.text !== f.opened) : [];
+      // a part hidden since the HUD was opened is shown again: hiding keeps its place aside (see moveOff), which no ↺
+      // puts back; first, so a lit ↺ of its place below still puts the place as it was opened
+      const own = part && ownBlock(sel), rf = own && sel.res;
+      const unhide = !!rf && rf.opened != null && partHidden(rf, own.block) && !partHidden({ parsed: parse(rf.opened), bases: [] }, own.block);
+      if (!undos.length && !back.length && !unhide) return status('Nothing here has changed since the HUD was opened.');
+      // one Ctrl+Z for all of it: every write until it's done (some ↺ write later, or in a group of their own)
+      const group = resetGroup = burstGroup();
+      setTimeout(() => writing.then(() => { if (resetGroup === group) resetGroup = null; }), 1500);
+      if (unhide) setPartHidden(rf, own.block, false);
+      for (const u of undos) u.onclick();
+      // (after the settings above are written, so the files end as they were opened)
+      if (back.length) {
+        waiting.add('window reset');
+        setTimeout(() => {
+          waiting.delete('window reset');
+          for (const f of back) {
+            for (const pic of f.text.match(/replay\/thumbnails\/[^"\s]+/gi) || []) dropPicture(pic); // (on Save, if nothing names it)
+            // the borders of boxes added since: borders of their own in the scheme (see setEdge), unused once they go
+            const sf = F(resScheme(f)), had = new Set((f.opened.match(/HudEditorEdge_\w+/gi) || []).map(n => n.toLowerCase()));
+            for (const name of new Set(f.text.match(/HudEditorEdge_\w+/gi) || []))
+              if (sf && !had.has(name.toLowerCase())) commit(sf, `${sf.name}/${name}/remove`, () => dropBlock(sf, ['Borders'], name), group);
+            commit(f, `${f.name}/reset`, () => f.opened, group);
+          }
+          if (!waiting.size && renderAfterSave) writing.then(() => { renderAfterSave = false; render(); });
+        }, 300);
+      }
+      refreshSoon();
+    }, 'nx-reset');
+  b.dataset.what = what;
+  return b;
+}
+// The game's default (the heading's factory): the part's own block as the game has it (a HUD part's in HudLayout, a window
+// control's in its .res), or for a window every file it has, as the game has them (The game's window, under Extra).
+const topBlock = (f, name) => f && f.parsed.sections.find(s => s.path.length === 2 && s.path[1].toLowerCase() === name.toLowerCase());
+const blockSpan = (f, s) => { const t = f.text, a = t.lastIndexOf('\n', s.kstart - 1) + 1, n = t.indexOf('\n', s.close); return [a, n < 0 ? t.length : n + 1]; };
+const gameBlock = (g, name) => g.text.slice(...blockSpan(g, topBlock(g, name)));
+const withGameBlock = (f, name, game) => { const [x, y] = blockSpan(f, topBlock(f, name)); return f.text.slice(0, x) + game + f.text.slice(y); };
+function gameDefaultOf(sel) {
+  if (sel.info.kind === 'window' && !sel.control && !sel.node) {
+    const fs = windowFiles(sel).filter(f => gameOf(f.name)?.text != null);
+    return fs.length ? { fs } : null;
+  }
+  if (sel.thing.key === 'loadingdialog') return null;
+  const own = sel.res && (sel.control || sel.node) && ownBlock(sel);
+  const [f, block] = own ? [sel.res, own.block] : sel.info.kind === 'hud' && !sel.control ? [F(L), sel.info.id] : [null, null];
+  if (!f || /^hudeditor_/i.test(block)) return null;
+  const g = gameOf(f.name);
+  return g && topBlock(g, block) && topBlock(f, block) ? { f, block, g } : null;
+}
+function defaultButton(sel) {
+  const d = gameDefaultOf(sel);
+  const b = iconButton('factory', !d ? 'The game\'s default: none for this one (↺ puts it back as it was when the HUD was opened)'
+    : d.fs ? 'The game\'s default: the whole window as the game has it (what was added to it goes; Ctrl+Z brings yours back)'
+    : 'The game\'s default: this part\'s own settings as the game has them (the colours and fonts it shares with others stay; Ctrl+Z brings yours back)', () => {
+      if (d.fs) return toGameWindow(d.fs);
+      const game = gameBlock(d.g, d.block);
+      let same = false;
+      commit(d.f, `${d.f.name}/${d.block}/gamedefault`, () => { const next = withGameBlock(d.f, d.block, game); same = next === d.f.text; return next; });
+      writing.then(() => status(same ? `${shownName(sel)} is as the game has it already.` : `${shownName(sel)} is back as the game has it (Ctrl+Z brings yours back).`));
+      refreshSoon();
+    }, 'nx-default');
+  b.disabled = !d;
+  return b;
+}
+// Pin (Float): the card stays open on its part while other parts are clicked (each opens the main card); unpinned, it's
+// the main card again (or closes, if another part has the main card).
+function pinButton(pin) {
+  const b = iconButton('pin', pin ? 'Pinned: open on this part while you click others. Click to unpin.' : 'Pin: keep this card open on this part while you click other parts', () => pin ? unpin(pin) : pinCard(), 'nx-pinbtn');
+  b.setAttribute('aria-pressed', String(!!pin));
+  return b;
+}
+function pinCard() {
+  if (!cardSel) return;
+  const a = document.querySelector('aside').getBoundingClientRect();
+  pins.push({ sel: cardSel, x: a.left, y: a.top, w: a.width, h: a.height, el: null, tabs: { key: mainTabs.key, open: new Set(mainTabs.open), more: new Set(mainTabs.more) } });
+  status(`Pinned ${shownName(cardSel)}: it stays open while you click other parts.`);
+  selected = cardSel; cardSel = null; floatPlaced = ''; floatMoved = false;
+  try { localStorage.removeItem('floatAt'); } catch {}
+  render(); drawBoxes();
+}
+function unpin(p) {
+  pins = pins.filter(x => x !== p);
+  p.el.remove();
+  if (!cardSel) { cardSel = p.sel; floatMoved = true; setFloatXY(p.x, p.y); floatPlaced = selKey(p.sel); }
+  selected = cardSel;
+  holdShown(); render(); drawBoxes();
+}
+function closePin(p) {
+  pins = pins.filter(x => x !== p);
+  p.el.remove();
+  if (selected === p.sel) selected = cardSel;
+  holdShown(); render(); drawBoxes();
+}
+// The loading screen held open while a card (the main one or a pinned one) shows it
+function holdShown() { return holdLoading([cardSel, ...pins.map(p => p.sel)].some(s => s && s.thing.key === 'loadingdialog')); }
+// The part in use is gone (removed): next (its window) or nothing in its place, in the card it was in (a pinned one too)
+function replaceSel(next) {
+  const pin = layoutMode === 'float' && pins.find(p => p.sel === selected);
+  if (!pin) return select(next);
+  if (!next) return closePin(pin);
+  pin.sel = selected = next;
+  render(); drawBoxes();
+}
+function renderPins(act = selected) {
+  for (const p of pins) {
+    if (!p.el) {
+      p.el = el('div', { className: 'nx-pin' });
+      p.h = Math.max(200, Math.min(p.h, innerHeight - p.y - 96)); // (above the bar under the game)
+      Object.assign(p.el.style, { left: `${p.x}px`, top: `${p.y}px`, width: `${p.w}px`, height: `${p.h}px` });
+      p.el.addEventListener('pointerdown', e => { useSel(p.sel); grip(e, p.el, p); }, true);
+      p.el.addEventListener('focusin', () => useSel(p.sel));
+      document.body.append(p.el);
+    }
+    const top = p.el.querySelector('.nx-body')?.scrollTop || 0;
+    selected = p.sel;
+    p.el.replaceChildren();
+    try { buildSelection(p.el, p.tabs, p); } finally { selected = act; }
+    p.el.classList.toggle('active', act === p.sel);
+    const b = p.el.querySelector('.nx-body');
+    if (b) b.scrollTop = top;
+  }
+  document.querySelector('aside').classList.toggle('active', !!pins.length && !!cardSel && act === cardSel);
+}
+// A card being used makes its part the one in use (marked in the preview, what keys and handlers act on)
+function useSel(s) {
+  if (!s || selected === s) return;
+  selected = s;
+  for (const p of pins) p.el && p.el.classList.toggle('active', p.sel === s);
+  document.querySelector('aside').classList.toggle('active', !!pins.length && s === cardSel);
+  drawBoxes();
+}
+
+// Float: the card goes by the part picked (beside its box in the preview), once per part; dragged, it stays where it's put.
+const setFloatXY = (x, y) => {
+  const a = document.querySelector('aside');
+  x = Math.round(Math.max(4, Math.min(x, innerWidth - a.offsetWidth - 4))); y = Math.round(Math.max(4, Math.min(y, innerHeight - 64)));
+  a.style.setProperty('--fx', `${x}px`); a.style.setProperty('--fy', `${y}px`);
+  return { x, y };
+};
+function placeFloat() {
+  if (layoutMode !== 'float' || !cardSel || innerWidth <= 860) return;
+  const key = selKey(cardSel);
+  if (floatMoved || key === floatPlaced) return;
+  floatPlaced = key;
+  const a = document.querySelector('aside'), box = $('boxes').querySelector('.box.sel'), P = $('preview').getBoundingClientRect(), w = a.offsetWidth, h = Math.min(a.offsetHeight, 420);
+  // beside the part's box (right, then left), else the game's top right or top left; not over a pinned card if it can help it
+  const fit = y => Math.min(Math.max(y, P.top + 8), Math.max(P.top + 8, P.bottom - h - 8)), R = box && box.getBoundingClientRect();
+  const spots = [...(R ? [[R.right + 14, fit(R.top)], [R.left - w - 14, fit(R.top)]] : []), [P.right - w - 12, P.top + 12], [P.left + 12, P.top + 12]]
+    .filter(([x]) => x >= P.left + 4 && x + w <= P.right - 4);
+  const free = ([x, y]) => !pins.some(p => x < p.x + p.w && x + w > p.x && y < p.y + p.h && y + h > p.y);
+  const at = spots.find(free) || spots[0] || [P.right - w - 12, P.top + 12];
+  setFloatXY(at[0], at[1]);
+}
+function dragCard(e, card, pin) {
+  if (e.button !== 0 || (!pin && innerWidth <= 860) || e.target.closest('button, input, select, a, [contenteditable]')) return;
+  const r = card.getBoundingClientRect(), dx = e.clientX - r.left, dy = e.clientY - r.top;
+  e.preventDefault();
+  const move = m => {
+    const x = Math.round(Math.max(4, Math.min(m.clientX - dx, innerWidth - r.width - 4))), y = Math.round(Math.max(4, Math.min(m.clientY - dy, innerHeight - 64)));
+    if (pin) { Object.assign(pin, { x, y }); Object.assign(card.style, { left: `${x}px`, top: `${y}px` }); }
+    else { floatMoved = true; const at = setFloatXY(x, y); try { localStorage.setItem('floatAt', JSON.stringify(at)); } catch {} }
+  };
+  const up = () => { removeEventListener('pointermove', move); removeEventListener('pointerup', up); };
+  addEventListener('pointermove', move);
+  addEventListener('pointerup', up);
+}
+// The browser's own corner grip resizes a card; the size it's left at is kept (the main card's on this PC).
+function grip(e, card, pin) {
+  const r = card.getBoundingClientRect();
+  if (r.right - e.clientX > 18 || r.bottom - e.clientY > 18) return;
+  addEventListener('pointerup', () => {
+    if (pin) Object.assign(pin, { w: card.offsetWidth, h: card.offsetHeight });
+    else { card.style.setProperty('--fw', `${card.offsetWidth}px`); card.style.setProperty('--fh', `${card.offsetHeight}px`); card.style.width = card.style.height = ''; try { localStorage.setItem('floatSize', JSON.stringify([card.offsetWidth, card.offsetHeight])); } catch {} }
+  }, { once: true });
+}
+function setLayout(mode) {
+  layoutMode = mode;
+  try { localStorage.setItem('layout', mode); } catch {}
+  document.body.classList.toggle('float', mode === 'float');
+  $('dockbtn').setAttribute('aria-pressed', String(mode === 'dock'));
+  $('floatbtn').setAttribute('aria-pressed', String(mode === 'float'));
+  if (mode === 'dock') {
+    // one panel: the part in use (a pinned card's, else the main card's); the pinned cards close
+    for (const p of pins) p.el && p.el.remove();
+    pins = [];
+    cardSel = selected = selected || cardSel;
+    holdShown();
+  } else { cardSel = selected; floatPlaced = ''; }
+  closeNxPop();
+  render(); drawBoxes();
+}
+
+// The bar under the game: the toggles (in a map), the loading screen, and (Float) the element list and show/hide.
+function viewBar() {
+  const loading = [cardSel, ...pins.map(p => p.sel)].some(s => s && s.thing.key === 'loadingdialog');
+  $('loadbtn').setAttribute('aria-pressed', String(loading));
+  $('loadbtn').disabled = !files.length;
+  const hidden = Object.keys(HUD).filter(id => canHide(id) && isHidden(id) && !DEV_OUT.has(id)).length;
+  $('hiddencount').hidden = !hidden;
+  $('hiddencount').textContent = hidden;
+}
+function openNxPop(btn, build) {
+  if (nxPop && nxPop.owner === btn) return closeNxPop();
+  closeNxPop();
+  nxPop = el('div', { className: 'nx-pop' });
+  Object.assign(nxPop, { owner: btn, build });
+  nxPop.setAttribute('role', 'dialog');
+  btn.setAttribute('aria-expanded', 'true');
+  document.body.append(nxPop);
+  fillNxPop();
+}
+function fillNxPop() {
+  if (!nxPop) return;
+  const top = nxPop.scrollTop;
+  nxPop.replaceChildren(...nxPop.build());
+  const b = nxPop.owner.getBoundingClientRect(), w = nxPop.offsetWidth, h = nxPop.offsetHeight;
+  nxPop.style.left = `${Math.round(Math.max(8, Math.min(b.right - w, innerWidth - w - 8)))}px`;
+  nxPop.style.top = `${Math.round(b.top - h - 6 >= 8 ? b.top - h - 6 : b.bottom + 6)}px`;
+  nxPop.scrollTop = top;
+}
+function closeNxPop() { if (!nxPop) return; nxPop.owner.setAttribute('aria-expanded', 'false'); nxPop.remove(); nxPop = null; }
+function elementPop() {
+  if (!files.length) return [el('p', { className: 'meta empty', textContent: 'Open a HUD first.' })];
+  const things = onScreen(), rest = otherParts(things);
+  const out = [el('h3', { textContent: live ? 'On screen now' : 'HUD parts' }), ...(things.length ? things.map(t => partRow(t, true)) : [el('p', { className: 'meta empty', textContent: 'Nothing editable on screen right now.' })])];
+  if (menuUp()) out.push(partRow({ thing: BG_SEL().thing, info: BG_SEL().info }, true));
+  if (rest.length) out.push(el('h3', { textContent: 'Not on screen now' }), ...rest.map(t => partRow(t, true)));
+  return out;
+}
+function showHidePop() {
+  if (!files.length) return [el('p', { className: 'meta empty', textContent: 'Open a HUD first.' })];
+  const all = [...onScreen(), ...otherParts(onScreen())].filter(t => t.info.kind === 'hud' && canHide(t.info.id));
+  const off = all.filter(t => isHidden(t.info.id)), on = all.filter(t => !isHidden(t.info.id));
+  const head = el('h3', { textContent: `Hidden (${off.length})` });
+  if (off.length) head.append(el('button', { type: 'button', textContent: 'Show them all', onclick: () => { for (const t of off) setHidden(t.info.id, false); refreshSoon(); } }));
+  return [head, ...(off.length ? off.map(t => partRow(t, true)) : [el('p', { className: 'meta empty', textContent: 'Nothing hidden. The eye by a part hides it; hidden parts are listed here to show again.' })]),
+    el('h3', { textContent: `Shown (${on.length})` }), ...on.map(t => partRow(t, true))];
 }
 
 // ---------- preview boxes ----------
@@ -5591,7 +5979,7 @@ function boxList() {
     for (const p of live.panels) {
       if (!p.thing || p !== p.thing || (front && p !== front)) continue; // (the loading screen, a question box: only its box)
       const info = thingInfo(p);
-      if (!info || NO_CLICK.has(p.key) || (cover && info.kind === 'hud') || !seenInGame(info)) continue;
+      if (!info || DEV_OUT.has(info.id) || NO_CLICK.has(p.key) || (cover && info.kind === 'hud') || !seenInGame(info)) continue;
       for (const r of clickRects(p, info, live.W, live.H))
         if (r.w * r.h <= 0.9 * live.W * live.H && r.x < live.W && r.y < live.H && r.x + r.w > 0 && r.y + r.h > 0) boxes.push({ thing: p, info, r, cls: 'thing' });
     }
@@ -5599,6 +5987,10 @@ function boxList() {
     for (const s of [sel, ...also]) if (s && s.control && s.control.w + s.control.h === 0) continue;
       else if (s && s.control) boxes.push({ thing: s.thing, info: s.info, r: s.control, cls: 'sel', label: controlIn(s.control, s.thing)[1] });
       else if (s && partName(s) && partPanel(s)) boxes.push({ thing: s.thing, info: s.info, r: partPanel(s), cls: 'sel', label: partName(s) }); // (a window's picture, box...)
+    // (Float: a pinned card's control or window part, its name over it)
+    for (const { sel: s } of pins) if (s === sel || !live.panels.includes(s.thing)) continue;
+      else if (s.control && s.control.w + s.control.h) boxes.push({ thing: s.thing, info: s.info, r: s.control, cls: 'pin', label: controlIn(s.control, s.thing)[1] });
+      else if (partName(s) && partPanel(s)) boxes.push({ thing: s.thing, info: s.info, r: partPanel(s), cls: 'pin', label: partName(s) });
     return { W: live.W, H: live.H, boxes };
   }
   const v = $('video'), W = v.hidden ? 1920 : v.width || 1920, H = v.hidden ? 1080 : v.height || 1080;
@@ -5612,7 +6004,8 @@ function drawBoxes() {
   host.innerHTML = '';
   for (const b of boxes) {
     const isSel = selected && (b.cls === 'sel' || [selected, ...also].some(s => !s.control && !partName(s) && s.info.id === b.info.id && s.thing.key === b.thing.key));
-    const d = el('div', { className: `box ${b.cls}${isSel ? ' sel' : ''}` });
+    const pinned = !isSel && b.cls === 'thing' && pins.some(({ sel: s }) => !s.control && !partName(s) && s.info.id === b.info.id && s.thing.key === b.thing.key);
+    const d = el('div', { className: `box ${b.cls}${isSel ? ' sel' : ''}${pinned ? ' pin' : ''}` });
     Object.assign(d.style, { left: `${b.r.x / W * 100}%`, top: `${b.r.y / H * 100}%`, width: `${b.r.w / W * 100}%`, height: `${b.r.h / H * 100}%` });
     d.append(el('span', { textContent: b.label || b.info.name }));
     host.append(d);
@@ -5620,6 +6013,7 @@ function drawBoxes() {
   const hover = el('div', { className: 'box hover', id: 'hoverbox', hidden: true });
   hover.append(el('span'));
   host.append(hover);
+  placeFloat(); // (Float: a part just picked gets its card beside it)
 }
 
 const stagePoint = e => { const r = $('boxes').getBoundingClientRect(); return [(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height]; };
@@ -5665,7 +6059,7 @@ const gridded = v => { const m = /^([rc]?)(-?[\d.]+)$/i.exec(v ?? ''); return !g
 function showGrid(t) {
   const box = $('boxes');
   if (!grid || !t) { box.style.backgroundImage = ''; return; }
-  const k = box.offsetWidth / live.W, step = grid * t.s * k, line = 'rgba(232, 162, 199, .22)'; // (in the preview's own pixels, zoomed with it)
+  const k = box.offsetWidth / live.W, step = grid * t.s * k, line = 'rgba(124, 177, 255, .22)'; // (in the preview's own pixels, zoomed with it)
   const origin = (key, full) => {
     const a = (/^\s*([rc]?)/i.exec(t.p[key] || '') || [, ''])[1].toLowerCase();
     if (a === 'c') return full / 2;
@@ -5979,19 +6373,26 @@ async function poll() {
   // the scoreboard closes when the HUD reloads: open it again while it's being kept open
   if (keepScores && live && !live.panels.some(p => p.key === 'scores') && Date.now() - scoresSent > 1500) { scoresSent = Date.now(); call('cmd', '', '+showscores'); }
   // (the chat: the plugin holds it, see Chat in In-game Toggles)
-  if (selected && live && !live.panels.includes(selected.thing)) {
-    // the same thing, found again in the new list (panels are re-read every time). One that is gone stays selected:
-    // windows close while the HUD reloads (the scoreboard) and come back
-    const again = live.panels.find(p => p === p.thing && p.key === selected.thing.key);
-    const ctl = again && selected.control && live.panels.find(p => p.thing === again && p.key === selected.control.key && p.cls === selected.control.cls);
-    const node = again && selected.node && live.panels.find(p => p.thing === again && p.key === selected.node.key && p.cls === selected.node.cls);
-    if (again) selected = { ...selected, thing: again, info: thingInfo(again) || selected.info, control: ctl || selected.control, node: node || selected.node };
+  if (live) {
+    // the same thing, found again in the new list (panels are re-read every time), for every open card. One that is gone
+    // stays picked: windows close while the HUD reloads (the scoreboard) and come back
+    const done = new Map(), again = s => {
+      if (!s || live.panels.includes(s.thing)) return s;
+      if (!done.has(s)) {
+        const t = live.panels.find(p => p === p.thing && p.key === s.thing.key);
+        const ctl = t && s.control && live.panels.find(p => p.thing === t && p.key === s.control.key && p.cls === s.control.cls);
+        const node = t && s.node && live.panels.find(p => p.thing === t && p.key === s.node.key && p.cls === s.node.cls);
+        done.set(s, t ? { ...s, thing: t, info: thingInfo(t) || s.info, control: ctl || s.control, node: node || s.node } : s);
+      }
+      return done.get(s);
+    };
+    selected = again(selected); cardSel = again(cardSel);
+    for (const p of pins) p.sel = again(p.sel);
   }
   drawBoxes();
-  const busy = document.activeElement && $('list').contains(document.activeElement) && document.activeElement.tagName === 'INPUT';
-  if (busy) pendingRender = true; else renderOnScreenOnly();
+  if (typingInCard()) pendingRender = true; else renderOnScreenOnly();
 }
-$('list').addEventListener('focusout', () => { if (pendingRender) setTimeout(render); });
+document.addEventListener('focusout', e => { if (pendingRender && e.target.closest && e.target.closest('#list, .nx-pin')) setTimeout(render); });
 
 // Re-render only when the set of things on screen changed, so the rows being edited stay put.
 let shownKey = '';
@@ -6081,14 +6482,15 @@ function testTools() {
   $('notlocal').hidden = local;
   if (!$('tools').hidden) placeTools(); // taller now: still whole in the window
 }
-// In a map: the In-game Toggles panel at the top of the list (the scoreboard and the chat held open, see poll; the test
-// game's sample texts); out of one, it goes and lets go of what it held
+// In a map: the toggles under the game work (the scoreboard and the chat held open, see poll; the test game's sample
+// texts); out of one, they're greyed out and let go of what they held
 const inMap = () => !!live && live.panels.some(p => p.module === 'ClientDLL' && HUD[p.name]);
-const ingameEl = $('ingame'); // (moved into the panel and back to #ingamehold, see renderList)
+const ingameEl = $('ingame'); // (in the bar under the game)
 let shownInMap = false;
 function inGameRow() {
   const on = inMap(), local = on && live.local;
   if (on !== shownInMap) { shownInMap = on; render(); }
+  for (const id of ['scores', 'keepchat', 'netgraphbtn', 'showposbtn']) $(id).disabled = !on;
   // Speed & timer: the sample texts are the test game's (the plugin sends them on its own server only)
   $('textsbtn').disabled = !local;
   $('textsbtn').title = local ? 'The test game\'s sample timer and speed texts: each on or off' : 'Only in the test game (Test server): the sample timer and speed texts';
@@ -6233,7 +6635,9 @@ async function openHud(path) {
     $('picker').hidden = true;
     closeRestartPop();
     $('hudbtn').textContent = hudName;
-    selected = null;
+    selected = cardSel = null;
+    for (const p of pins) p.el && p.el.remove();
+    pins = [];
     also = []; // (parts Ctrl+clicked with the last one)
     holdLoading(false);
     undoSteps.length = 0;
@@ -6455,7 +6859,57 @@ if (host) {
   $('capture').onclick = () => capture(false);
   $('launch').onclick = () => launchForHud(true);
   $('search').oninput = () => render();
+  $('undobtn').onclick = () => undo();
 }
+// ---------- the dev build's frame: Dock / Float, the divider, the bar under the game ----------
+$('dockbtn').onclick = () => setLayout('dock');
+$('floatbtn').onclick = () => setLayout('float');
+$('loadbtn').onclick = () => {
+  const pin = pins.find(p => p.sel.thing.key === 'loadingdialog');
+  if (pin) closePin(pin); else if (cardSel && cardSel.thing.key === 'loadingdialog') select(null); else select(LOADING_SEL());
+};
+$('elembtn').onclick = () => openNxPop($('elembtn'), elementPop);
+$('showhidebtn').onclick = () => openNxPop($('showhidebtn'), showHidePop);
+document.addEventListener('pointerdown', e => { if (nxPop && !nxPop.contains(e.target) && !nxPop.owner.contains(e.target)) closeNxPop(); }, true);
+addEventListener('resize', () => { if (nxPop) fillNxPop(); if (layoutMode === 'float') setFloatXY(parseFloat(document.querySelector('aside').style.getPropertyValue('--fx')) || innerWidth * .6, parseFloat(document.querySelector('aside').style.getPropertyValue('--fy')) || 90); });
+// Esc (not over the game, where it's the game's): a pop-out closes, else the card or panel lets go
+addEventListener('keydown', e => {
+  if (e.key !== 'Escape' || overPreview || cpop || fpop || restartPop || cautionPop || !$('picker').hidden) return;
+  const a = document.activeElement;
+  if (a && (/^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName) || a.isContentEditable)) return;
+  if (nxPop) closeNxPop(); else if (cardSel) select(null);
+}, true); // (capture: before the colour picker's, the restart list's... which close theirs and would leave it to this)
+// The main card (Float): using it makes its part the one in use; its corner grip's size is kept
+document.querySelector('aside').addEventListener('pointerdown', e => { if (layoutMode !== 'float') return; useSel(cardSel); grip(e, document.querySelector('aside'), null); }, true);
+document.querySelector('aside').addEventListener('focusin', () => { if (layoutMode === 'float') useSel(cardSel); });
+// The bar between the game and the panel (Dock): dragged, the panel's width (kept on this PC); double-click: the usual
+(() => {
+  const root = document.documentElement, d = $('divider');
+  const set = w => { w = Math.round(Math.max(300, Math.min(w, innerWidth * .62))); root.style.setProperty('--side', `${w}px`); return w; };
+  const keep = w => { try { localStorage.setItem('side', w); } catch {} };
+  try { const w = +localStorage.getItem('side'); if (w >= 300) set(w); } catch {}
+  d.onpointerdown = e => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    d.classList.add('drag');
+    let w = 0;
+    const move = m => { w = set(innerWidth - m.clientX - 3); };
+    const up = () => { d.classList.remove('drag'); removeEventListener('pointermove', move); removeEventListener('pointerup', up); if (w) keep(w); };
+    addEventListener('pointermove', move);
+    addEventListener('pointerup', up);
+  };
+  d.ondblclick = () => { root.style.removeProperty('--side'); try { localStorage.removeItem('side'); } catch {} };
+  d.onkeydown = e => { const k = { ArrowLeft: 20, ArrowRight: -20 }[e.key]; if (k) { e.preventDefault(); e.stopPropagation(); keep(set((parseFloat(getComputedStyle(root).getPropertyValue('--side')) || 408) + k)); } };
+  // Float, as left last time: the card's size and (once dragged) its place
+  try {
+    const sz = JSON.parse(localStorage.getItem('floatSize') || 'null'), at = JSON.parse(localStorage.getItem('floatAt') || 'null'), a = document.querySelector('aside');
+    if (sz) { a.style.setProperty('--fw', `${sz[0]}px`); a.style.setProperty('--fh', `${sz[1]}px`); }
+    if (at) { floatMoved = true; a.style.setProperty('--fx', `${at.x}px`); a.style.setProperty('--fy', `${at.y}px`); }
+  } catch {}
+  document.body.classList.toggle('float', layoutMode === 'float');
+  $('dockbtn').setAttribute('aria-pressed', String(layoutMode === 'dock'));
+  $('floatbtn').setAttribute('aria-pressed', String(layoutMode === 'float'));
+})();
 
 // Keys pressed with the mouse over the preview go to the game (brought to the front): Esc, ~, Tab, B, movement...
 // The game reads scan codes, so KeyboardEvent.code is mapped to them.
@@ -6937,6 +7391,11 @@ async function parserCheck() {
   check(gv === '16,c-32,r0,f0', `grid: positions land on multiples, from their own anchor (${gv})`);
   const bp = JSON.stringify(blockPairs(parse('"S" { "Borders" { "B" { "inset" "0 0 1 1" "Left" { "1" { "color" "X" "offset" "0 0" } } } } }'), ['S', 'Borders', 'B']));
   check(bp === '[["inset","0 0 1 1"],["Left",[["1",[["color","X"],["offset","0 0"]]]]]]', `a game block is copied with its sub-blocks (${bp})`);
+  {
+    const mk = t => ({ text: t, parsed: parse(t) }), g = mk('"f"\n{\n\tA\n\t{\n\t\t"x"\t"1"\n\t}\n\tB\n\t{\n\t\t"y"\t"2"\n\t}\n}\n');
+    const h = mk('"f"\n{\n\t"B"\t{ "y" "9" "z" "3" }\n\tA\n\t{\n\t\t"x"\t"5"\n\t}\n}\n'), out = withGameBlock(h, 'a', gameBlock(g, 'A')), op = topBlock(mk(out), 'a');
+    check(out.startsWith('"f"\n{\n\t"B"\t{ "y" "9" "z" "3" }\n') && op && /"x"\t"1"/.test(out) && !/"5"/.test(out) && out.endsWith('}\n'), `the game's default swaps the one block, whole lines (${JSON.stringify(out)})`);
+  }
   const vt = pictureVtf([new Uint8ClampedArray([1, 2, 3, 4, 5, 6, 7, 8]), new Uint8ClampedArray(8)], 2, 1), vd = new DataView(vt.buffer);
   check(vt.length === 96 && vd.getUint32(52, true) === 12 && vd.getUint16(24, true) === 2 && [...vt.slice(80, 88)].join() === '3,2,1,4,7,6,5,8', 'pictures are written as BGRA VTFs, one frame after another');
 }
@@ -7233,7 +7692,7 @@ if (host && location.hash === '#hosttest') (async () => {
       for (const f of [ld, vac]) save(f, 'wide', '444', 'LoadingDialog');
       save(ld, 'xpos', '7', 'InfoLabel');
       await sleep(400); await writing; render(); await sleep(300);
-      const changed = [ld.text, vac.text], rb = [...$('footbtns').children].find(b => b.textContent === '↺ Reset window');
+      const changed = [ld.text, vac.text], rb = [...document.querySelectorAll('#list .nx-reset')].find(b => b.dataset.what === 'window');
       rb?.click();
       commit(vac, 'selftest own group', () => `${vac.text}// own group\n`, Symbol());
       await sleep(1900); await writing;
@@ -7261,12 +7720,16 @@ if (host && location.hash === '#hosttest') (async () => {
       // its ↺: back as the HUD was opened, a step of its own (two Ctrl+Z: the ↺, then the change)
       for (const k in opened) if (/^kinds?\|/.test(k)) delete opened[k];
       render();
-      const v0 = now(), t0 = texts(), arrow = () => [...$('list').querySelectorAll('.row.colour')].find(r => r.querySelector('.name .rename').textContent === 'Borders')?.querySelector('.undo');
+      const kb = el('div'), arrow = () => { kb.replaceChildren(...kindRows()); return [...kb.querySelectorAll('.row.colour')].find(r => r.querySelector('.name .rename').textContent === 'Borders')?.querySelector('.undo'); };
+      document.body.append(kb); kb.hidden = true;
+      arrow(); // (its ↺'s starting point: the colours as they are before the change, as the list's rows took it)
+      const v0 = now(), t0 = texts();
       setKind('border', p => `7 8 9 ${toRgba(p.value)[3]}`); await done(); render();
       const lit = arrow() && !arrow().classList.contains('off');
       arrow()?.onclick(); await done();
       const back = [...v0].every(([id, v]) => now().get(id) === v);
       await undo(); await undo();
+      kb.remove();
       check(lit && back && texts() === t0, 'a kind\'s ↺ puts its colours back as opened, as a step of its own');
     }
     {
