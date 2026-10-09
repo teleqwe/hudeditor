@@ -5869,9 +5869,9 @@ function lineUpRows() {
 // ---------- the game: live panel list, capture, test server ----------
 let pendingRender = false, captured = false, autoTried = false, shownSize = ''; // (shownSize: the game's size the page last showed, see poll)
 
-let keepScores = false, scoresSent = 0, keepChat = false, chatSent = 0;
+let keepScores = false, scoresSent = 0, keepChat = false, chatSent = 0, joinedGame = false;
 async function poll() {
-  // capture once the plugin answers: a game started some other way (from Steam) is left alone, the editor can't use it
+  // capture once the plugin answers (a game started from Steam: once the editor has joined it, see start)
   if (live && !captured && !autoTried) { autoTried = true; capture(true); }
   const raw = await call('panels').catch(() => '');
   if (raw === liveRaw) return;
@@ -5890,6 +5890,11 @@ async function poll() {
   if (!live && captured) captureEnded();
   // a game that has gone reads everything afresh when it starts
   if (!live && restartFor.size) { restartFor.clear(); needRestart(); }
+  if (live && joinedGame) { // (see start)
+    joinedGame = false;
+    needRestart('main menu buttons');
+    status(hudName ? `Joined the running game. Editing ${hudName}.` : 'Joined the running game. Pick a HUD to edit.');
+  }
   // which HUD the game started with is known once the plugin answers (a HUD opened before that is checked again here)
   const loadHud = live ? live.loadHud : null;
   if (loadHud !== menuSeen) { menuSeen = loadHud; if (live) menuMark(); }
@@ -6414,8 +6419,8 @@ function menuMark() {
   if (live && hudPath && startedWith && !sameFolder(startedWith, hudPath)) needRestart(`${hudName}'s main menu buttons`);
   else needRestart();
 }
-// A HUD picked with no game running starts it (a game already running without the editor is left alone: Launch game,
-// once it's quit). byHand: the Launch game button.
+// A HUD picked with no game running starts it (a game already running without the editor is joined, see start, or left
+// alone: Launch game, once it's quit). byHand: the Launch game button.
 async function launchForHud(byHand = false) {
   if (live || launching || restarting || (!byHand && (!hudPath || startState === 'foreign'))) return;
   launching = true;
@@ -6436,8 +6441,26 @@ async function start() {
   try {
     const state = startState = await call('start');
     if (state === 'foreign') {
-      status('The game is already running without the editor. Quit it, then click Launch game.');
-      $('launch').hidden = false;
+      // started some other way (from Steam): with -insecure, the exe loads the plugin into it (plugin_load); without, or
+      // if it doesn't answer, the old way: quit it and Launch game
+      // ("starting...": the game's window isn't up yet, or it's the editor's own game loading its plugin: ask again)
+      (async () => {
+        for (let i = 0; i < 60; i++) {
+          try {
+            await call('attach');
+            status('The game is already running: joining it (loading the editor\'s plugin into it)...');
+            // the main menu was made before the plugin could put the HUD first: its buttons show after a restart (marked
+            // once the plugin answers: poll clears the list while there's no game)
+            joinedGame = true;
+            setTimeout(() => { if (!live) { status('The game didn\'t take the editor\'s plugin. Quit it, then click Launch game.'); $('launch').hidden = false; } }, 30000);
+            return;
+          } catch (err) {
+            if (!/^starting/.test(err.message)) { status(err.message); $('launch').hidden = false; return; }
+            if (live) return;
+            await sleep(2000);
+          }
+        }
+      })();
     } else if (state === 'running') {
       status('Game already running.');
     } else {

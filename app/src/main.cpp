@@ -458,6 +458,53 @@ static bool GameRunning()
 	return GamePid() != 0;
 }
 
+// When the running game started (0: none): the plugin's panels file counts only if written since (a file left by an
+// earlier game read as this one's, 2026-10-09: a game started from Steam, no plugin in it, showed the last game's
+// scoreboard outlined in the editor, its own scoreboard closed)
+static ULONGLONG GameStartTime()
+{
+	HANDLE h = OpenProcess( PROCESS_QUERY_LIMITED_INFORMATION, FALSE, GamePid() );
+	FILETIME c{}, e, k, u;
+	bool ok = h && GetProcessTimes( h, &c, &e, &k, &u );
+	if ( h )
+		CloseHandle( h );
+	return ok ? (ULONGLONG)c.dwHighDateTime << 32 | c.dwLowDateTime : 0;
+}
+static bool PanelsFresh( const wstring &path )
+{
+	WIN32_FILE_ATTRIBUTE_DATA a;
+	ULONGLONG started = GameStartTime();
+	return started && GetFileAttributesExW( path.c_str(), GetFileExInfoStandard, &a )
+		&& ( (ULONGLONG)a.ftLastWriteTime.dwHighDateTime << 32 | a.ftLastWriteTime.dwLowDateTime ) >= started;
+}
+
+// The running game's command line and its exe ("" if it can't be read): ProcessCommandLineInformation (60), Windows 8.1+
+static wstring GameCommandLine( wstring *exe = NULL )
+{
+	typedef LONG( NTAPI * QueryFn )( HANDLE, int, PVOID, ULONG, PULONG );
+	struct UStr { USHORT len, max; PWSTR buf; };
+	static QueryFn query = (QueryFn)GetProcAddress( GetModuleHandleW( L"ntdll.dll" ), "NtQueryInformationProcess" );
+	HANDLE h = OpenProcess( PROCESS_QUERY_LIMITED_INFORMATION, FALSE, GamePid() );
+	wstring out;
+	if ( h && exe )
+	{
+		wchar_t path[MAX_PATH];
+		DWORD n = MAX_PATH;
+		if ( QueryFullProcessImageNameW( h, 0, path, &n ) )
+			*exe = path;
+	}
+	std::vector< BYTE > buf( 64 * 1024 );
+	ULONG got = 0;
+	if ( h && query && query( h, 60, buf.data(), (ULONG)buf.size(), &got ) >= 0 )
+	{
+		UStr *s = (UStr *)buf.data();
+		out.assign( s->buf, s->len / sizeof( wchar_t ) );
+	}
+	if ( h )
+		CloseHandle( h );
+	return out;
+}
+
 // Started with the plugin (by the editor, with -insecure) rather than from Steam?
 static bool PluginLoaded()
 {
@@ -474,11 +521,13 @@ static bool PluginLoaded()
 
 // Copies the plugin into cstrike/addons unless the same files are already there, with the silent hint sound the
 // plugin puts first in the game's search paths.
-static wstring InstallPlugin()
+static wstring InstallPlugin( bool vdf = true )
 {
 	const wchar_t *files[][2] = { { L"PLUGIN_DLL", L"schemereload.dll" }, { L"PLUGIN_VDF", L"schemereload.vdf" }, { L"", L"schemereload_sounds\\sound\\ui\\hint.wav" } };
 	for ( auto &f : files )
 	{
+		if ( !vdf && !wcscmp( f[1], L"schemereload.vdf" ) )
+			continue;
 		wstring path = g_game + L"\\addons\\" + f[1];
 		string want = *f[0] ? Res( f[0] ) : SilentWav(), have;
 		if ( ReadAll( path, have ) && have == want )
@@ -548,6 +597,39 @@ static void MountHud()
 	std::replace( p.begin(), p.end(), L'\\', L'/' );
 	if ( !g_game.empty() && !p.empty() )
 		GameCommand( L"schemereload_mount \"" + p + L"\"; scheme_reload" ); // and read its files again: the last HUD's stay up otherwise
+}
+
+// A game started some other way (from Steam) with -insecure: the plugin is loaded into it the way a player could, by
+// plugin_load in its console, sent with -hijack (a second start of the game's exe hands its command line to the running
+// one and exits). Without -insecure the game would turn VAC-secured servers off for the session (or refuse), so it's
+// left alone. The .vdf isn't put back: plugin_load doesn't need it, and a later start from Steam mustn't find it.
+// ("starting...": not yet, ask again shortly. The .vdf in addons: a game the editor started, which loads the plugin
+// itself (a plugin_load too would load it twice); no window: -hijack would find no game and show a message box.)
+static HWND GameWindow();
+static wstring Attach()
+{
+	if ( !g_selftestOut.empty() ) // (--selftest stands an empty folder in for the game: never a real one)
+		return L"not in --selftest";
+	if ( IsFile( g_game + L"\\addons\\schemereload.vdf" ) || !GameWindow() )
+		return L"starting: the game is still starting";
+	wstring exe, cmdline = GameCommandLine( &exe );
+	wstring low = cmdline;
+	std::transform( low.begin(), low.end(), low.begin(), ::towlower );
+	if ( exe.empty() || cmdline.empty() )
+		return L"Couldn't read how the game was started. Quit it, then click Launch game.";
+	if ( low.find( L"-insecure" ) == wstring::npos )
+		return L"The game is running, started without -insecure, so the editor can't join it. Quit it, then click Launch game.";
+	wstring err = InstallPlugin( false );
+	if ( !err.empty() )
+		return err;
+	DeleteFileW( ( g_game + L"\\addons\\schemereload_panels.txt" ).c_str() );
+	// (commands an earlier editor left for a game without the plugin, its HUD's cvars and all: the plugin would run them
+	// as it loads, seen 2026-10-09; this one sends its own once a HUD is opened)
+	DeleteFileW( ( g_game + L"\\addons\\schemereload_cmd.txt" ).c_str() );
+	MountHud();
+	if ( (INT_PTR)ShellExecuteW( NULL, L"open", exe.c_str(), L"-hijack -game cstrike +plugin_load addons/schemereload", NULL, SW_SHOWNOACTIVATE ) <= 32 )
+		return L"Couldn't reach the running game. Quit it, then click Launch game.";
+	return wstring();
 }
 
 // Stub scheme files that #base the game's defaults, for a brand-new HUD.
@@ -957,6 +1039,15 @@ static void OnMessage( const wstring &msg )
 		else if ( ( out = Launch() ).size() )
 			ok = false;
 	}
+	else if ( op == L"attach" ) // a game running without the plugin (started from Steam): load the plugin into it
+	{
+		if ( g_game.empty() )
+			fail( noGame );
+		else if ( !GameRunning() )
+			fail( L"The game isn't running." );
+		else if ( !PluginLoaded() && ( out = Attach() ).size() )
+			ok = false;
+	}
 	else if ( op == L"huds" ) // "label\tpath\tcustom" per line: the HUD folders in custom, the ones opened last first; then
 	{                         // "\tcurrent\t<the HUD open now>"
 		std::vector< wstring > seen;
@@ -1283,7 +1374,8 @@ static void OnMessage( const wstring &msg )
 	else if ( op == L"panels" ) // what the plugin says is on screen right now
 	{
 		string data;
-		if ( g_game.empty() || !GameRunning() || !ReadAll( g_game + L"\\addons\\schemereload_panels.txt", data ) )
+		wstring panels = g_game + L"\\addons\\schemereload_panels.txt";
+		if ( g_game.empty() || !PanelsFresh( panels ) || !ReadAll( panels, data ) )
 			fail( L"game not running with the plugin" );
 		else
 		{
