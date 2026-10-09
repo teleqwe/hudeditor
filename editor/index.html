@@ -410,7 +410,7 @@
   .nx-head .titles { flex: 1; min-width: 0; }
   .nx-head h2 { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .nx-head p { margin: 1px 0 0; color: var(--muted); font-size: 11px; line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .nx-head .back.nx-up { display: inline-flex; align-items: center; height: auto; margin: 0 0 2px; padding: 0; border: 0; background: none; color: var(--accent); font-size: 11.5px; cursor: pointer; }
+  .nx-head .back.nx-up { display: block; width: auto; max-width: 100%; height: auto; margin: 0 0 2px; padding: 0; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border: 0; background: none; color: var(--accent); font-size: 11.5px; cursor: pointer; }
   .nx-head .back.nx-up:hover { text-decoration: underline; background: none; }
   .nx-tools { flex: none; display: flex; align-items: center; gap: 2px; }
   .nx-tools > button { width: 30px; height: 30px; padding: 0; display: inline-grid; place-items: center; border-color: transparent; background: transparent; color: var(--muted); }
@@ -4708,7 +4708,7 @@ $('fontfile').onchange = async () => {
     try { const face = new FontFace(family, data); await face.load(); document.fonts.add(face); } catch {} // (the list shows it in itself)
     setDirty(true);
     if (fontAdded) { fontAdded(family); fontAdded = null; status(`Added "${family}" to every scheme and picked it: ${fontAddedNote}.`); }
-    else status(`Added "${family}". Pick it in any Face box, or in All fonts > Every text font at once.`);
+    else status(`Added "${family}". Pick it in any Face box.`);
   } catch (err) {
     status(`Couldn't add that font: ${err.message}`);
   }
@@ -5377,12 +5377,14 @@ function byKind(groups) {
     if (!go.length) continue;
     s[1] = s[1].filter(r => !go.includes(r));
     for (const r of go) {
-      const k = `${r.dataset.cat}|${r.dataset.head}`;
-      if (!moved.has(k)) moved.set(k, [r.dataset.head, [], r.dataset.cat]);
+      const k = `${r.dataset.cat}|${r.dataset.head}|${s[0]}`;
+      if (!moved.has(k)) moved.set(k, [r.dataset.head, [], r.dataset.cat, s[0]]);
       moved.get(k)[1].push(r);
     }
   }
-  return [...moved.values(), ...out].filter(([, rows]) => rows.length);
+  // (one heading from two sections, as a chat's box and its text box: each says whose it is, not two X positions in one)
+  const all = [...moved.values()], twice = ([h, , cat]) => all.filter(m => m[0] === h && m[2] === cat).length > 1;
+  return [...all.map(m => [twice(m) && m[3] ? `${m[0]}: ${(sectionTitle(m[3]) || m[3]).split(':')[0]}` : m[0], m[1], m[2]]), ...out].filter(([, rows]) => rows.length);
 }
 
 // Things on screen now (or every known HUD part when the game isn't reporting).
@@ -5616,10 +5618,14 @@ function buildSelection(box, tabs, pin = null) {
   const sel = selected, float = layoutMode === 'float', key = selKey(sel);
   if (tabs.key !== key) { tabs.key = key; tabs.open.clear(); tabs.more.clear(); }
   const head = el('div', { className: 'selected-head nx-head' }), titles = el('div', { className: 'titles' }), tools = el('div', { className: 'nx-tools' });
-  // (from a part of a window: back to the window)
-  if ((sel.control || sel.node) && sel.info.kind === 'window')
-    titles.append(el('button', { className: 'back nx-up', type: 'button', textContent: `‹ ${sel.info.name}`, title: `Back to ${sel.info.name}`, onclick: () => select({ ...sel, control: null, node: null }) }));
-  titles.append(el('h2', { textContent: shownName(sel), title: shownName(sel) }), el('p', { textContent: subtitle(sel), title: subtitle(sel) }));
+  // (from a part of a window or of a HUD part, as the chat's text box: back to the whole)
+  // (a control: named as itself, as the preview's box is, with the whole it's in above it)
+  const ctl = sel.control && !partName(sel), name = ctl ? controlIn(sel.control, sel.thing)[1] : shownName(sel);
+  const sub = ctl ? `${sel.control.name ? `"${sel.control.name}" in ` : 'In '}${sel.info.name}` : subtitle(sel);
+  const whole = name !== sel.info.name ? sel.info.name : sel.info.kind === 'hud' ? 'The whole part' : 'The whole window';
+  if (sel.control || sel.node)
+    titles.append(el('button', { className: 'back nx-up', type: 'button', textContent: `‹ ${whole}`, title: `Back to ${sel.info.name}`, onclick: () => select({ ...sel, control: null, node: null }) }));
+  titles.append(el('h2', { textContent: name, title: name }), el('p', { textContent: sub, title: sub }));
   head.append(icon('grip-vertical', 'grip'), titles, tools);
   rowScope = [sel.thing.key, sel.control?.key, sel.node?.key].filter(Boolean).join('/');
   const sections = selectionSections(sel), quick = float && !floatAll ? quickRows(sections, sel) : [];
@@ -5872,7 +5878,11 @@ function placeFloat() {
   floatPlaced = key;
   const a = document.querySelector('aside'), box = $('boxes').querySelector('.box.sel'), P = $('preview').getBoundingClientRect(), w = a.offsetWidth, h = Math.min(a.offsetHeight, 420);
   // beside the part's box (right, then left), else the game's top right or top left; not over a pinned card if it can help it
-  const fit = y => Math.min(Math.max(y, P.top + 8), Math.max(P.top + 8, P.bottom - h - 8)), R = box && box.getBoundingClientRect();
+  // (a part of a smaller window, as the loading box's picture: beside the whole window, not over the rest of it)
+  const t = (cardSel.control || cardSel.node || partName(cardSel)) && live && live.panels.includes(cardSel.thing) && cardSel.thing, B = $('boxes').getBoundingClientRect();
+  const R = t && t.w * t.h < 0.5 * live.W * live.H ? { left: B.left + t.x / live.W * B.width, top: B.top + t.y / live.H * B.height, right: B.left + (t.x + t.w) / live.W * B.width }
+    : box && box.getBoundingClientRect();
+  const fit = y => Math.min(Math.max(y, P.top + 8), Math.max(P.top + 8, P.bottom - h - 8));
   const spots = [...(R ? [[R.right + 14, fit(R.top)], [R.left - w - 14, fit(R.top)]] : []), [P.right - w - 12, P.top + 12], [P.left + 12, P.top + 12]]
     .filter(([x]) => x >= P.left + 4 && x + w <= P.right - 4);
   const free = ([x, y]) => !pins.some(p => x < p.x + p.w && x + w > p.x && y < p.y + p.h && y + h > p.y);
