@@ -41,6 +41,7 @@ static wstring g_hudPath;     // the HUD being edited
 #define APP_VERSION L"0.9.1 beta"     // (also in app.rc)
 static wstring g_unsaved;     // saved versions of the files changed since the last save (see KeepSaved)
 static wstring g_settings;    // recent HUD folders, most recent first
+static wstring g_originals;   // each HUD as it was first made, imported or opened here (Back to how it was imported)
 static wstring g_steamExe;
 static wstring g_selftestOut; // set in --selftest mode
 static int g_exitCode;
@@ -255,6 +256,122 @@ static void Revert()
 	std::error_code ec;
 	if ( ok )
 		std::filesystem::remove_all( g_unsaved, ec );
+}
+
+// The copy of a HUD as it first came (see Snapshot): a folder named from its path, so a rename or a move takes it along.
+static wstring OriginalOf( const wstring &hud )
+{
+	unsigned long long h = 1469598103934665603ULL; // FNV-1a of the path, lowercased
+	for ( wchar_t c : hud )
+		h ^= towlower( c ), h *= 1099511628211ULL;
+	wchar_t hex[17];
+	swprintf_s( hex, L"%016llx", h );
+	return g_originals + L"\\" + hex;
+}
+
+// What the copy holds: not a HUD's own git history (.git)
+static bool InCopy( const wstring &rel )
+{
+	return _wcsnicmp( rel.c_str(), L".git\\", 5 ) != 0;
+}
+
+// Keeps every file of a HUD as it is now, once: when it's made or imported (fresh: a copy already there is of another
+// HUD that was at that path), or the first time it's opened here (for one that came before this was). Back to how it was
+// imported puts these back.
+static void Snapshot( const wstring &hud, bool fresh = false )
+{
+	wstring dir = OriginalOf( hud );
+	std::error_code ec;
+	if ( fresh && !g_originals.empty() && !hud.empty() )
+		std::filesystem::remove_all( dir, ec );
+	if ( g_originals.empty() || hud.empty() || IsDir( dir ) || !IsHud( hud ) )
+		return;
+	bool ok = true;
+	EachFile( hud, L"", [&]( const wstring &rel ) {
+		if ( !InCopy( rel ) )
+			return;
+		string data;
+		ok = ReadAll( hud + L"\\" + rel, data ) && WriteAll( dir + L"\\files\\" + rel, data ) && ok;
+	} );
+	SYSTEMTIME t;
+	GetLocalTime( &t );
+	char when[32];
+	sprintf_s( when, "%04d-%02d-%02d", t.wYear, t.wMonth, t.wDay );
+	if ( !ok || !WriteAll( dir + L"\\info.txt", Utf8( hud ) + "\n" + when ) )
+		std::filesystem::remove_all( dir, ec ); // (not a half copy)
+}
+
+// A HUD's copy follows it when it's renamed or moved
+static void MoveOriginal( const wstring &from, const wstring &to )
+{
+	std::error_code ec;
+	if ( g_originals.empty() || !IsDir( OriginalOf( from ) ) )
+		return;
+	std::filesystem::remove_all( OriginalOf( to ), ec ); // (another HUD's, once at that path)
+	std::filesystem::rename( OriginalOf( from ), OriginalOf( to ), ec );
+}
+
+// Back to how it was imported: every file of the open HUD as its copy has it, and the files made since to the Recycle Bin,
+// as unsaved changes (Save HUD keeps them, discarding brings the HUD back as last saved). Returns how many changed; -1
+// without a copy. failed: the files it couldn't write or move (ones the game has open: its fonts).
+static int RestoreOriginal( int &failed )
+{
+	wstring dir = OriginalOf( g_hudPath ) + L"\\files";
+	failed = 0;
+	if ( g_hudPath.empty() || !IsDir( dir ) )
+		return -1;
+	int n = 0;
+	EachFile( dir, L"", [&]( const wstring &rel ) {
+		string was, now;
+		ReadAll( dir + L"\\" + rel, was );
+		wstring path = g_hudPath + L"\\" + rel;
+		if ( ReadAll( path, now ) && now == was )
+			return;
+		KeepSaved( path );
+		bool ok = WriteAll( path, was );
+		n += ok, failed += !ok;
+	} );
+	EachFile( g_hudPath, L"", [&]( const wstring &rel ) {
+		if ( !InCopy( rel ) || IsFile( dir + L"\\" + rel ) )
+			return;
+		wstring path = g_hudPath + L"\\" + rel;
+		KeepSaved( path );
+		wstring from = path + L'\0'; // (a list, ended by two nulls)
+		SHFILEOPSTRUCTW sh = { NULL, FO_DELETE, from.c_str(), NULL, FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT | FOF_NOERRORUI };
+		bool ok = !SHFileOperationW( &sh ) && !IsFile( path );
+		n += ok, failed += !ok;
+	} );
+	return n;
+}
+
+// Saves some files only (a part's Save): each one's current version becomes the saved one (a path ending in \: every
+// file under it). saved = how many of them were unsaved; returns how many files are still unsaved.
+static int CommitSome( const std::vector<wstring> &paths, int &saved )
+{
+	saved = 0;
+	for ( const wstring &path : paths )
+	{
+		wstring rel = path.substr( g_hudPath.size() + 1 );
+		for ( const wchar_t *kind : { L"\\files\\", L"\\new\\" } )
+		{
+			wstring at = g_unsaved + kind + rel;
+			if ( !rel.empty() && rel.back() == L'\\' )
+			{
+				EachFile( at.substr( 0, at.size() - 1 ), L"", [&]( const wstring & ) { ++saved; } );
+				std::error_code ec;
+				std::filesystem::remove_all( at, ec );
+			}
+			else
+				saved += DeleteFileW( at.c_str() ) ? 1 : 0;
+		}
+	}
+	int left = 0;
+	EachFile( g_unsaved + L"\\files", L"", [&]( const wstring & ) { ++left; } );
+	EachFile( g_unsaved + L"\\new", L"", [&]( const wstring & ) { ++left; } );
+	std::error_code ec;
+	if ( !left )
+		std::filesystem::remove_all( g_unsaved, ec );
+	return left;
 }
 
 // Hint texts play ui/hint.wav on every update and the test server sends ten a second. Stopping the sound after it
@@ -1143,7 +1260,7 @@ static void OnMessage( const wstring &msg )
 			if ( ec || !IsHud( path ) )
 				fail( L"Couldn't put it in " + path );
 			else
-				out = path;
+				Snapshot( path, true ), out = path;
 		}
 	}
 	else if ( op == L"moveout" ) // arg = a HUD in the custom folder: moved to the Desktop (the game only reads custom; out
@@ -1161,7 +1278,7 @@ static void OnMessage( const wstring &msg )
 		else if ( std::filesystem::rename( arg, to, ec ), ec )
 			fail( GameRunning() ? L"The game has files of it open (its fonts): it can move once the game has quit." : L"Couldn't move it to " + to );
 		else
-			out = to;
+			MoveOriginal( arg, to ), out = to;
 	}
 	else if ( op == L"rename" ) // arg = a HUD folder, body = its new name (in the same folder): answers the new path; kept in
 	{                           // its place in the recent list. Fails while the game has its font files open.
@@ -1209,6 +1326,7 @@ static void OnMessage( const wstring &msg )
 				}
 				WriteAll( g_settings, Utf8( now ) );
 			}
+			MoveOriginal( arg, to );
 			if ( !_wcsicmp( g_hudPath.c_str(), arg.c_str() ) )
 				g_hudPath = to, MountHud();
 			out = to;
@@ -1226,7 +1344,7 @@ static void OnMessage( const wstring &msg )
 		else if ( !CreateHud( path ) )
 			fail( L"Couldn't create " + path );
 		else
-			out = path;
+			Snapshot( path, true ), out = path;
 	}
 	else if ( op == L"open" ) // arg = HUD folder; unsaved changes to the one open now are discarded (the page asks first)
 	{
@@ -1237,6 +1355,7 @@ static void OnMessage( const wstring &msg )
 			Revert();
 			g_hudPath = arg;
 			RememberHud( arg );
+			Snapshot( arg ); // (a HUD from before copies were kept: as it is the first time it's opened)
 			MountHud();
 			out = NameOf( arg );
 		}
@@ -1301,6 +1420,43 @@ static void OnMessage( const wstring &msg )
 			SHFILEOPSTRUCTW sh = { NULL, FO_DELETE, from.c_str(), NULL, FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT | FOF_NOERRORUI };
 			if ( SHFileOperationW( &sh ) || IsFile( path ) )
 				fail( L"couldn't remove " + path );
+		}
+	}
+	else if ( op == L"original" ) // the open HUD's copy as it first came: the day it was taken, or empty without one
+	{
+		string info;
+		if ( !g_hudPath.empty() && ReadAll( OriginalOf( g_hudPath ) + L"\\info.txt", info ) )
+			out = Widen( info.substr( info.find( '\n' ) + 1 ) );
+	}
+	else if ( op == L"restoreoriginal" ) // Back to how it was imported: answers how many files changed, a tab, how many couldn't be
+	{
+		int failed, n = RestoreOriginal( failed );
+		if ( n < 0 )
+			fail( L"There's no copy of this HUD as it was imported." );
+		else
+			out = std::to_wstring( n ) + L"\t" + std::to_wstring( failed );
+	}
+	else if ( op == L"savesome" ) // body = paths in the HUD, one a line (a folder ends in /): kept as they are now; answers "saved<tab>still unsaved"
+	{
+		std::vector<wstring> paths;
+		for ( size_t a = 0, b; a < body.size(); a = b + 1 )
+		{
+			b = body.find( L'\n', a );
+			if ( b == wstring::npos )
+				b = body.size();
+			wstring line = body.substr( a, b - a );
+			if ( !line.empty() && line.back() == L'\r' )
+				line.pop_back();
+			if ( InHud( line, path ) )
+				paths.push_back( path );
+		}
+		int saved = 0;
+		if ( g_hudPath.empty() )
+			fail( L"No HUD open." );
+		else
+		{
+			int left = CommitSome( paths, saved );
+			out = std::to_wstring( saved ) + L"\t" + std::to_wstring( left );
 		}
 	}
 	else if ( op == L"save" ) // keep the changes: answers how many files changed
@@ -1512,6 +1668,142 @@ static void OnMessage( const wstring &msg )
 }
 
 // ---------- window + WebView2 ----------
+// The title bar in the page's colours: dark (Windows 10 20H1+), then its surface, edge and text colours (Windows 11)
+static void DarkTitle( HWND h )
+{
+	BOOL dark = TRUE;
+	COLORREF caption = RGB( 0x16, 0x1a, 0x20 ), edge = RGB( 0x31, 0x3a, 0x46 ), title = RGB( 0xe3, 0xe8, 0xef );
+	DwmSetWindowAttribute( h, 20 /* DWMWA_USE_IMMERSIVE_DARK_MODE */, &dark, sizeof dark );
+	DwmSetWindowAttribute( h, 35 /* DWMWA_CAPTION_COLOR */, &caption, sizeof caption );
+	DwmSetWindowAttribute( h, 34 /* DWMWA_BORDER_COLOR */, &edge, sizeof edge );
+	DwmSetWindowAttribute( h, 36 /* DWMWA_TEXT_COLOR */, &title, sizeof title );
+}
+
+// The colour picker's Paste reads the clipboard: allowed without asking (the editor's window and the cards' windows)
+static HRESULT OnPermission( ICoreWebView2 *, ICoreWebView2PermissionRequestedEventArgs *args )
+{
+	COREWEBVIEW2_PERMISSION_KIND kind;
+	if ( SUCCEEDED( args->get_PermissionKind( &kind ) ) && kind == COREWEBVIEW2_PERMISSION_KIND_CLIPBOARD_READ )
+		args->put_State( COREWEBVIEW2_PERMISSION_STATE_ALLOW );
+	return S_OK;
+}
+
+// A popped-out card's window (the page's window.open, see popOut): no address bar, kept above the editor (owned by it,
+// so it also minimizes and closes with it) but free to go anywhere, another screen too. The page fills it.
+struct CardWindow
+{
+	ComPtr< ICoreWebView2Controller > ctl;
+};
+static LRESULT CALLBACK CardProc( HWND h, UINT m, WPARAM w, LPARAM l )
+{
+	auto *cw = (CardWindow *)GetWindowLongPtrW( h, GWLP_USERDATA );
+	switch ( m )
+	{
+	case WM_SIZE:
+		if ( cw && cw->ctl )
+		{
+			RECT r;
+			GetClientRect( h, &r );
+			cw->ctl->put_Bounds( r );
+		}
+		return 0;
+	case WM_MOVE:
+		if ( cw && cw->ctl )
+			cw->ctl->NotifyParentWindowPositionChanged();
+		return 0;
+	case WM_DPICHANGED: // (to another screen: the size Windows suggests for it)
+	{
+		const RECT *r = (const RECT *)l;
+		SetWindowPos( h, NULL, r->left, r->top, r->right - r->left, r->bottom - r->top, SWP_NOZORDER | SWP_NOACTIVATE );
+		return 0;
+	}
+	case WM_DESTROY: // (the page sees its window closed: the card closes, see popOut)
+		SetWindowLongPtrW( h, GWLP_USERDATA, 0 );
+		if ( cw && cw->ctl )
+			cw->ctl->Close();
+		delete cw;
+		return 0;
+	}
+	return DefWindowProcW( h, m, w, l );
+}
+static HRESULT OnNewWindow( ICoreWebView2 *, ICoreWebView2NewWindowRequestedEventArgs *args )
+{
+	// where the page asks (its card's place on screen, its size), in the editor's scale
+	ComPtr< ICoreWebView2WindowFeatures > f;
+	BOOL has = FALSE;
+	UINT32 x = 0, y = 0, cw = 360, ch = 480;
+	bool at = false;
+	if ( SUCCEEDED( args->get_WindowFeatures( &f ) ) )
+	{
+		if ( SUCCEEDED( f->get_HasPosition( &has ) ) && has )
+			at = SUCCEEDED( f->get_Left( &x ) ) && SUCCEEDED( f->get_Top( &y ) );
+		if ( SUCCEEDED( f->get_HasSize( &has ) ) && has )
+			f->get_Width( &cw ), f->get_Height( &ch );
+	}
+	UINT dpi = GetDpiForWindow( g_hwnd );
+	RECT r = { 0, 0, MulDiv( cw, dpi, 96 ), MulDiv( ch, dpi, 96 ) };
+	AdjustWindowRectExForDpi( &r, WS_OVERLAPPEDWINDOW, FALSE, 0, dpi ); // (the size asked for is the page's, inside the frame)
+	HWND h = CreateWindowExW( 0, L"CSSHudEditorCard", L"", WS_OVERLAPPEDWINDOW, at ? MulDiv( x, dpi, 96 ) + r.left : CW_USEDEFAULT,
+		at ? MulDiv( y, dpi, 96 ) + r.top : CW_USEDEFAULT, r.right - r.left, r.bottom - r.top, g_hwnd, NULL, GetModuleHandleW( NULL ), NULL );
+	if ( !h )
+		return args->put_Handled( TRUE ); // (window.open gives nothing)
+	DarkTitle( h );
+	SetWindowLongPtrW( h, GWLP_USERDATA, (LONG_PTR) new CardWindow );
+	ShowWindow( h, SW_SHOW );
+	ComPtr< ICoreWebView2Deferral > later;
+	args->GetDeferral( &later );
+	ComPtr< ICoreWebView2NewWindowRequestedEventArgs > a = args;
+	HRESULT hr = g_env->CreateCoreWebView2Controller( h, Callback< ICoreWebView2CreateCoreWebView2ControllerCompletedHandler >(
+		[a, later, h]( HRESULT hr, ICoreWebView2Controller *ctl ) -> HRESULT {
+			auto *cw = IsWindow( h ) ? (CardWindow *)GetWindowLongPtrW( h, GWLP_USERDATA ) : NULL;
+			ComPtr< ICoreWebView2 > web;
+			if ( FAILED( hr ) || !ctl || !cw || FAILED( ctl->get_CoreWebView2( &web ) ) )
+			{
+				if ( IsWindow( h ) )
+					DestroyWindow( h );
+				a->put_Handled( TRUE );
+				return later->Complete();
+			}
+			cw->ctl = ctl;
+			ComPtr< ICoreWebView2Controller2 > ctl2;
+			if ( SUCCEEDED( cw->ctl.As( &ctl2 ) ) )
+				ctl2->put_DefaultBackgroundColor( { 255, 0x11, 0x10, 0x13 } );
+			RECT r;
+			GetClientRect( h, &r );
+			ctl->put_Bounds( r );
+			// no Refresh (F5, Ctrl+R, the right-click menu): it would empty the window of its card
+			ComPtr< ICoreWebView2Settings > set;
+			ComPtr< ICoreWebView2Settings3 > set3;
+			if ( SUCCEEDED( web->get_Settings( &set ) ) )
+			{
+				set->put_AreDefaultContextMenusEnabled( FALSE );
+				if ( SUCCEEDED( set.As( &set3 ) ) )
+					set3->put_AreBrowserAcceleratorKeysEnabled( FALSE );
+			}
+			// its title: the card's part; window.close() (put back, or closed in the editor): the window goes
+			web->add_DocumentTitleChanged( Callback< ICoreWebView2DocumentTitleChangedEventHandler >(
+				[h]( ICoreWebView2 *w, IUnknown * ) -> HRESULT {
+					LPWSTR t = NULL;
+					if ( SUCCEEDED( w->get_DocumentTitle( &t ) ) && t )
+						SetWindowTextW( h, t ), CoTaskMemFree( t );
+					return S_OK;
+				} ).Get(), NULL );
+			web->add_WindowCloseRequested( Callback< ICoreWebView2WindowCloseRequestedEventHandler >(
+				[h]( ICoreWebView2 *, IUnknown * ) -> HRESULT { PostMessageW( h, WM_CLOSE, 0, 0 ); return S_OK; } ).Get(), NULL );
+			web->add_PermissionRequested( Callback< ICoreWebView2PermissionRequestedEventHandler >( OnPermission ).Get(), NULL );
+			a->put_NewWindow( web.Get() );
+			a->put_Handled( TRUE );
+			return later->Complete();
+		} ).Get() );
+	if ( FAILED( hr ) )
+	{
+		DestroyWindow( h );
+		args->put_Handled( TRUE );
+		later->Complete();
+	}
+	return S_OK;
+}
+
 static void Fit()
 {
 	RECT r;
@@ -1568,14 +1860,8 @@ static HRESULT OnController( HRESULT hr, ICoreWebView2Controller *ctl )
 			return S_OK;
 		} ).Get(), NULL );
 
-	// the colour picker's Paste reads the clipboard: allow it without asking
-	g_web->add_PermissionRequested( Callback< ICoreWebView2PermissionRequestedEventHandler >(
-		[]( ICoreWebView2 *, ICoreWebView2PermissionRequestedEventArgs *args ) -> HRESULT {
-			COREWEBVIEW2_PERMISSION_KIND kind;
-			if ( SUCCEEDED( args->get_PermissionKind( &kind ) ) && kind == COREWEBVIEW2_PERMISSION_KIND_CLIPBOARD_READ )
-				args->put_State( COREWEBVIEW2_PERMISSION_STATE_ALLOW );
-			return S_OK;
-		} ).Get(), NULL );
+	g_web->add_PermissionRequested( Callback< ICoreWebView2PermissionRequestedEventHandler >( OnPermission ).Get(), NULL );
+	g_web->add_NewWindowRequested( Callback< ICoreWebView2NewWindowRequestedEventHandler >( OnNewWindow ).Get(), NULL );
 
 	return g_web->Navigate( g_selftestOut.empty() ? L"https://hud.editor/" : L"https://hud.editor/#hosttest" );
 }
@@ -1683,6 +1969,7 @@ int WINAPI wWinMain( HINSTANCE inst, HINSTANCE, LPWSTR, int show )
 	CoTaskMemFree( known );
 	g_settings = data + L"\\recent.txt";
 	g_unsaved = data + L"\\unsaved";
+	g_originals = data + L"\\originals";
 
 	// CSSHudEditor.exe --selftest <empty folder>: runs the page's checks with that folder standing in for the game
 	int argc = 0;
@@ -1693,6 +1980,7 @@ int WINAPI wWinMain( HINSTANCE inst, HINSTANCE, LPWSTR, int show )
 		g_selftestOut = g_custom + L"\\selftest.txt";
 		g_settings = g_custom + L"\\recent.txt";
 		g_unsaved = g_custom + L"\\unsaved";
+		g_originals = g_custom + L"\\originals";
 	}
 	else
 		FindGame();
@@ -1708,14 +1996,12 @@ int WINAPI wWinMain( HINSTANCE inst, HINSTANCE, LPWSTR, int show )
 	wc.hIcon = (HICON)LoadImageW( inst, MAKEINTRESOURCEW( 1 ), IMAGE_ICON, GetSystemMetrics( SM_CXICON ), GetSystemMetrics( SM_CYICON ), 0 );
 	wc.hIconSm = (HICON)LoadImageW( inst, MAKEINTRESOURCEW( 1 ), IMAGE_ICON, GetSystemMetrics( SM_CXSMICON ), GetSystemMetrics( SM_CYSMICON ), 0 );
 	RegisterClassExW( &wc );
+	WNDCLASSEXW card = wc; // (a popped-out card's window, see OnNewWindow)
+	card.lpfnWndProc = CardProc;
+	card.lpszClassName = L"CSSHudEditorCard";
+	RegisterClassExW( &card );
 	g_hwnd = CreateWindowW( wc.lpszClassName, APP_NAME L" " APP_VERSION, WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, 1500, 900, NULL, NULL, inst, NULL );
-	// the title bar in the page's colours: dark (Windows 10 20H1+), then its surface, edge and text colours (Windows 11)
-	BOOL dark = TRUE;
-	COLORREF caption = RGB( 0x16, 0x1a, 0x20 ), edge = RGB( 0x31, 0x3a, 0x46 ), title = RGB( 0xe3, 0xe8, 0xef );
-	DwmSetWindowAttribute( g_hwnd, 20 /* DWMWA_USE_IMMERSIVE_DARK_MODE */, &dark, sizeof dark );
-	DwmSetWindowAttribute( g_hwnd, 35 /* DWMWA_CAPTION_COLOR */, &caption, sizeof caption );
-	DwmSetWindowAttribute( g_hwnd, 34 /* DWMWA_BORDER_COLOR */, &edge, sizeof edge );
-	DwmSetWindowAttribute( g_hwnd, 36 /* DWMWA_TEXT_COLOR */, &title, sizeof title );
+	DarkTitle( g_hwnd );
 	if ( g_selftestOut.empty() )
 		ShowWindow( g_hwnd, show );
 	else

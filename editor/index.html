@@ -423,7 +423,13 @@
   .nx-tools > .eye svg { width: 16px; height: 16px; }
   .nx-tools > .nx-pinbtn[aria-pressed="true"] { color: var(--accent); background: var(--soft); border-color: var(--accent); }
   .nx-tools .tsep { width: 1px; height: 18px; margin: 0 3px; background: var(--line); }
-  #list.picked > .nx-body, .nx-pin > .nx-body { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 8px; padding: 10px 10px 24px; }
+  #list.picked > .nx-body, .nx-pin > .nx-body { flex: 1; min-height: 0; overflow: auto; scrollbar-gutter: stable both-edges; display: flex; flex-direction: column; gap: 8px; padding: 10px 4px 12px; }
+  /* (the card's foot: Default, Undo, Save) */
+  .nx-foot { flex: none; display: flex; gap: 8px; padding: 10px 12px; background: var(--surface); border-top: 1px solid var(--line); }
+  .nx-foot button { flex: 1; min-width: 0; display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 34px; padding: 0 8px; font-size: 13px; white-space: nowrap; }
+  .nx-foot button .i { width: 15px; height: 15px; }
+  .nx-foot .nx-save { color: var(--accent); border-color: var(--accent); background: var(--soft); }
+  .nx-foot .nx-save:hover { color: var(--base); background: var(--accent); }
 
   /* the five tabs, always in this order, each closed until opened; inside: the first section, then Show more */
   .nx-cat { flex: none; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
@@ -437,8 +443,8 @@
   .nx-catb > .card > .sub { margin: 14px 0 2px; font-size: 11.5px; font-weight: 600; color: var(--muted); }
   .nx-catb > .card:first-child > .sub { margin-top: 10px; }
   .nx-catb > .card:first-child > .row:first-child { border-top: 0; }
-  .nx-more { width: calc(100% + 24px); display: flex; align-items: center; justify-content: center; gap: 6px; height: 36px; margin: 6px -12px -4px; padding: 0; border: 0; border-top: 1px dashed var(--line); border-radius: 0 0 9px 9px; background: none; color: var(--accent); font-size: 12px; }
-  .nx-more:hover { background: var(--raised); border-color: var(--line); }
+  .nx-more { width: calc(100% + 24px); display: flex; align-items: center; justify-content: center; gap: 6px; height: 36px; margin: 6px -12px -4px; padding: 0; border: 0; border-top: 1px solid var(--line); border-radius: 0 0 9px 9px; background: var(--raised); color: var(--text); font-size: 12px; font-weight: 500; }
+  .nx-more:hover { color: var(--accent); background: var(--soft); }
   .nx-more .i { width: 14px; height: 14px; }
   .i.flip { transform: rotate(180deg); }
   .nx-note { margin: 10px 0 2px; padding: 8px 10px; border-radius: 8px; background: var(--raised); color: var(--muted); font-size: 12px; line-height: 1.45; }
@@ -447,13 +453,18 @@
   /* Float's simple settings first: colours, the font and its size, named for what they change */
   .nx-quick { flex: none; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
   .nx-quick > .row:first-child { border-top: 0; }
-  .nx-all { flex: none; height: 34px; display: flex; align-items: center; justify-content: center; gap: 6px; color: var(--accent); background: transparent; border-style: dashed; }
+  .nx-all { flex: none; height: 34px; display: flex; align-items: center; justify-content: center; gap: 7px; color: var(--text); background: var(--raised); border: 1px solid var(--line); font-weight: 500; }
+  .nx-all:hover { color: var(--accent); border-color: var(--accent); background: var(--soft); }
   .nx-all .i { width: 14px; height: 14px; }
 
   /* pinned cards (Float): open on their own part while other parts are clicked */
   .nx-pin { position: fixed; z-index: 13; display: flex; flex-direction: column; min-width: 290px; min-height: 200px; max-width: calc(100vw - 16px); max-height: calc(100vh - 16px);
     overflow: hidden; resize: both; background: var(--base); border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--line)); border-radius: 12px; box-shadow: 0 18px 50px rgba(0, 0, 0, .55); }
   .nx-pin.active, body.float aside.active { z-index: 14; border-color: var(--accent); } /* (the card in use: over the others) */
+  body.popout { display: block; overflow: hidden; }
+  body.popout > .nx-pin { position: static; width: 100vw; height: 100vh; max-width: none; max-height: none; min-width: 0; resize: none; border: 0; border-radius: 0; box-shadow: none; }
+  body.popout .nx-head { cursor: default; }
+  body.popout .nx-head .grip { display: none; }
 
   /* small lists that open from the bar under the game (Float): the element list, show/hide */
   .nx-pop { position: fixed; z-index: 30; width: 310px; max-height: min(62vh, 560px); overflow: auto; padding: 6px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 14px 40px rgba(0, 0, 0, .5); }
@@ -462,6 +473,20 @@
   .nx-pop .thing-btn { border-radius: 6px; }
   .nx-pop .meta.empty { padding: 4px 10px 8px; }
 
+  /* (the first HUD opened: Dock or Float) */
+  .modepick { position: fixed; inset: 0; z-index: 25; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, .6); }
+  .modepick > div { width: min(560px, 92vw); padding: 22px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 12px 40px #0008; }
+  .modepick h2 { margin: 0 0 6px; font-size: 17px; font-weight: 600; }
+  .modeopts { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 14px 0; }
+  .modeopt { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; height: auto; padding: 14px; text-align: left; white-space: normal; border-radius: 9px; }
+  .modeopt .i { width: 22px; height: 22px; color: var(--accent); }
+  .modeopt b { font-size: 15px; }
+  .modeopt span { color: var(--muted); font-size: 12.5px; line-height: 1.45; }
+  .modeopt:hover, .modeopt:focus-visible { border-color: var(--accent); background: var(--soft); }
+  @media (max-width: 520px) { .modeopts { grid-template-columns: 1fr; } }
+  .app-header .seg.pulse { animation: segpulse 1.3s ease-in-out 2; }
+  @keyframes segpulse { 50% { box-shadow: 0 0 0 4px var(--accent-a), 0 0 0 1px var(--accent); } }
+  @media (prefers-reduced-motion: reduce) { .app-header .seg.pulse { animation: none; box-shadow: 0 0 0 2px var(--accent); } }
   /* (a long HUD name ends in "..." inside its button, not cut off both sides: a flex box can't ellipsis) */
   .app-header #hudbtn { display: block; }
   /* (a narrow window: Global settings, Test server, Dock and Float as their icons; their tooltips still name them) */
@@ -471,7 +496,16 @@
   .nx-body > .card > .sub { margin: 10px 0 2px; font-size: 11.5px; font-weight: 600; color: var(--muted); }
   .nx-body > .card > .row:first-child { border-top: 0; }
   /* (the bar under the game wraps instead of hiding its end) */
-  .viewbar { flex-wrap: wrap; overflow: visible; }
+  /* (the bar: buttons of their own in the game's bottom right corner, under its picture; never zoomed) */
+  #preview { position: relative; padding-bottom: 54px; }
+  #preview > .viewbar { position: absolute; right: 12px; bottom: 11px; z-index: 6; display: flex; flex-wrap: wrap-reverse; justify-content: flex-end; align-items: center; gap: 8px;
+    max-width: calc(100% - 24px); min-height: 0; padding: 0; background: none; border: 0; overflow: visible; pointer-events: none; }
+  #preview > .viewbar button { pointer-events: auto; height: 32px; padding: 0 12px; background: var(--surface); border: 1px solid var(--line); box-shadow: 0 2px 10px rgba(0, 0, 0, .4); }
+  #preview > .viewbar button:hover { border-color: var(--accent); }
+  #preview > .viewbar button[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); background: var(--soft); }
+  #preview > .viewbar #ingame, #preview > .viewbar .ingame { gap: 8px; }
+  #preview > .viewbar .ingame.chips button { height: 28px; border-radius: 14px; }
+  #preview > .viewbar [hidden], body:not(.float) #preview > .viewbar .float-only { display: none !important; }
   /* (keyboard focus visible on Dock and Float, and on the divider) */
   .seg button:focus-visible { outline-offset: -2px; }
   #divider:focus-visible { background: var(--accent); }
@@ -482,7 +516,7 @@
 </style>
 </head>
 <body>
-<svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" /> <circle cx="12" cy="12" r="3" /></symbol><symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49" /> <path d="M14.084 14.158a3 3 0 0 1-4.242-4.242" /> <path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143" /> <path d="m2 2 20 20" /></symbol><symbol id="i-rotate-ccw" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /> <path d="M3 3v5h5" /></symbol><symbol id="i-factory" viewBox="0 0 24 24"><path d="M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8l-7 5V8l-7 5V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z" /> <path d="M17 18h1" /> <path d="M12 18h1" /> <path d="M7 18h1" /></symbol><symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18" /> <path d="m6 6 12 12" /></symbol><symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 17v5" /> <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" /></symbol><symbol id="i-pin-off" viewBox="0 0 24 24"><path d="M12 17v5" /> <path d="M15 9.34V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H7.89" /> <path d="m2 2 20 20" /> <path d="M9 9v1.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h11" /></symbol><symbol id="i-grip-vertical" viewBox="0 0 24 24"><circle cx="9" cy="12" r="1" /> <circle cx="9" cy="5" r="1" /> <circle cx="9" cy="19" r="1" /> <circle cx="15" cy="12" r="1" /> <circle cx="15" cy="5" r="1" /> <circle cx="15" cy="19" r="1" /></symbol><symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" /></symbol><symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6" /></symbol><symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6" /></symbol><symbol id="i-undo-2" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5" /> <path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11" /></symbol><symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /> <path d="M3 3v5h5" /> <path d="M12 7v5l4 2" /></symbol><symbol id="i-panel-right" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" /> <path d="M15 3v18" /></symbol><symbol id="i-picture-in-picture-2" viewBox="0 0 24 24"><path d="M21 9V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v10c0 1.1.9 2 2 2h4" /> <rect width="10" height="7" x="12" y="13" rx="2" /></symbol><symbol id="i-list" viewBox="0 0 24 24"><path d="M3 12h.01" /> <path d="M3 18h.01" /> <path d="M3 6h.01" /> <path d="M8 12h13" /> <path d="M8 18h13" /> <path d="M8 6h13" /></symbol><symbol id="i-image" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" ry="2" /> <circle cx="9" cy="9" r="2" /> <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" /></symbol><symbol id="i-type" viewBox="0 0 24 24"><polyline points="4 7 4 4 20 4 20 7" /> <line x1="9" x2="15" y1="20" y2="20" /> <line x1="12" x2="12" y1="4" y2="20" /></symbol><symbol id="i-square" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" /></symbol><symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14" /> <path d="M12 5v14" /></symbol><symbol id="i-save" viewBox="0 0 24 24"><path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" /> <path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7" /> <path d="M7 3v4a1 1 0 0 0 1 1h7" /></symbol><symbol id="i-folder-open" viewBox="0 0 24 24"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2" /></symbol><symbol id="i-play" viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3" /></symbol><symbol id="i-triangle-alert" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" /> <path d="M12 9v4" /> <path d="M12 17h.01" /></symbol><symbol id="i-toggle-right" viewBox="0 0 24 24"><rect width="20" height="12" x="2" y="6" rx="6" ry="6" /> <circle cx="16" cy="12" r="2" /></symbol><symbol id="i-message-square" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></symbol><symbol id="i-table-2" viewBox="0 0 24 24"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18" /></symbol><symbol id="i-refresh-cw" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /> <path d="M21 3v5h-5" /> <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /> <path d="M8 16H3v5" /></symbol><symbol id="i-sliders-horizontal" viewBox="0 0 24 24"><line x1="21" x2="14" y1="4" y2="4" /> <line x1="10" x2="3" y1="4" y2="4" /> <line x1="21" x2="12" y1="12" y2="12" /> <line x1="8" x2="3" y1="12" y2="12" /> <line x1="21" x2="16" y1="20" y2="20" /> <line x1="12" x2="3" y1="20" y2="20" /> <line x1="14" x2="14" y1="2" y2="6" /> <line x1="8" x2="8" y1="10" y2="14" /> <line x1="16" x2="16" y1="18" y2="22" /></symbol><symbol id="i-loader" viewBox="0 0 24 24"><path d="M12 2v4" /> <path d="m16.2 7.8 2.9-2.9" /> <path d="M18 12h4" /> <path d="m16.2 16.2 2.9 2.9" /> <path d="M12 18v4" /> <path d="m4.9 19.1 2.9-2.9" /> <path d="M2 12h4" /> <path d="m4.9 4.9 2.9 2.9" /></symbol></svg>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" /> <circle cx="12" cy="12" r="3" /></symbol><symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49" /> <path d="M14.084 14.158a3 3 0 0 1-4.242-4.242" /> <path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143" /> <path d="m2 2 20 20" /></symbol><symbol id="i-rotate-ccw" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /> <path d="M3 3v5h5" /></symbol><symbol id="i-factory" viewBox="0 0 24 24"><path d="M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8l-7 5V8l-7 5V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z" /> <path d="M17 18h1" /> <path d="M12 18h1" /> <path d="M7 18h1" /></symbol><symbol id="i-pop-out" viewBox="0 0 24 24"><path d="M21 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h6" /> <path d="m21 3-9 9" /> <path d="M15 3h6v6" /></symbol><symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18" /> <path d="m6 6 12 12" /></symbol><symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 17v5" /> <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" /></symbol><symbol id="i-pin-off" viewBox="0 0 24 24"><path d="M12 17v5" /> <path d="M15 9.34V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H7.89" /> <path d="m2 2 20 20" /> <path d="M9 9v1.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h11" /></symbol><symbol id="i-grip-vertical" viewBox="0 0 24 24"><circle cx="9" cy="12" r="1" /> <circle cx="9" cy="5" r="1" /> <circle cx="9" cy="19" r="1" /> <circle cx="15" cy="12" r="1" /> <circle cx="15" cy="5" r="1" /> <circle cx="15" cy="19" r="1" /></symbol><symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" /></symbol><symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6" /></symbol><symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6" /></symbol><symbol id="i-undo-2" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5" /> <path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11" /></symbol><symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /> <path d="M3 3v5h5" /> <path d="M12 7v5l4 2" /></symbol><symbol id="i-panel-right" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" /> <path d="M15 3v18" /></symbol><symbol id="i-picture-in-picture-2" viewBox="0 0 24 24"><path d="M21 9V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v10c0 1.1.9 2 2 2h4" /> <rect width="10" height="7" x="12" y="13" rx="2" /></symbol><symbol id="i-list" viewBox="0 0 24 24"><path d="M3 12h.01" /> <path d="M3 18h.01" /> <path d="M3 6h.01" /> <path d="M8 12h13" /> <path d="M8 18h13" /> <path d="M8 6h13" /></symbol><symbol id="i-image" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" ry="2" /> <circle cx="9" cy="9" r="2" /> <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" /></symbol><symbol id="i-type" viewBox="0 0 24 24"><polyline points="4 7 4 4 20 4 20 7" /> <line x1="9" x2="15" y1="20" y2="20" /> <line x1="12" x2="12" y1="4" y2="20" /></symbol><symbol id="i-square" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" /></symbol><symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14" /> <path d="M12 5v14" /></symbol><symbol id="i-save" viewBox="0 0 24 24"><path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" /> <path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7" /> <path d="M7 3v4a1 1 0 0 0 1 1h7" /></symbol><symbol id="i-folder-open" viewBox="0 0 24 24"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2" /></symbol><symbol id="i-play" viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3" /></symbol><symbol id="i-triangle-alert" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" /> <path d="M12 9v4" /> <path d="M12 17h.01" /></symbol><symbol id="i-toggle-right" viewBox="0 0 24 24"><rect width="20" height="12" x="2" y="6" rx="6" ry="6" /> <circle cx="16" cy="12" r="2" /></symbol><symbol id="i-message-square" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></symbol><symbol id="i-table-2" viewBox="0 0 24 24"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18" /></symbol><symbol id="i-refresh-cw" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /> <path d="M21 3v5h-5" /> <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /> <path d="M8 16H3v5" /></symbol><symbol id="i-sliders-horizontal" viewBox="0 0 24 24"><line x1="21" x2="14" y1="4" y2="4" /> <line x1="10" x2="3" y1="4" y2="4" /> <line x1="21" x2="12" y1="12" y2="12" /> <line x1="8" x2="3" y1="12" y2="12" /> <line x1="21" x2="16" y1="20" y2="20" /> <line x1="12" x2="3" y1="20" y2="20" /> <line x1="14" x2="14" y1="2" y2="6" /> <line x1="8" x2="8" y1="10" y2="14" /> <line x1="16" x2="16" y1="18" y2="22" /></symbol><symbol id="i-loader" viewBox="0 0 24 24"><path d="M12 2v4" /> <path d="m16.2 7.8 2.9-2.9" /> <path d="M18 12h4" /> <path d="m16.2 16.2 2.9 2.9" /> <path d="M12 18v4" /> <path d="m4.9 19.1 2.9-2.9" /> <path d="M2 12h4" /> <path d="m4.9 4.9 2.9 2.9" /></symbol></svg>
 <header class="app-header">
   <button id="hudbtn" title="The HUD you're editing: click to pick another, rename one, or add one">No HUD open</button>
   <button id="explore" class="ib" title="Open the HUD's folder" aria-label="Open the HUD's folder"><svg class="i" aria-hidden="true"><use href="#i-folder-open"/></svg></button>
@@ -502,7 +536,7 @@
     </div>
     <span class="sep" aria-hidden="true"></span>
     <button id="undobtn" class="ib" disabled title="Undo (Ctrl+Z)" aria-label="Undo"><svg class="i" aria-hidden="true"><use href="#i-undo-2"/></svg></button>
-    <button id="discard" class="ib" disabled title="Undo all: put the HUD back to how it was last saved (every unsaved change goes)" aria-label="Undo all"><svg class="i" aria-hidden="true"><use href="#i-history"/></svg></button>
+    <button id="discard" class="ib" disabled aria-haspopup="dialog" title="Undo every change: back to how the HUD was imported (or only the unsaved changes)" aria-label="Undo every change"><svg class="i" aria-hidden="true"><use href="#i-history"/></svg></button>
     <button id="restartmark" class="caution" hidden aria-haspopup="dialog">⚠</button>
     <button id="save" class="primary" disabled>Save HUD</button>
   </div>
@@ -544,11 +578,11 @@
       <div id="empty"><p><b>Starting...</b></p></div>
       <div id="boxes"></div>
     </div>
-  </main>
-  <!-- under the game: what the game holds open for editing (in a map), the loading screen, and in Float the element list
-       and show/hide (in Dock the panel lists them) -->
-  <div class="viewbar" id="viewbar">
-    <span class="vlabel">Show</span>
+    <!-- the game's corner, under its picture: what the game holds open for editing (in a map), the loading screen, and in
+         Float the element list and show/hide (in Dock the panel lists them); only the ones for the screen it's on -->
+    <div class="viewbar" id="viewbar">
+    <button id="elembtn" class="float-only" aria-haspopup="dialog" title="Every part on screen now, and the ones that show now and then"><svg class="i" aria-hidden="true"><use href="#i-list"/></svg>Element list</button>
+    <button id="showhidebtn" class="float-only" aria-haspopup="dialog" title="Hidden and shown parts, each with its eye"><svg class="i" aria-hidden="true"><use href="#i-eye"/></svg>Show/hide<span class="count" id="hiddencount" hidden></span></button>
     <div id="ingame">
       <div class="ingame">
         <button id="scores" aria-pressed="false" title="Keep the scoreboard open to edit it. Click again to close it.">Scoreboard</button>
@@ -565,12 +599,9 @@
         <button data-bit="4" title="Large speed text under it, like jhud (font CenterPrintText, ClientScheme)">Large speed</button>
       </div>
     </div>
-    <span class="vsep" aria-hidden="true"></span>
     <button id="loadbtn" aria-pressed="false" title="The box that shows while a map loads: the game holds it open while you edit it">Loading screen</button>
-    <span class="grow"></span>
-    <button id="elembtn" class="float-only" aria-haspopup="dialog" title="Every part on screen now, and the ones that show now and then"><svg class="i" aria-hidden="true"><use href="#i-list"/></svg>Element list</button>
-    <button id="showhidebtn" class="float-only" aria-haspopup="dialog" title="Hidden and shown parts, each with its eye"><svg class="i" aria-hidden="true"><use href="#i-eye"/></svg>Show/hide<span class="count" id="hiddencount" hidden></span></button>
   </div>
+  </main>
   <footer class="preview-footer"><div class="msg"><span id="status">Starting...</span><span id="hint">Click a part of the game to edit it (again: the one under it); Ctrl+click adds more. The wheel zooms.</span></div><span id="gamestate"></span></footer>
 </section>
 <div id="divider" role="separator" aria-orientation="vertical" aria-label="Panel width" tabindex="0" title="Drag to give the game or the panel more room; double-click: the usual width"></div>
@@ -668,7 +699,7 @@ const HUD = {
       ['Lines line up on the', 'RightJustify', [['1', 'Right'], ['0', 'Left']], '1', 'Side of the kill feed\'s area (move the area to move the feed)']], fontKeys: [['Names font', 'TextFont', 'Default']],
     extraCvars: [['Each kill stays for', 'hud_deathnotice_time', 'time', 'Seconds (hud_deathnotice_time)']] },
   // the chat reads ChatScheme; its message colours (names in team colours, yellow server lines) are the game's own
-  HudChat: { name: 'Chat', scheme: CH, rounded: true, colours: [['Background', 'DullWhite', 'Behind the chat while typing; the game sets how see-through it is', 'rgb'],
+  HudChat: { name: 'Chat', scheme: CH, shownBy: () => keepChat || chatOpen(), rounded: true, colours: [['Background', 'DullWhite', 'Behind the chat while typing; the game sets how see-through it is', 'rgb'],
     ['Typing text', 'Chat.TypingText', ''], ['"Say :" text', 'Label.TextColor', ''], ['Typing box', 'TextEntry.BgColor', '']],
     extraCvars: [['Each line stays for', 'hud_saytext_time', 'time', 'Seconds, while the chat is closed (hud_saytext_time)']] },
   HudHintDisplay: { name: 'Timer / hint text', fit: true, rounded: true, roundOnly: true, note: 'Font HudHintText', colours: [['Text', 'HintMessageFg', 'Also the right-side text'], ['Background', 'HintMessageBg', '']],
@@ -1042,6 +1073,15 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 // ---------- files ----------
 let hudName = null, files = [], writing = Promise.resolve(), dirty = false;
 const $ = id => document.getElementById(id);
+// A handler of the page's keys and clicks that a popped-out card's window needs as well (see popOut)
+const pageHandlers = [];
+function onPage(type, fn, capture = false) { pageHandlers.push([type, fn, capture]); document.addEventListener(type, fn, capture); }
+// The windows with the page's cards in them, and what has the keyboard in the one in front
+const wins = () => [window, ...pins.filter(p => p.win).map(p => p.win)];
+const activeEl = () => {
+  const ds = [document, ...pins.filter(p => p.win).map(p => p.win.document)]; // (none in front, the game say: the one with something focused)
+  return (ds.find(d => d.hasFocus()) || ds.find(d => d.activeElement && d.activeElement !== d.body) || document).activeElement;
+};
 const F = name => files.find(f => f.name === name);
 let statusAt = 0;
 // Messages pop up at the bottom of the sidebar for a few seconds (longer ones stay longer).
@@ -1212,7 +1252,8 @@ async function undo() {
 
 function setDirty(d) {
   dirty = d;
-  $('save').disabled = $('discard').disabled = !d;
+  $('save').disabled = !d;
+  $('discard').disabled = !hudPath;
   $('undobtn').disabled = !undoSteps.length;
   $('save').textContent = d ? 'Save HUD *' : 'Save HUD';
   $('savestate').textContent = d ? 'Unsaved changes' : 'No unsaved changes';
@@ -2094,7 +2135,7 @@ const LOADING_SEL = () => ({ thing: { name: 'LoadingDialog', key: 'loadingdialog
 const LOADING_TWIN = { [UI_RES.loadingdialog]: LOADING_VAC, [LOADING_VAC]: UI_RES.loadingdialog };
 const loadingTwin = f => (f && LOADING_TWIN[f.name] && F(LOADING_TWIN[f.name])) || null;
 // a number being typed in the panel or a card (a re-render would take it away)
-function typingInCard() { const a = document.activeElement; return !!a && a.tagName === 'INPUT' && !!a.closest('#list, .nx-pin'); }
+function typingInCard() { const a = activeEl(); return !!a && a.tagName === 'INPUT' && !!a.closest('#list, .nx-pin'); }
 let loadingVac = false; // the box as VAC-secured servers show it (its file is the one clicked parts write first)
 let loadingHeld = null, loadingAsked = 0; // what the plugin was last asked for ('show', 'vac' or null: closed), and when
 const loadingUp = () => !!live && live.panels.some(p => p === p.thing && p.key === 'loadingdialog');
@@ -2247,11 +2288,14 @@ async function dropUnused() {
   let sq = null;
   const squareUsed = namedAnywhere('hudeditor_square_corner');
   for (const p of SQUARE_CORNERS) if (!dropped.has(p)) dropped.set(p, () => sq ??= squareUsed());
-  for (const [path, used] of dropped) if (!(await used())) await call('remove', path).catch(err => status(`Couldn't remove ${path}: ${err.message}`));
+  const gone = []; // (what was taken out: a part's Save keeps that too)
+  const drop = path => call('remove', path).then(() => gone.push(path), err => status(`Couldn't remove ${path}: ${err.message}`));
+  for (const [path, used] of dropped) if (!(await used())) await drop(path);
   dropped.clear();
   // a window's file the HUD didn't have, changed and changed back: the game's own again, so not kept as a copy (the
   // game reads its own; one not written yet isn't there, which remove leaves alone)
-  for (const f of files) if (f.gameCopy != null && f.opened != null && f.text === f.gameCopy) await call('remove', f.path).catch(err => status(`Couldn't remove ${f.path}: ${err.message}`));
+  for (const f of files) if (f.gameCopy != null && f.opened != null && f.text === f.gameCopy) await drop(f.path);
+  return gone;
 }
 const CUSTOM = {
   imagepanel: { word: 'Picture', layoutColours: [['Tint', 'drawcolor', '255 255 255 255']], settings: [['Layer', 'zpos', 'num', '1', 'Higher is in front']] },
@@ -2932,7 +2976,7 @@ function renameable(text) {
     e.preventDefault(); e.stopPropagation();
     s.contentEditable = 'plaintext-only';
     s.focus();
-    getSelection().selectAllChildren(s);
+    s.ownerDocument.defaultView.getSelection().selectAllChildren(s);
     s.onkeydown = k => {
       if (k.key === 'Enter') { k.preventDefault(); s.blur(); }
       else if (k.key === 'Escape') { s.textContent = renamed[text] ?? text; s.blur(); }
@@ -2949,13 +2993,13 @@ function renameable(text) {
 let cpop = null, colourClip = '';
 const closePicker = () => {
   if (!cpop) return;
-  const back = cpop.contains(document.activeElement) && cpop.owner && cpop.owner.querySelector && cpop.owner.querySelector('.swatch');
+  const back = cpop.contains(activeEl()) && cpop.owner && cpop.owner.querySelector && cpop.owner.querySelector('.swatch');
   cpop.remove();
   cpop = null;
   if (back) back.focus();
 };
-document.addEventListener('pointerdown', e => { if (cpop && !cpop.contains(e.target) && !e.target.closest('.swatch')) closePicker(); });
-document.addEventListener('keydown', e => { if (e.key === 'Escape') closePicker(); });
+onPage('pointerdown', e => { if (cpop && !cpop.contains(e.target) && !e.target.closest('.swatch')) closePicker(); });
+onPage('keydown', e => { if (e.key === 'Escape') closePicker(); });
 const clamp = (n, a = 0, b = 1) => Math.min(b, Math.max(a, n));
 // "255 128 0", "255 128 0 200", "255, 128, 0", "#ff8000", "#ff8000c8", "rgb(255 128 0)", "rgba(255, 128, 0, 0.5)"
 function parseColour(s) {
@@ -3013,12 +3057,12 @@ function openPicker(anchor, rgba, onPick, owner, title = 'Colour', alpha = true,
   const flash = (b, t) => { const was = b.textContent; b.textContent = t; setTimeout(() => { b.textContent = was; }, 900); };
   copy.onclick = async () => {
     colourClip = c.join(' ');
-    try { await navigator.clipboard.writeText(colourClip); } catch {} // the editor keeps its own copy too
+    try { await copy.ownerDocument.defaultView.navigator.clipboard.writeText(colourClip); } catch {} // the editor keeps its own copy too (a popped-out card: its window's clipboard)
     flash(copy, 'Copied');
   };
   paste.onclick = async () => {
     let text = '';
-    try { text = await navigator.clipboard.readText(); } catch {}
+    try { text = await paste.ownerDocument.defaultView.navigator.clipboard.readText(); } catch {}
     const src = parseColour(text) ? text : colourClip, p = parseColour(src);
     if (!p) return flash(paste, 'No colour');
     // (one without an opacity, #hex, R G B or rgb(), keeps this one's)
@@ -3037,7 +3081,8 @@ function openPicker(anchor, rgba, onPick, owner, title = 'Colour', alpha = true,
   foot.append(el('button', { type: 'button', className: 'primary', textContent: 'Done', onclick: closePicker }));
   pop.append(head, prev, ...chans.map(ch => ch.row), foot);
   show();
-  document.body.append(pop);
+  const { innerWidth, innerHeight } = anchor.ownerDocument.defaultView; // (a popped-out card: in its window)
+  anchor.ownerDocument.body.append(pop);
   // below the boxes (above them near the bottom), its right edge at theirs, kept 12px inside the window
   const r = anchor.getBoundingClientRect();
   pop.style.left = `${clamp(r.right - pop.offsetWidth, 12, innerWidth - pop.offsetWidth - 12)}px`;
@@ -4318,7 +4363,7 @@ function fontFold(file, font, what, open) {
 // drawn in that font). A name typed that isn't listed can be used too (a font the HUD brings, say).
 let fpop = null, fontFaces = []; // installed font families, the HUD's own first (see start, openHud)
 const closeFontPop = () => { if (fpop) { fpop.remove(); fpop = null; } };
-document.addEventListener('pointerdown', e => { if (fpop && !fpop.contains(e.target) && e.target !== fpop.owner) closeFontPop(); });
+onPage('pointerdown', e => { if (fpop && !fpop.contains(e.target) && e.target !== fpop.owner) closeFontPop(); });
 function fontPick(value, names, onPick, faces = false, empty = '(none)') {
   const b = el('button', { className: 'fontpick', type: 'button' });
   b.set = v => { value = v; b.textContent = v || empty; b.title = v; if (faces) b.style.fontFamily = `"${v}", system-ui`; };
@@ -4356,7 +4401,8 @@ function fontPick(value, names, onPick, faces = false, empty = '(none)') {
     };
     pop.append(q, list);
     fill();
-    document.body.append(pop);
+    const { innerWidth, innerHeight } = b.ownerDocument.defaultView; // (a popped-out card: in its window)
+    b.ownerDocument.body.append(pop);
     const r = b.getBoundingClientRect();
     pop.style.left = `${clamp(r.right - pop.offsetWidth, 8, innerWidth - pop.offsetWidth - 8)}px`;
     pop.style.top = `${r.bottom + pop.offsetHeight + 8 > innerHeight ? Math.max(8, r.top - pop.offsetHeight - 4) : r.bottom + 4}px`;
@@ -4726,11 +4772,14 @@ function addFontFile(schemes, then = null, note = 'Apply to every text font uses
   fontSchemes = schemes;
   fontAdded = then;
   fontAddedNote = note;
-  $('fontfile').value = '';
-  $('fontfile').click();
+  // (from a popped-out card: a chooser of its own window's, as only that window has the click that may open one)
+  const doc = activeEl()?.ownerDocument || document, pick = doc === document ? $('fontfile') : Object.assign(doc.createElement('input'), { type: 'file', accept: $('fontfile').accept });
+  pick.value = '';
+  if (pick !== $('fontfile')) pick.onchange = () => fontFileChosen(pick.files[0]);
+  pick.click();
 }
-$('fontfile').onchange = async () => {
-  const file = $('fontfile').files[0];
+$('fontfile').onchange = () => fontFileChosen($('fontfile').files[0]);
+async function fontFileChosen(file) {
   if (!file) return;
   try {
     const rel = `resource/fonts/${file.name.replace(/[^\w.()' -]/g, '_')}`, data = await file.arrayBuffer();
@@ -5460,8 +5509,8 @@ const el = (tag, props) => Object.assign(document.createElement(tag), props);
 // Rebuilding the list between mouse-down and mouse-up moves the click onto a new row (a Hide button click would
 // select the row instead), so a render asked for while a button is held waits for its release.
 let pointerDown = false, renderOnRelease = false, openOther = false, openColours = false;
-document.addEventListener('pointerdown', () => { pointerDown = true; }, true);
-document.addEventListener('pointerup', () => {
+onPage('pointerdown', () => { pointerDown = true; }, true);
+onPage('pointerup', () => {
   pointerDown = false;
   if (renderOnRelease) { renderOnRelease = false; setTimeout(render); } // after the click this release makes
 }, true);
@@ -5471,7 +5520,7 @@ function render() {
   // a row drawn now would show the value from before an edit still waiting to be written (a tick box would untick)
   if (waiting.size) { renderAfterSave = true; return; }
   // (keyboard focus on a card's button: found again after the redraw, by its kind, tab and words)
-  const fe = document.activeElement, fbox = fe && fe.tagName === 'BUTTON' && fe.closest('#list, .nx-pin');
+  const fe = activeEl(), fbox = fe && fe.tagName === 'BUTTON' && fe.closest('#list, .nx-pin');
   const fk = fbox && { pin: pins.find(p => p.el === fbox) || null, tab: fe.closest('.nx-cat')?.dataset.tab, cls: fe.className, text: fe.textContent.trim() };
   // emptying the list scrolls it to the top; keep the reader's place (select() scrolls up itself)
   const top = scroller().scrollTop, act = inUse = selected;
@@ -5482,9 +5531,9 @@ function render() {
     scroller().scrollTop = top;
     if (layoutMode === 'float') renderPins(act);
   } finally { selected = act; }
-  if (fpop && !document.contains(fpop.owner)) closeFontPop(); // its row has gone
-  if (cpop && !document.contains(cpop.owner)) closePicker();
-  if (fk && !document.contains(fe)) {
+  if (fpop && !fpop.owner.isConnected) closeFontPop(); // its row has gone
+  if (cpop && !cpop.owner.isConnected) closePicker();
+  if (fk && !fe.isConnected) {
     const root = fk.pin ? (pins.includes(fk.pin) && fk.pin.sel === selected ? fk.pin.el : null) : layoutMode !== 'float' || cardSel === selected ? $('list') : null;
     const same = b => b.className === fk.cls && (b.closest('.nx-cat')?.dataset.tab) === fk.tab;
     const bs = root ? [...root.querySelectorAll('button')] : [];
@@ -5604,14 +5653,21 @@ function renderList() {
 // ---------- the dev build's panel: Dock (beside the game) or Float (a card over it, more pinned) ----------
 // A selection's settings in five tabs, always in this order, each closed until opened (again for every part picked);
 // inside one, its first section, then Show more for the rest. Float shows the settings people change most first.
-const TABS = [['colour', 'Colours'], ['font', 'Fonts'], ['border', 'Borders'], ['extra', 'Extra'], ['custom', 'Add custom']];
-const TAB_OF = { colour: 'colour', font: 'font', border: 'border', layout: 'extra', other: 'extra', missing: 'extra', show: 'extra', custom: 'custom' };
+const TABS = [['colour', 'Colours'], ['font', 'Fonts'], ['border', 'Borders'], ['position', 'Position'], ['size', 'Size'], ['show', 'Show/hide'],
+  ['buttons', 'Buttons'], ['misc', 'Misc'], ['custom', 'Add custom']];
+const TAB_OF = { colour: 'colour', font: 'font', border: 'border', layout: 'position', other: 'misc', missing: 'misc', show: 'show', custom: 'custom' };
+// (a layout section by its title: sizes, a text's words and alignment, or places; the main menu's buttons a tab of their own)
+const tabOf = (kind, title = '') => kind === 'layout' ? (/size|items|space inside|padding/i.test(title) ? 'size' : /^text$/i.test(title) ? 'misc' : 'position')
+  : kind === 'other' && /^buttons$/i.test(title) ? 'buttons' : TAB_OF[kind] || 'misc';
+// (a row that sets a width, a height or a size: under Size, the section's places under Position)
+const isSizeRow = r => /\b(width|height|size)\b/i.test((r.querySelector && r.querySelector('input[aria-label]')?.getAttribute('aria-label')) || (r.dataset && r.dataset.q) || '');
 // Out of the dev build for now (the user's ask, 10-09): the killer panel and the round-end panel; the bomb screen and the
 // whole-HUD colours and fonts aren't in the list either
 const DEV_OUT = new Set(['FreezePanel', 'WinPanel_Round']);
 // cardSel: what the main card (Float) or the panel (Dock) shows; pins: Float's pinned cards, each on its own part. The
 // global `selected` is the one in use: what the preview marks and keys and handlers act on (a pinned card's while it's used)
 let inUse = null; // (the part in use while render() draws each card with its own: the Ctrl+click group's card)
+let popped = 0; // (popped-out cards' windows: each its own name)
 let layoutMode = 'dock', cardSel = null, pins = [], floatAll = false, floatMoved = false, floatPlaced = '', nxPop = null;
 try { if (localStorage.getItem('layout') === 'float') layoutMode = 'float'; } catch {}
 const mainTabs = { key: '', open: new Set(), more: new Set() };
@@ -5667,6 +5723,8 @@ function elementCards() {
 // The settings of the global `selected` into box (the panel's list, or a pinned card): its heading, then its tabs (Float:
 // its simple settings first). tabs: which tabs are open and showing more, kept while it's the same part.
 let curPin = null; // (the pinned card being drawn: its own links open in it)
+// Simple mode (a part's main settings) or Advanced (every setting in its tabs), in Dock and Float alike, kept on this PC
+function setAdvanced(on) { floatAll = on; try { localStorage.setItem('advanced', on ? '1' : '0'); } catch {} render(); }
 function buildSelection(box, tabs, pin = null) {
   curPin = pin;
   const sel = selected, float = layoutMode === 'float', key = selKey(sel);
@@ -5683,11 +5741,11 @@ function buildSelection(box, tabs, pin = null) {
   titles.append(el('h2', { textContent: name, title: name }), el('p', { textContent: sub, title: sub }));
   head.append(icon('grip-vertical', 'grip'), titles, tools);
   rowScope = [sel.thing.key, sel.control?.key, sel.node?.key].filter(Boolean).join('/');
-  const sections = selectionSections(sel), quick = float && !floatAll ? quickRows(sections, sel) : [];
+  const sections = selectionSections(sel), quick = !floatAll ? quickRows(sections, sel) : [];
   rowScope = '';
   const eye = hideButton(sel) || el('button', { className: 'eye', type: 'button', disabled: true, innerHTML: EYE_SVG, title: 'This one can\'t be hidden from here' });
-  tools.append(eye, resetButton(sel, sections, quick), defaultButton(sel));
-  if (float && (pin || sel.thing.key !== 'loadingdialog')) tools.append(pinButton(pin)); // (not the loading screen: held open, it takes every click)
+  tools.append(eye);
+  if (float && (pin || sel.thing.key !== 'loadingdialog')) tools.append(pinButton(pin), popButton(pin)); // (not the loading screen: held open, it takes every click)
   tools.append(el('span', { className: 'tsep' }), iconButton('x', pin ? 'Close this pinned card' : float ? 'Close (Esc); changes stay unsaved until Save HUD' : 'Close (Esc): back to the list; changes stay unsaved until Save HUD', () => pin ? closePin(pin) : select(null), 'close'));
   if (float) head.addEventListener('pointerdown', e => dragCard(e, pin ? pin.el : document.querySelector('aside'), pin));
   box.append(head);
@@ -5695,22 +5753,71 @@ function buildSelection(box, tabs, pin = null) {
   if (also.length && sel === inUse) body.append(card(`Line up ${also.length + 1} parts`, lineUpRows(), false));
   if (sel.thing.key === 'loadingdialog') body.append(card('', loadingHoldRows(), false)); // (above the tabs: which box)
   if (quick.length) {
-    const q = el('section', { className: 'nx-quick' }), all = el('button', { className: 'nx-all', type: 'button', onclick: () => { floatAll = true; render(); } });
+    const q = el('section', { className: 'nx-quick' }), all = el('button', { className: 'nx-all', type: 'button', title: 'Every setting, in tabs', onclick: () => setAdvanced(true) });
     q.append(...quick);
-    all.append(icon('chevron-down'), 'All settings');
+    all.append(icon('sliders-horizontal'), 'Advanced');
     body.append(q, all);
   } else {
     const cats = tabCards(sections, sel, tabs);
     body.append(...(cats.length ? cats : [el('p', { className: 'meta', textContent: 'Nothing to edit here yet.' })]));
-    if (float && floatAll) { const fewer = el('button', { className: 'nx-all', type: 'button', onclick: () => { floatAll = false; render(); } }); fewer.append(icon('chevron-down', 'flip'), 'Fewer settings'); body.append(fewer); }
+    if (floatAll && quickRows(sections, sel).length) { const fewer = el('button', { className: 'nx-all', type: 'button', title: 'Only the main settings: colours, font and text size', onclick: () => setAdvanced(false) }); fewer.append(icon('list'), 'Simple mode'); body.append(fewer); }
   }
   box.append(body);
+  // (the part's own: the game's default, back to how it was opened, and Save for its files)
+  const foot = el('div', { className: 'nx-foot' }), label = (b, text) => (b.append(el('span', { textContent: text })), b);
+  foot.append(label(defaultButton(sel), 'Default'), label(resetButton(sel, sections, quick), 'Undo'),
+    label(iconButton('save', 'Save this part: keeps its changes now (its files: what other parts changed in the same files is kept too)', () => savePart(sel), 'nx-save'), 'Save'));
+  box.append(foot);
+}
+
+// A part's Save: its files as they are now become the saved ones: its window's file (or HudLayout), the schemes its
+// colours and fonts are in, its pictures. Other parts' changes in those files are kept with them (whole files).
+function partPaths(sel) {
+  const fs = new Set(), add = f => { const x = typeof f === 'string' ? F(f) : f; if (x) fs.add(x); };
+  if (sel.info.id === 'global') for (const [n] of FONT_FILES) add(n);
+  else {
+    add(sel.res);
+    if (sel.info.kind === 'window') for (const f of windowFiles(sel)) add(f);
+    if (sel.thing.key === 'loadingdialog') { add(UI_RES.loadingdialog); add(LOADING_VAC); }
+    if (sel.info.kind === 'hud') add(L);
+    add(schemeOf(sel.control || sel.thing)); add(sel.info.file); add(sel.info.hud && sel.info.hud.scheme);
+    for (const [f] of fontsOf(sel)) add(f);
+    if (sel.info.id === 'HudChat') { add(CH); add(UI_RES.hudchat); }
+    if (sel.info.id === 'gamemenu' || sel.info.id === 'menubg') { add(GM); add(C); add(S); }
+    if (sel.thing.key === 'scores' || HUD[sel.info.id]?.cvars || HUD[sel.info.id]?.extraCvars) { add(CVAR_CFG); add(VALVE_RC); }
+  }
+  const files = [...fs], paths = files.map(f => f.path);
+  for (const f of files) if (STUBS[f.name]) paths.push(f.path.replace(/[^/]+$/, STUBS[f.name][0])); // (its #base: written with its first change)
+  for (const f of files) if (FONT_FILES.some(([n]) => n === f.name)) for (const e of fontFileEntries(f)) paths.push(e.value.replace(/\\/g, '/'));
+  for (const f of files) for (const m of (f.text || '').matchAll(/vgui\/replay\/thumbnails\/([\w.-]+)/gi))
+    paths.push(`materials/vgui/replay/thumbnails/${m[1]}.vmt`, `materials/vgui/replay/thumbnails/${m[1]}.vtf`);
+  if (sel.info.id === 'gamemenu' || sel.info.id === 'menubg') paths.push('materials/console/'); // (a background's frames)
+  return [...new Set(paths)];
+}
+async function savePart(sel) {
+  await settled();
+  try {
+    const gone = await dropUnused(); // (what Save HUD takes out first: pictures nothing uses...)
+    const [saved, left] = (await call('savesome', '', [...partPaths(sel), ...gone].join('\n'))).split('\t').map(Number);
+    if (!left) setDirty(false);
+    const name = sel.info.id === 'global' ? 'the fonts' : shownName(sel);
+    status(saved ? `Saved ${name} (${saved} file${saved > 1 ? 's' : ''})${left ? `. ${left} other file${left > 1 ? 's are' : ' is'} still unsaved: Save HUD keeps everything.` : '. Nothing else is unsaved.'}`
+      : `Nothing unsaved in ${name}'s files.`);
+  } catch (err) { status(`Couldn't save: ${err.message}`); }
 }
 
 // The sections in their tabs. Add custom says what it adds to: a window's parts go in that window; a HUD part's are the HUD's.
 function tabCards(sections, sel, tabs) {
   const by = new Map(TABS.map(([k]) => [k, []]));
-  for (const [t, rows, kind] of sections) if (rows.length) by.get(TAB_OF[kind] || 'extra').push([sectionTitle(t), rows]);
+  for (const [t, rows, kind] of sections) {
+    if (!rows.length) continue;
+    const title = sectionTitle(t), tab = tabOf(kind, title);
+    if (tab === 'position' && !/^columns$/i.test(title)) { // (its widths and heights under Size, its places here)
+      const sizes = rows.filter(isSizeRow), places = rows.filter(r => !isSizeRow(r));
+      if (places.length) by.get('position').push([title, places]);
+      if (sizes.length) by.get('size').push([title, sizes]);
+    } else by.get(tab).push([title, rows]);
+  }
   // Fonts: the font itself first (its face and size), then the rest (a separate font, the game's missing font)
   if (sel.info.id !== 'global') by.get('font').sort((a, b) => !a[1].some(r => r.dataset && r.dataset.file) - !b[1].some(r => r.dataset && r.dataset.file));
   const custom = by.get('custom');
@@ -5817,8 +5924,8 @@ function resetButton(sel, sections, quick = []) {
       const group = resetGroup = burstGroup();
       resetGroups.add(group);
       // (its step: everything written until the user clicks or types again, as some ↺ write a moment later; at most 5 s)
-      const end = () => { if (resetGroup === group) resetGroup = null; for (const t of ['pointerdown', 'keydown']) removeEventListener(t, end, true); };
-      setTimeout(() => { for (const t of ['pointerdown', 'keydown']) addEventListener(t, end, true); });
+      const end = () => { if (resetGroup === group) resetGroup = null; for (const w of wins()) for (const t of ['pointerdown', 'keydown']) w.removeEventListener(t, end, true); };
+      setTimeout(() => { for (const w of wins()) for (const t of ['pointerdown', 'keydown']) w.addEventListener(t, end, true); });
       setTimeout(end, 5000);
       if (unhide) setPartHidden(rf, own.block, false);
       if (hudHid) setHidden(sel.info.id, false);
@@ -5897,6 +6004,49 @@ function pinButton(pin) {
   b.setAttribute('aria-pressed', String(!!pin));
   return b;
 }
+// Pop out (Float): the card in a window of its own, to put anywhere, outside the editor too (another screen); pinned, as it
+// stays open while other parts are clicked. Back in: where it was, pinned. Closing its window closes the card.
+function popButton(pin) {
+  const b = iconButton('pop-out', pin?.win ? 'In a window of its own: click to put it back in the editor' : 'Pop out: this card in a window of its own, to put anywhere (outside the editor too)', () => pin?.win ? popIn(pin) : popOut(pin), 'nx-pinbtn');
+  b.setAttribute('aria-pressed', String(!!pin?.win));
+  return b;
+}
+function popOut(p) {
+  if (!p) { const n = pins.length; pinCard(); if (pins.length === n) return; p = pins[n]; } // (the main card: pinned first)
+  if (!p.el) renderPins();
+  const r = p.el.getBoundingClientRect(); // (where the card is now: the exe makes its window round that, see OnNewWindow)
+  const w = window.open('', `card${++popped}`, `popup,width=${Math.round(r.width)},height=${Math.round(r.height)},left=${Math.round(screenX + r.left)},top=${Math.round(screenY + r.top)}`);
+  if (!w) return status('Couldn\'t open a window for the card.');
+  const d = w.document;
+  d.title = shownName(p.sel);
+  for (const a of document.documentElement.attributes) d.documentElement.setAttribute(a.name, a.value);
+  d.head.append(...[...document.querySelectorAll('style')].map(x => x.cloneNode(true)));
+  try { for (const f of document.fonts) d.fonts.add(f); } catch {} // (the HUD's fonts, see fontFaces)
+  d.body.className = `${document.body.className} popout`;
+  d.body.append(document.getElementById('i-x').ownerSVGElement.cloneNode(true), p.el); // (the icons, and the card itself)
+  p.el.style.cssText = '';
+  p.win = w;
+  for (const [type, fn, capture] of pageHandlers) d.addEventListener(type, fn, capture);
+  w.addEventListener('focus', () => { overPreview = false; useSel(p.sel); });
+  w.addEventListener('pagehide', () => { if (p.win === w) { p.win = null; closePin(p); } });
+  render();
+  status(`${shownName(p.sel)} is in a window of its own: put it anywhere. Its pop-out button puts it back in the editor.`);
+}
+function popIn(p) {
+  const w = p.win;
+  p.win = null;
+  document.body.append(p.el);
+  p.x = clamp(p.x, 4, Math.max(4, innerWidth - p.w - 4)); p.y = clamp(p.y, 4, Math.max(4, innerHeight - 64));
+  Object.assign(p.el.style, { left: `${p.x}px`, top: `${p.y}px`, width: `${p.w}px`, height: `${p.h}px` });
+  w.close();
+  render();
+}
+// A pinned card gone: its window too, if it has one
+function dropPin(p) {
+  pins = pins.filter(x => x !== p);
+  p.el?.remove();
+  if (p.win) { const w = p.win; p.win = null; w.close(); }
+}
 function pinCard() {
   if (!cardSel) return;
   const a = document.querySelector('aside').getBoundingClientRect();
@@ -5907,15 +6057,13 @@ function pinCard() {
   render(); drawBoxes();
 }
 function unpin(p) {
-  pins = pins.filter(x => x !== p);
-  p.el?.remove();
+  dropPin(p);
   if (!cardSel) { cardSel = p.sel; Object.assign(mainTabs, p.tabs); setFloatXY(p.x, p.y); floatPlaced = selKey(p.sel); }
   selected = cardSel;
   holdShown(); render(); drawBoxes();
 }
 function closePin(p) {
-  pins = pins.filter(x => x !== p);
-  p.el?.remove();
+  dropPin(p);
   if (selected === p.sel) selected = cardSel;
   holdShown(); render(); drawBoxes();
 }
@@ -5944,6 +6092,7 @@ function renderPins(act = selected) {
     p.el.replaceChildren();
     try { buildSelection(p.el, p.tabs, p); } finally { selected = act; }
     p.el.classList.toggle('active', act === p.sel);
+    if (p.win) p.win.document.title = shownName(p.sel);
     const b = p.el.querySelector('.nx-body');
     if (b) b.scrollTop = top;
   }
@@ -5985,7 +6134,7 @@ function placeFloat() {
   setFloatXY(at[0], at[1]);
 }
 function dragCard(e, card, pin) {
-  if (e.button !== 0 || (!pin && innerWidth <= 860) || e.target.closest('button, input, select, a, [contenteditable]')) return;
+  if (pin?.win || e.button !== 0 || (!pin && innerWidth <= 860) || e.target.closest('button, input, select, a, [contenteditable]')) return;
   const r = card.getBoundingClientRect(), dx = e.clientX - r.left, dy = e.clientY - r.top;
   e.preventDefault();
   const move = m => {
@@ -5999,6 +6148,7 @@ function dragCard(e, card, pin) {
 }
 // The browser's own corner grip resizes a card; the size it's left at is kept (the main card's on this PC).
 function grip(e, card, pin) {
+  if (pin?.win) return;
   const r = card.getBoundingClientRect();
   if (r.right - e.clientX > 18 || r.bottom - e.clientY > 18) return;
   addEventListener('pointerup', () => {
@@ -6017,8 +6167,7 @@ function setLayout(mode) {
     // one panel: the part in use (a pinned card's, else the main card's, with its open tabs); the pinned cards close
     const cur = pins.find(p => p.sel === selected);
     if (cur) Object.assign(mainTabs, cur.tabs);
-    for (const p of pins) p.el && p.el.remove();
-    pins = [];
+    for (const p of pins) dropPin(p);
     cardSel = selected = selected || cardSel;
     holdShown();
   } else { cardSel = selected; floatPlaced = ''; clampFloat(); }
@@ -6032,7 +6181,7 @@ function viewBar() {
   $('loadbtn').setAttribute('aria-pressed', String(loading));
   $('globalbtn').setAttribute('aria-pressed', String([cardSel, ...pins.map(p => p.sel)].some(s => s && s.info.id === 'global')));
   $('globalbtn').disabled = !files.length;
-  $('loadbtn').disabled = !files.length;
+  $('loadbtn').hidden = !files.length;
   const hidden = Object.keys(HUD).filter(id => canHide(id) && isHidden(id) && !DEV_OUT.has(id)).length;
   $('hiddencount').hidden = !hidden;
   $('hiddencount').textContent = hidden;
@@ -6407,9 +6556,9 @@ $('zoom').onclick = () => setZoom(1, 0, 0);
 // Parts Ctrl+clicked with the selection. Arrow keys move them all 1 unit (Shift: 10); the Line up buttons move the
 // others to the selection (the first one picked), or spread them evenly between the outermost two.
 const nudged = {};
-window.addEventListener('keydown', e => {
+onPage('keydown', e => {
   const d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
-  if (!d || !selected || !$('picker').hidden || /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement?.tagName)) return;
+  if (!d || !selected || !$('picker').hidden || /^(INPUT|SELECT|TEXTAREA)$/.test(activeEl()?.tagName)) return;
   const ts = [selected, ...also].map(moveTarget).filter(Boolean);
   if (!ts.length) return;
   e.preventDefault();
@@ -6506,7 +6655,7 @@ async function poll() {
   drawBoxes();
   if (typingInCard()) pendingRender = true; else renderOnScreenOnly();
 }
-document.addEventListener('focusout', e => { if (pendingRender && e.target.closest && e.target.closest('#list, .nx-pin')) setTimeout(render); });
+onPage('focusout', e => { if (pendingRender && e.target.closest && e.target.closest('#list, .nx-pin')) setTimeout(render); });
 
 // Re-render only when the set of things on screen changed, so the rows being edited stay put.
 let shownKey = '';
@@ -6606,9 +6755,9 @@ let shownInMap = false;
 function inGameRow() {
   const on = inMap(), local = on && live.local;
   if (on !== shownInMap) { shownInMap = on; render(); }
-  for (const id of ['scores', 'keepchat', 'netgraphbtn', 'showposbtn']) { const b = $(id); b.dataset.t ??= b.title; b.disabled = !on; b.title = on ? b.dataset.t : 'Only in a map (Test server starts one)'; }
+  $('ingame').hidden = !on; // (out of a map: not there at all, not greyed out)
   // Speed & timer: the sample texts are the test game's (the plugin sends them on its own server only)
-  $('textsbtn').disabled = !local;
+  $('textsbtn').hidden = !local;
   $('textsbtn').title = local ? 'The test game\'s sample timer and speed texts: each on or off' : 'Only in the test game (Test server): the sample timer and speed texts';
   if (!local) { $('textchips').hidden = true; $('textsbtn').setAttribute('aria-expanded', 'false'); }
   if (!on && (keepScores || keepChat)) {
@@ -6629,15 +6778,12 @@ async function testServer() {
   if (!live) { status('Start the game first.'); return; }
   status('Starting an offline test game on de_dust2...');
   await call('cmd', '', `schemereload_testtext ${texts}; ${TEST_SETUP}`);
-  // once the team menu (or MOTD) shows up, join CT and close the menus
+  // (the MOTD and team select show as on a server, to edit them: the player closes the MOTD and picks a team in the game)
   for (let i = 0; i < 90; i++) {
     await sleep(1000);
     if (live && live.panels.some(p => ['team', 'info', 'class_ct'].includes(p.key))) break;
   }
-  await call('cmd', '', 'hidepanel info; jointeam 3');
-  for (let i = 0; i < 10 && !(live && live.panels.some(p => p.key === 'class_ct')); i++) await sleep(500);
-  await call('cmd', '', 'joinclass 5; hidepanel class_ct; hidepanel team; hidepanel info');
-  status('Test game running: a frozen bot on T, $16000, and the timer texts on screen.');
+  status('Test game running: the MOTD and team select show as on a server. With the mouse over the game, Enter closes the MOTD and 1/2/5 pick a team.');
 }
 
 // Quits the game (through the plugin, as typing quit would) and starts it again once it has gone, for what the game only
@@ -6745,10 +6891,10 @@ function renameRow(row, name, path, mine, canCancel) {
 }
 
 // (true once it's open: false if it was kept, or couldn't open, said why)
-async function openHud(path) {
-  if (dirty && !confirm(`Discard the unsaved changes to ${hudName}?`)) return false;
+async function openHud(path, again = false) { // (again: read again as the files are now, the changes kept unsaved)
+  if (!again && dirty && !confirm(`Discard the unsaved changes to ${hudName}?`)) return false;
   try {
-    hudName = await call('open', path);
+    if (!again) hudName = await call('open', path);
     hudPath = path;
     try { const k = JSON.parse(localStorage.getItem('restartFor') || 'null'); if (k && k.hud === hudName && live) for (const w of k.what) restartFor.add(w); } catch {}
     needRestart();
@@ -6756,8 +6902,7 @@ async function openHud(path) {
     closeRestartPop();
     $('hudbtn').textContent = hudName;
     selected = cardSel = null;
-    for (const p of pins) p.el && p.el.remove();
-    pins = [];
+    for (const p of pins) dropPin(p);
     also = []; // (parts Ctrl+clicked with the last one)
     holdLoading(false);
     undoSteps.length = 0;
@@ -6766,7 +6911,7 @@ async function openHud(path) {
     globalSym = null; globalFace = globalWeight = ''; // (Global settings' picks: this HUD's own)
     kindsPicked.clear();
     chatResOk = false;
-    setDirty(false);
+    setDirty(again);
     await loadAll();
     // this HUD's menu background, logo, highlight, MVP star and box corners (or the game's), not the last one's (or the
     // discarded ones: Undo all opens it again)
@@ -6775,6 +6920,8 @@ async function openHud(path) {
     if (F(CVAR_CFG) || cvarStart) { cvarValues = null; await loadCvars(); applyCvars(F(CVAR_CFG) && F(CVAR_CFG).text); }
     status(live ? `Editing ${hudName}. Click anything in the preview to edit it.` : `Editing ${hudName}.`);
     menuMark();
+    if (again) { render(); drawBoxes(); return true; }
+    askLayout();
     await launchForHud();
     // the HUD's own font faces first in the font name suggestions
     call('hudfonts').then(list => { fontFaces = [...new Set([...list.split('\n').filter(Boolean).map(l => l.split('\t')[0]), ...fontFaces])]; }).catch(() => {});
@@ -6866,6 +7013,78 @@ document.addEventListener('drop', e => {
 
 // (a change still being typed, or a colour by kind waiting for the picker to rest)
 const settled = async () => { await sleep(300); for (let i = 0; waiting.size && i < 100; i++) await sleep(50); await writing; };
+// The first time a HUD is opened: Dock or Float, as the user likes to work (kept on this PC); the switch at the top
+// changes it any time, and is pointed out as the choice is made.
+function askLayout() {
+  try { if (localStorage.getItem('layoutPicked')) return; } catch { return; }
+  const back = el('div', { className: 'modepick', role: 'dialog' }), box = el('div');
+  back.setAttribute('aria-label', 'Dock or Float');
+  const choice = (mode, iconName, name, text) => {
+    const b = el('button', { type: 'button', className: 'modeopt', onclick: () => {
+      try { localStorage.setItem('layoutPicked', '1'); } catch {}
+      back.remove();
+      setLayout(mode);
+      const seg = document.querySelector('.app-header .seg');
+      seg.classList.add('pulse');
+      setTimeout(() => seg.classList.remove('pulse'), 2600);
+      status(`${name}: switch any time with Dock / Float at the top.`);
+    } });
+    b.append(icon(iconName), el('b', { textContent: name }), el('span', { textContent: text }));
+    return b;
+  };
+  box.append(el('h2', { textContent: 'How do you want to edit?' }),
+    el('p', { className: 'meta', textContent: 'Click a part of the game and its settings open. Pick where they show:' }),
+    el('div', { className: 'modeopts' }), el('p', { className: 'meta', textContent: 'You can switch any time with Dock / Float at the top of the window.' }));
+  box.querySelector('.modeopts').append(
+    choice('dock', 'panel-right', 'Dock', 'A panel beside the game, always in the same place. Drag the bar between them to make it wider.'),
+    choice('float', 'picture-in-picture-2', 'Float', 'A card beside the part you click, over the game. Drag cards anywhere; pin one to keep it open while you click others.'));
+  back.append(box);
+  document.body.append(back);
+  box.querySelector('.modeopt' + (layoutMode === 'float' ? ':last-child' : '')).focus();
+}
+
+// Undo every change (the history button): back to how the HUD was imported (the exe's copy from then; for a HUD from
+// before copies were kept, the first time this editor opened it), or only back to the last save. Both as unsaved changes:
+// nothing's saved until Save HUD.
+let histPop = null;
+const closeHistPop = () => { if (histPop) { histPop.remove(); histPop = null; } };
+async function showHistPop() {
+  closeHistPop();
+  const ask = showHistPop.ask = {};
+  const when = await call('original').catch(() => '');
+  if (showHistPop.ask !== ask || histPop) return; // (clicked again meanwhile)
+  const pop = histPop = el('div', { className: 'cautionpop', role: 'dialog' }), foot = el('footer');
+  pop.setAttribute('aria-label', 'Undo every change');
+  foot.append(el('button', { textContent: 'Close', onclick: closeHistPop }),
+    el('button', { textContent: 'Undo unsaved changes', disabled: !dirty, title: 'Back to how it was last saved', onclick: () => { closeHistPop(); discardChanges(); } }),
+    el('button', { className: 'primary', textContent: 'Back to how it was imported', disabled: !when, onclick: () => { closeHistPop(); backToOriginal(); } }));
+  pop.append(el('h3', { textContent: 'Undo every change' }),
+    el('p', { textContent: when ? `Back to how it was imported puts ${hudName} back as it came (as it was on ${when}), every change since gone, saved or not.` : `There's no copy of ${hudName} as it was imported.` }),
+    el('p', { textContent: 'Undo unsaved changes only goes back to the last save. Neither is saved until Save HUD.' }), foot);
+  document.body.append(pop);
+  const r = $('discard').getBoundingClientRect();
+  pop.style.top = `${r.bottom + 8}px`;
+  pop.style.left = `${clamp(r.right - pop.offsetWidth, 12, innerWidth - pop.offsetWidth - 12)}px`;
+}
+async function discardChanges() {
+  await settled();
+  if (!dirty || !hudPath || !confirm(`Undo every unsaved change to ${hudName}? It goes back to how it was last saved.`)) return;
+  setDirty(false); // (asked here: not again as it opens)
+  if (!(await openHud(hudPath))) return setDirty(true); // (it couldn't open: the changes are still there, unsaved)
+  status(`Undid every unsaved change: ${hudName} is as it was last saved. Values taken out of HudLayout can stay in the game until it restarts.`);
+}
+async function backToOriginal() {
+  await settled();
+  if (!hudPath || !confirm(`Put ${hudName} back to how it was imported? Every change since goes, saved or not. Nothing is saved until Save HUD (Undo unsaved changes brings yours back until then).`)) return;
+  try {
+    const [n, failed] = (await call('restoreoriginal')).split('\t').map(Number);
+    const stuck = failed ? ` ${failed} file${failed > 1 ? 's' : ''} the game has open (its fonts) couldn't be put back: quit the game and do it again.` : '';
+    if (!n) return status(`${hudName} is as it was imported already.${stuck}`);
+    await openHud(hudPath, true); // (read again as the files are now, the changes kept unsaved)
+    status(`${hudName} is back to how it was imported (${n} file${n > 1 ? 's' : ''}). Save HUD keeps it.${stuck}`);
+  } catch (err) { status(`Couldn't put it back: ${err.message}`); }
+}
+
 async function saveHud() {
   await settled();
   try {
@@ -6927,17 +7146,15 @@ if (host) {
   document.addEventListener('mousedown', e => { if (restartPop && !restartPop.contains(e.target) && !$('restartmark').contains(e.target)) closeRestartPop(); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && restartPop) closeRestartPop(); });
   // Discard changes: every unsaved change goes (the exe puts the saved files back as the HUD is opened again)
-  $('discard').onclick = async () => {
-    await settled();
-    if (!dirty || !hudPath || !confirm(`Undo every unsaved change to ${hudName}? It goes back to how it was last saved.`)) return;
-    setDirty(false); // (asked here: not again as it opens)
-    if (!(await openHud(hudPath))) return setDirty(true); // (it couldn't open: the changes are still there, unsaved)
-    status(`Undid every unsaved change: ${hudName} is as it was last saved. Values taken out of HudLayout can stay in the game until it restarts.`);
-  };
+  $('discard').onclick = () => histPop ? closeHistPop() : showHistPop();
+  document.addEventListener('mousedown', e => { if (histPop && !histPop.contains(e.target) && !$('discard').contains(e.target)) closeHistPop(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && histPop) closeHistPop(); });
+  $('grid').replaceChildren(el('option', { value: '0', textContent: 'Grid: off' }), ...Array.from({ length: 48 }, (_, i) => 6 + 2 * i).map(n => el('option', { value: String(n), textContent: `Grid: ${n}` })));
+  if (grid) grid = clamp(Math.round(grid / 2) * 2, 6, 100); // (a size kept from before: the nearest there is)
   $('grid').value = String(grid);
   $('grid').onchange = () => { grid = +$('grid').value; try { localStorage.setItem('grid', grid); } catch {} };
-  document.addEventListener('keydown', e => {
-    const typing = document.activeElement && /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName) && document.activeElement.type !== 'range';
+  onPage('keydown', e => {
+    const a = activeEl(), typing = a && /^(INPUT|TEXTAREA)$/.test(a.tagName) && a.type !== 'range';
     if (e.ctrlKey && !e.shiftKey && e.code === 'KeyZ' && !typing) { e.preventDefault(); undo(); }
   });
   $('explore').onclick = () => call('explore');
@@ -6995,22 +7212,23 @@ $('loadbtn').onclick = () => {
 };
 $('elembtn').onclick = () => openNxPop($('elembtn'), elementPop);
 $('showhidebtn').onclick = () => openNxPop($('showhidebtn'), showHidePop);
-document.addEventListener('pointerdown', e => { if (nxPop && !nxPop.contains(e.target) && !nxPop.owner.contains(e.target)) closeNxPop(); }, true);
+onPage('pointerdown', e => { if (nxPop && !nxPop.contains(e.target) && !nxPop.owner.contains(e.target)) closeNxPop(); }, true);
 // (Float: the main card and the pinned ones kept on screen: a smaller window, a place saved on a bigger one)
 function clampFloat() {
   if (layoutMode !== 'float') return;
   const a = document.querySelector('aside');
   setFloatXY(parseFloat(a.style.getPropertyValue('--fx')) || innerWidth * .6, parseFloat(a.style.getPropertyValue('--fy')) || 90);
-  for (const p of pins) if (p.el) {
+  for (const p of pins) if (p.el && !p.win) {
     p.x = clamp(p.x, 4, Math.max(4, innerWidth - p.el.offsetWidth - 4)); p.y = clamp(p.y, 4, Math.max(4, innerHeight - 64));
     Object.assign(p.el.style, { left: `${p.x}px`, top: `${p.y}px` });
   }
 }
 addEventListener('resize', () => { if (nxPop) fillNxPop(); clampFloat(); });
+addEventListener('pagehide', () => { for (const p of pins) p.win?.close(); });
 // Esc (not over the game, where it's the game's): a pop-out closes, else the card or panel lets go
-addEventListener('keydown', e => {
-  if (e.key !== 'Escape' || overPreview || cpop || fpop || restartPop || cautionPop || !$('picker').hidden) return;
-  const a = document.activeElement;
+onPage('keydown', e => {
+  if (e.key !== 'Escape' || overPreview || cpop || fpop || restartPop || cautionPop || histPop || !$('picker').hidden) return;
+  const a = activeEl();
   if (a && (/^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName) || a.isContentEditable)) return;
   const pin = pins.find(p => p.sel === selected);
   if (nxPop) closeNxPop(); else if (pin) closePin(pin); else if (cardSel) select(null);
@@ -7037,6 +7255,7 @@ document.querySelector('aside').addEventListener('focusin', () => { if (layoutMo
   d.ondblclick = () => { root.style.removeProperty('--side'); try { localStorage.removeItem('side'); } catch {} };
   addEventListener('resize', () => { const w = parseFloat(root.style.getPropertyValue('--side')); if (w) set(w); });
   d.onkeydown = e => { const k = { ArrowLeft: 20, ArrowRight: -20 }[e.key]; if (k) { e.preventDefault(); e.stopPropagation(); keep(set((parseFloat(getComputedStyle(root).getPropertyValue('--side')) || 408) + k)); } };
+  try { floatAll = localStorage.getItem('advanced') === '1'; } catch {} // (Simple mode or Advanced, as left last time)
   // Float, as left last time: the card's size and (once dragged) its place
   try {
     const sz = JSON.parse(localStorage.getItem('floatSize') || 'null'), at = JSON.parse(localStorage.getItem('floatAt') || 'null'), a = document.querySelector('aside');
@@ -7060,6 +7279,8 @@ for (let i = 1; i <= 10; i++) SCAN[`F${i}`] = (0x3A + i).toString(16);
 let overPreview = false;
 $('preview').onmouseenter = () => { overPreview = true; };
 $('preview').onmouseleave = () => { overPreview = false; };
+$('viewbar').onmouseenter = () => { overPreview = false; };
+$('viewbar').onmouseleave = e => { overPreview = $('preview').contains(e.relatedTarget); };
 // Down and up go separately, so a key held over the preview stays held in the game (Tab keeps the scoreboard open).
 const keysDown = new Set();
 document.addEventListener('keydown', e => {
@@ -7562,6 +7783,9 @@ async function parserCheck() {
   const gv = [gridded('13'), gridded('c-29'), gridded('r3'), gridded('f0')].join();
   grid = g0;
   check(gv === '16,c-32,r0,f0', `grid: positions land on multiples, from their own anchor (${gv})`);
+  check(tabOf('layout', 'Box size') === 'size' && tabOf('layout', 'Position') === 'position' && tabOf('layout', 'Text') === 'misc' && tabOf('other', 'Buttons') === 'buttons'
+    && tabOf('other', 'Settings') === 'misc' && tabOf('missing') === 'misc' && tabOf('custom') === 'custom' && tabOf('show') === 'show', 'sections go in their tabs (Size, Position, Buttons, Misc...)');
+  check(isSizeRow({ dataset: { q: 'Width' } }) && isSizeRow({ dataset: { q: 'Text size' } }) && !isSizeRow({ dataset: { q: 'X position' } }), 'width, height and size rows go in Size');
   const bp = JSON.stringify(blockPairs(parse('"S" { "Borders" { "B" { "inset" "0 0 1 1" "Left" { "1" { "color" "X" "offset" "0 0" } } } } }'), ['S', 'Borders', 'B']));
   check(bp === '[["inset","0 0 1 1"],["Left",[["1",[["color","X"],["offset","0 0"]]]]]]', `a game block is copied with its sub-blocks (${bp})`);
   {
@@ -8074,6 +8298,17 @@ if (host && location.hash === '#hosttest') (async () => {
     check(await call('read', '../outside.txt').then(() => false, () => true), 'paths outside the HUD refused');
     check(await call('new', 'myhud').then(() => false, () => true), 'existing HUD not overwritten');
     check(await call('gamemem').then(() => false, () => true), 'the game\'s memory: none without the game');
+    { // a part's Save keeps its own files only; Back to how it was imported puts the HUD back as it was made, unsaved
+      check(/^\d{4}-\d\d-\d\d$/.test(await call('original')), 'a new HUD keeps a copy of itself as it was made');
+      save(F(L), 'xpos', '24', 'HudHealth');
+      save(F(C), 'Panel.FgColor', '4 5 6 255');
+      await sleep(400);
+      await writing;
+      check(await call('savesome', '', 'scripts/HudLayout.res') === '1\t1', 'a part\'s Save keeps its own files, the rest stays unsaved');
+      const n = parseInt(await call('restoreoriginal'), 10), lay = await readHud('scripts/HudLayout.res') || '';
+      check(n >= 2 && !/"xpos"\t\t"2[04]"/.test(lay) && !(await readHud('resource/ClientScheme.res')).includes('"4 5 6 255"'), `Back to how it was imported puts the HUD back as it was made (${n} files)`);
+      check(+await call('save') >= 2, 'it stays unsaved until Save HUD');
+    }
     await call('done', '', 'ok');
   } catch (err) {
     await call('done', '', err.message);
