@@ -6097,6 +6097,8 @@ function renderPins(act = selected) {
     try { buildSelection(p.el, p.tabs, p); } finally { selected = act; }
     p.el.classList.toggle('active', act === p.sel);
     if (p.win) p.win.document.title = shownName(p.sel);
+    // (a command box's suggestions: the list is looked for in the box's own window)
+    if (p.win && $('cmdpresets') && !p.win.document.getElementById('cmdpresets')) p.win.document.body.append($('cmdpresets').cloneNode(true));
     const b = p.el.querySelector('.nx-body');
     if (b) b.scrollTop = top;
   }
@@ -7068,7 +7070,7 @@ async function showHistPop() {
     el('button', { textContent: 'Undo unsaved changes', disabled: !dirty, title: 'Back to how it was last saved', onclick: () => { closeHistPop(); discardChanges(); } }),
     el('button', { className: 'primary', textContent: 'Back to how it was imported', disabled: !when, onclick: () => { closeHistPop(); backToOriginal(); } }));
   pop.append(el('h3', { textContent: 'Undo every change' }),
-    el('p', { textContent: when ? `Back to how it was imported puts ${hudName} back as it came (as it was on ${when}), every change since gone, saved or not.` : `There's no copy of ${hudName} as it was imported.` }),
+    el('p', { textContent: when ? `Back to how it was imported puts ${hudName} back as it came (as it was on ${when}), every change since gone, saved or not (what it replaces goes to the Recycle Bin).` : `There's no copy of ${hudName} as it was imported.` }),
     el('p', { textContent: 'Undo unsaved changes only goes back to the last save. Neither is saved until Save HUD.' }), foot);
   document.body.append(pop);
   const r = $('discard').getBoundingClientRect();
@@ -7086,8 +7088,9 @@ async function backToOriginal() {
   await settled();
   if (!hudPath || !confirm(`Put ${hudName} back to how it was imported? Every change since goes, saved or not. Nothing is saved until Save HUD (Undo unsaved changes brings yours back until then).`)) return;
   try {
-    const [n, failed] = (await call('restoreoriginal')).split('\t').map(Number);
-    const stuck = failed ? ` ${failed} file${failed > 1 ? 's' : ''} the game has open (its fonts) couldn't be put back: quit the game and do it again.` : '';
+    const [n, failed, lost] = (await call('restoreoriginal')).split('\t').map(Number), s = k => k > 1 ? 's' : '';
+    const stuck = (failed ? ` ${failed} file${s(failed)} the game has open (its fonts) couldn't be put back: quit the game and do it again.` : '')
+      + (lost ? ` ${lost} file${s(lost)} changed outside the editor can't be put back (the editor only keeps a file as it came before it changes it).` : '');
     if (!n) return status(`${hudName} is as it was imported already.${stuck}`);
     await openHud(hudPath, true); // (read again as the files are now, the changes kept unsaved)
     status(`${hudName} is back to how it was imported (${n} file${n > 1 ? 's' : ''}). Save HUD keeps it.${stuck}`);
@@ -8318,6 +8321,10 @@ if (host && location.hash === '#hosttest') (async () => {
     check(await call('new', 'myhud').then(() => false, () => true), 'existing HUD not overwritten');
     check(await call('gamemem').then(() => false, () => true), 'the game\'s memory: none without the game');
     check(await call('gamestate') === 'none', 'no game to join in --selftest');
+    // the player's own settings back in config.cfg after the editor's game: each kept line as it was, one it didn't have
+    // taken out, the rest untouched
+    const merged = await call('mergecvars', '', 'name "x"\r\ncl_radaralpha "0"\r\nnet_graph "1"\r\nsensitivity "2"\r\n\x01// kept\ncl_radaralpha "150"\n');
+    check(merged === 'name "x"\r\ncl_radaralpha "150"\r\nsensitivity "2"\r\n', `the player's game settings put back (${JSON.stringify(merged)})`);
     { // a part's Save keeps its own files only; Back to how it was imported puts the HUD back as it was made, unsaved
       check(/^\d{4}-\d\d-\d\d$/.test(await call('original')), 'a new HUD keeps a copy of itself as it was made');
       save(F(L), 'xpos', '24', 'HudHealth');
@@ -8325,8 +8332,9 @@ if (host && location.hash === '#hosttest') (async () => {
       await sleep(400);
       await writing;
       check(await call('savesome', '', 'scripts/HudLayout.res') === '1\t1', 'a part\'s Save keeps its own files, the rest stays unsaved');
-      const n = parseInt(await call('restoreoriginal'), 10), lay = await readHud('scripts/HudLayout.res') || '';
-      check(n >= 2 && !/"xpos"\t\t"2[04]"/.test(lay) && !(await readHud('resource/ClientScheme.res')).includes('"4 5 6 255"'), `Back to how it was imported puts the HUD back as it was made (${n} files)`);
+      // (only the files the editor changed are kept as they came, each before its first change: none lost)
+      const [n, , lost] = (await call('restoreoriginal')).split('\t').map(Number), lay = await readHud('scripts/HudLayout.res') || '';
+      check(n >= 2 && lost === 0 && !/"xpos"\t\t"2[04]"/.test(lay) && !(await readHud('resource/ClientScheme.res')).includes('"4 5 6 255"'), `Back to how it was imported puts the HUD back as it was made (${n} files, ${lost} lost)`);
       check(+await call('save') >= 2, 'it stays unsaved until Save HUD');
     }
     await call('done', '', 'ok');

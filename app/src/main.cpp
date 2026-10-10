@@ -12,6 +12,8 @@
 #include <string>
 #include <vector>
 #include <algorithm>
+#include <map>
+#include <set>
 #include <filesystem>
 #include <mutex>
 #include <d3d11.h>
@@ -206,11 +208,13 @@ static void EachFile( const wstring &dir, const wstring &rel, Fn fn, int depth =
 
 // Changes are written straight into the HUD, so the game shows them. Before the first change to a file since the last
 // save, its saved version goes to g_unsaved\files (or, for a file that didn't exist, a note in g_unsaved\new).
+static void KeepOriginal( const wstring &path );
 static void KeepSaved( const wstring &path )
 {
 	wstring rel = path.substr( g_hudPath.size() + 1 ), kept = g_unsaved + L"\\files\\" + rel, made = g_unsaved + L"\\new\\" + rel;
 	if ( IsFile( kept ) || IsFile( made ) )
 		return;
+	KeepOriginal( path );
 	WriteAll( g_unsaved + L"\\hud.txt", Utf8( g_hudPath ) );
 	string data;
 	if ( ReadAll( path, data ) )
@@ -275,70 +279,183 @@ static bool InCopy( const wstring &rel )
 	return _wcsnicmp( rel.c_str(), L".git\\", 5 ) != 0;
 }
 
-// Keeps every file of a HUD as it is now, once: when it's made or imported (fresh: a copy already there is of another
-// HUD that was at that path), or the first time it's opened here (for one that came before this was). Back to how it was
-// imported puts these back.
+// A file's fingerprint (FNV-1a), to tell whether it's still as it came
+static string Fingerprint( const string &data )
+{
+	unsigned long long h = 1469598103934665603ULL;
+	for ( unsigned char c : data )
+		h ^= c, h *= 1099511628211ULL;
+	char hex[17];
+	sprintf_s( hex, "%016llx", h );
+	return hex;
+}
+static wstring Lower( wstring s )
+{
+	std::transform( s.begin(), s.end(), s.begin(), ::towlower );
+	return s;
+}
+// The copy's list (manifest.txt, "fingerprint\tpath" a line): every file the HUD came with, by its path lowercased
+static std::map< wstring, std::pair< string, wstring > > Manifest( const wstring &dir )
+{
+	std::map< wstring, std::pair< string, wstring > > out;
+	string data;
+	ReadAll( dir + L"\\manifest.txt", data );
+	for ( size_t a = 0, b; a < data.size(); a = b + 1 )
+	{
+		b = data.find( '\n', a );
+		if ( b == string::npos )
+			b = data.size();
+		size_t t = data.find( '\t', a );
+		if ( t < b )
+		{
+			wstring rel = Widen( data.substr( t + 1, b - t - 1 ) );
+			out[Lower( rel )] = { data.substr( a, t - a ), rel };
+		}
+	}
+	return out;
+}
+
+// The copy of a HUD as it first came, for Back to how it was imported: made when it's made or imported (fresh: one
+// already there is of another HUD that was at that path), or the first time it's opened here. It's a list of every
+// file's fingerprint, not a copy of them: a file is kept only before the editor first changes it (KeepOriginal), so
+// files never changed are never copied. (A copy from before this was, every file, becomes a list, the files still as
+// they came dropped.)
 static void Snapshot( const wstring &hud, bool fresh = false )
 {
 	wstring dir = OriginalOf( hud );
 	std::error_code ec;
 	if ( fresh && !g_originals.empty() && !hud.empty() )
 		std::filesystem::remove_all( dir, ec );
-	if ( g_originals.empty() || hud.empty() || IsDir( dir ) || !IsHud( hud ) )
-		return;
-	bool ok = true;
-	EachFile( hud, L"", [&]( const wstring &rel ) {
+	if ( g_originals.empty() || hud.empty() || IsFile( dir + L"\\manifest.txt" ) || !IsHud( hud ) || ( fresh && IsDir( dir ) ) )
+		return; // (fresh, and the old one couldn't all go: none, rather than one made from another HUD's files)
+	bool old = IsDir( dir ), ok = true;
+	string list;
+	std::vector< wstring > same; // (an old copy's files still as they came: the list is enough for them)
+	EachFile( old ? dir + L"\\files" : hud, L"", [&]( const wstring &rel ) {
+		string data, now;
 		if ( !InCopy( rel ) )
 			return;
-		string data;
-		ok = ReadAll( hud + L"\\" + rel, data ) && WriteAll( dir + L"\\files\\" + rel, data ) && ok;
+		if ( !ReadAll( ( old ? dir + L"\\files\\" : hud + L"\\" ) + rel, data ) )
+		{
+			ok = false;
+			return;
+		}
+		list += Fingerprint( data ) + "\t" + Utf8( rel ) + "\n";
+		if ( old && ReadAll( hud + L"\\" + rel, now ) && now == data )
+			same.push_back( rel );
 	} );
 	SYSTEMTIME t;
 	GetLocalTime( &t );
 	char when[32];
 	sprintf_s( when, "%04d-%02d-%02d", t.wYear, t.wMonth, t.wDay );
-	if ( !ok || !WriteAll( dir + L"\\info.txt", Utf8( hud ) + "\n" + when ) )
-		std::filesystem::remove_all( dir, ec ); // (not a half copy)
+	if ( ok && WriteAll( dir + L"\\manifest.txt", list ) && ( old || WriteAll( dir + L"\\info.txt", Utf8( hud ) + "\n" + when ) ) )
+		for ( const wstring &rel : same )
+			DeleteFileW( ( dir + L"\\files\\" + rel ).c_str() );
+	else if ( old )
+		DeleteFileW( ( dir + L"\\manifest.txt" ).c_str() ); // (the old copy stays as it was, made a list another time)
+	else
+		std::filesystem::remove_all( dir, ec ); // (not half a list)
+}
+
+// Before the editor first changes one of the open HUD's files: kept in its copy if it's still as the HUD came
+static void KeepOriginal( const wstring &path )
+{
+	if ( g_originals.empty() || g_hudPath.empty() )
+		return;
+	wstring dir = OriginalOf( g_hudPath ), rel = path.substr( g_hudPath.size() + 1 ), kept = dir + L"\\files\\" + rel;
+	if ( IsFile( kept ) )
+		return;
+	auto list = Manifest( dir );
+	auto it = list.find( Lower( rel ) );
+	string data;
+	if ( it != list.end() && ReadAll( path, data ) && Fingerprint( data ) == it->second.first )
+		WriteAll( kept, data );
+}
+
+// Copies of HUDs that are gone (deleted or moved outside the editor) go; older full copies become lists (see Snapshot)
+static void TidyOriginals()
+{
+	std::error_code ec;
+	if ( g_originals.empty() || !IsDir( g_originals ) )
+		return;
+	for ( auto &e : std::filesystem::directory_iterator( g_originals, ec ) )
+	{
+		string info;
+		wstring dir = e.path().wstring();
+		ReadAll( dir + L"\\info.txt", info );
+		wstring hud = Widen( info.substr( 0, info.find( '\n' ) ) );
+		std::error_code e2;
+		if ( hud.empty() || ( !IsDir( hud ) && IsDir( hud.substr( 0, hud.find_last_of( L"\\/" ) ) ) ) )
+			std::filesystem::remove_all( dir, e2 ); // (no note, or the HUD's folder there without it: deleted or moved away)
+		else if ( IsDir( hud ) && !IsFile( dir + L"\\manifest.txt" ) )
+			Snapshot( hud );
+	}
 }
 
 // A HUD's copy follows it when it's renamed or moved
 static void MoveOriginal( const wstring &from, const wstring &to )
 {
 	std::error_code ec;
-	if ( g_originals.empty() || !IsDir( OriginalOf( from ) ) )
+	wstring a = OriginalOf( from ), b = OriginalOf( to ); // (the same for a rename that only changes case)
+	if ( g_originals.empty() || !IsDir( a ) )
 		return;
-	std::filesystem::remove_all( OriginalOf( to ), ec ); // (another HUD's, once at that path)
-	std::filesystem::rename( OriginalOf( from ), OriginalOf( to ), ec );
+	if ( a != b )
+	{
+		std::filesystem::remove_all( b, ec ); // (another HUD's, once at that path)
+		std::filesystem::rename( a, b, ec );
+		if ( ec )
+			return;
+	}
+	string info; // (its note says where the HUD is now, the day kept: TidyOriginals goes by it)
+	ReadAll( b + L"\\info.txt", info );
+	size_t nl = info.find( '\n' );
+	WriteAll( b + L"\\info.txt", Utf8( to ) + ( nl == string::npos ? string() : info.substr( nl ) ) );
 }
 
-// Back to how it was imported: every file of the open HUD as its copy has it, and the files made since to the Recycle Bin,
-// as unsaved changes (Save HUD keeps them, discarding brings the HUD back as last saved). Returns how many changed; -1
-// without a copy. failed: the files it couldn't write or move (ones the game has open: its fonts).
-static int RestoreOriginal( int &failed )
+// A file to the Recycle Bin: true once it's gone
+static bool Recycle( const wstring &path )
 {
-	wstring dir = OriginalOf( g_hudPath ) + L"\\files";
-	failed = 0;
-	if ( g_hudPath.empty() || !IsDir( dir ) )
+	if ( !g_selftestOut.empty() ) // (--selftest's own files, in its empty folder: not into the Recycle Bin)
+		return DeleteFileW( path.c_str() ) && !IsFile( path );
+	wstring from = path + L'\0'; // (a list, ended by two nulls)
+	SHFILEOPSTRUCTW sh = { NULL, FO_DELETE, from.c_str(), NULL, FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT | FOF_NOERRORUI };
+	return !SHFileOperationW( &sh ) && !IsFile( path );
+}
+
+// Back to how it was imported: every file the HUD came with as it came, the files made since gone, as unsaved changes
+// (Save HUD keeps them, discarding brings the HUD back as last saved). The versions replaced go to the Recycle Bin, so a
+// Save afterwards loses nothing for good. Returns how many changed; -1 without a copy. failed: files it couldn't write
+// or move (ones the game has open: its fonts); lost: files changed outside the editor, whose first version it never saw.
+static int RestoreOriginal( int &failed, int &lost )
+{
+	wstring dir = OriginalOf( g_hudPath );
+	failed = lost = 0;
+	if ( g_hudPath.empty() || !IsFile( dir + L"\\manifest.txt" ) )
 		return -1;
+	auto list = Manifest( dir );
 	int n = 0;
-	EachFile( dir, L"", [&]( const wstring &rel ) {
+	for ( auto &[key, f] : list )
+	{
+		wstring path = g_hudPath + L"\\" + f.second;
 		string was, now;
-		ReadAll( dir + L"\\" + rel, was );
-		wstring path = g_hudPath + L"\\" + rel;
-		if ( ReadAll( path, now ) && now == was )
-			return;
+		bool there = ReadAll( path, now );
+		if ( there && Fingerprint( now ) == f.first )
+			continue;
+		if ( !ReadAll( dir + L"\\files\\" + f.second, was ) )
+		{
+			++lost;
+			continue;
+		}
 		KeepSaved( path );
-		bool ok = WriteAll( path, was );
+		bool ok = ( !there || Recycle( path ) ) && WriteAll( path, was );
 		n += ok, failed += !ok;
-	} );
+	}
 	EachFile( g_hudPath, L"", [&]( const wstring &rel ) {
-		if ( !InCopy( rel ) || IsFile( dir + L"\\" + rel ) )
+		if ( !InCopy( rel ) || list.count( Lower( rel ) ) )
 			return;
 		wstring path = g_hudPath + L"\\" + rel;
 		KeepSaved( path );
-		wstring from = path + L'\0'; // (a list, ended by two nulls)
-		SHFILEOPSTRUCTW sh = { NULL, FO_DELETE, from.c_str(), NULL, FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT | FOF_NOERRORUI };
-		bool ok = !SHFileOperationW( &sh ) && !IsFile( path );
+		bool ok = Recycle( path );
 		n += ok, failed += !ok;
 	} );
 	return n;
@@ -655,6 +772,104 @@ static wstring InstallPlugin( bool vdf = true )
 	return wstring();
 }
 
+// ---------- the player's own game settings ----------
+// The game settings a HUD carries (its cfg/hudeditor_colours.cfg: the page's GAME_CVARS and the scoreboard's name
+// colours) are ones the game saves: whatever they are when it quits goes into the player's cfg/config.cfg, so the editor's
+// game would leave the HUD's values there (seen 10-09: a radar opacity of 0 became 150). The editor keeps config.cfg's
+// lines for them as its game starts (or as it joins one) and puts them back once that game has quit (the next time the
+// editor opens, if it closed first).
+static wstring g_cvarKeep;   // config.cfg's lines for them, until the game the editor used has quit
+static bool g_cvarGameSeen;  // that game was seen running (putting them back waits for it to quit)
+static bool HudCvar( const string &line, string *name = NULL )
+{
+	static const char *names[] = { "cl_radaralpha", "net_graph", "net_graphpos", "net_graphheight", "net_graphtext", "net_graphproportionalfont",
+		"net_graphsolid", "net_graphshowlatency", "net_graphshowinterp", "cl_showpos", "cl_showfps", "hud_deathnotice_time", "hud_saytext_time",
+		"cl_round_win_fade_time" }; // ponytail: the page's GAME_CVARS again, kept in step by hand
+	size_t a = line.find_first_not_of( " \t" ), b = line.find_first_of( " \t\r\n", a );
+	if ( a == string::npos )
+		return false;
+	string k = line.substr( a, b == string::npos ? string::npos : b - a );
+	std::transform( k.begin(), k.end(), k.begin(), ::tolower );
+	bool hud = !k.rfind( "cl_scoreboard_", 0 ) || std::any_of( std::begin( names ), std::end( names ), [&]( const char *n ) { return k == n; } );
+	if ( hud && name )
+		*name = k;
+	return hud;
+}
+// config.cfg with the lines kept put back: each of those settings as it was, the ones it didn't have taken out
+static string MergeCvars( const string &config, const string &kept )
+{
+	std::map< string, string > was;
+	std::set< string > done;
+	string name, out;
+	for ( size_t a = 0, b; a < kept.size(); a = b + 1 )
+	{
+		b = kept.find( '\n', a );
+		string line = kept.substr( a, b == string::npos ? string::npos : b - a );
+		if ( !line.empty() && line.back() == '\r' )
+			line.pop_back();
+		if ( HudCvar( line, &name ) )
+			was[name] = line;
+		if ( b == string::npos )
+			break;
+	}
+	for ( size_t a = 0, b; a < config.size(); a = b + 1 )
+	{
+		b = config.find( '\n', a );
+		string line = config.substr( a, b == string::npos ? string::npos : b - a + 1 ), end = line.size() > 1 && line[line.size() - 2] == '\r' ? "\r\n" : "\n";
+		if ( !HudCvar( line, &name ) )
+			out += line;
+		else if ( was.count( name ) && done.insert( name ).second )
+			out += was[name] + end;
+		if ( b == string::npos )
+			break;
+	}
+	for ( auto &[k, line] : was )
+		if ( !done.count( k ) )
+			out += line + "\n";
+	return out;
+}
+// As the editor's game starts or is joined: config.cfg's lines for them (one kept already stays: it's from before a
+// game the editor used, which hasn't been put back yet)
+static void KeepCvars()
+{
+	string config, kept = "// config.cfg's lines for the game settings HUDs carry, put back once the game quits (HUD editor)\n";
+	g_cvarGameSeen = false;
+	if ( g_cvarKeep.empty() || IsFile( g_cvarKeep ) || !ReadAll( g_game + L"\\cfg\\config.cfg", config ) )
+		return;
+	for ( size_t a = 0, b; a < config.size(); a = b + 1 )
+	{
+		b = config.find( '\n', a );
+		string line = config.substr( a, b == string::npos ? string::npos : b - a + 1 );
+		if ( HudCvar( line ) )
+			kept += line;
+		if ( b == string::npos )
+			break;
+	}
+	WriteAll( g_cvarKeep, kept );
+}
+// Every 3 s (WM_TIMER 6): once the game the editor used has quit, its settings go back (config.cfg as it was is kept
+// beside the editor's other files, as config.cfg.bak, just in case)
+static void RestoreCvars()
+{
+	if ( g_cvarKeep.empty() || !IsFile( g_cvarKeep ) )
+		return;
+	if ( GameRunning() )
+	{
+		g_cvarGameSeen = true;
+		return;
+	}
+	if ( !g_cvarGameSeen )
+		return;
+	string config, kept;
+	wstring cfg = g_game + L"\\cfg\\config.cfg";
+	if ( g_game.empty() || !ReadAll( g_cvarKeep, kept ) || !ReadAll( cfg, config ) )
+		return; // (the game's folder not there, or the file busy: again in 3 s)
+	string merged = MergeCvars( config, kept );
+	if ( merged != config && ( !WriteAll( g_cvarKeep.substr( 0, g_cvarKeep.rfind( L'\\' ) ) + L"\\config.cfg.bak", config ) || !WriteAll( cfg, merged ) ) )
+		return;
+	DeleteFileW( g_cvarKeep.c_str() );
+}
+
 // The plugin's .vdf is in addons only while the editor starts the game: a game started from Steam without -insecure
 // loads it too ("Loading unsigned module addons\schemereload"), and the engine then turns off access to VAC-secured
 // servers for that session (seen 2026-10-08). So once the plugin is up (its panels file is there), and whenever the
@@ -676,6 +891,7 @@ static wstring Launch()
 	wstring err = InstallPlugin();
 	if ( !err.empty() )
 		return err;
+	KeepCvars();
 	MountHud();
 	DeleteFileW( ( g_game + L"\\addons\\schemereload_panels.txt" ).c_str() );
 	// the game's console log (-condebug) only ever grows (35 MB by 2026-10-02): past 8 MB it starts again, the last one
@@ -743,6 +959,7 @@ static wstring Attach()
 	// (commands an earlier editor left for a game without the plugin, its HUD's cvars and all: the plugin would run them
 	// as it loads, seen 2026-10-09; this one sends its own once a HUD is opened)
 	DeleteFileW( ( g_game + L"\\addons\\schemereload_cmd.txt" ).c_str() );
+	KeepCvars();
 	MountHud();
 	if ( (INT_PTR)ShellExecuteW( NULL, L"open", exe.c_str(), L"-hijack -game cstrike +plugin_load addons/schemereload", NULL, SW_SHOWNOACTIVATE ) <= 32 )
 		return L"Couldn't reach the running game. Quit it, then click Launch game.";
@@ -1421,9 +1638,7 @@ static void OnMessage( const wstring &msg )
 		else if ( IsFile( path ) )
 		{
 			KeepSaved( path );
-			wstring from = path + L'\0'; // (a list, ended by two nulls)
-			SHFILEOPSTRUCTW sh = { NULL, FO_DELETE, from.c_str(), NULL, FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT | FOF_NOERRORUI };
-			if ( SHFileOperationW( &sh ) || IsFile( path ) )
+			if ( !Recycle( path ) )
 				fail( L"couldn't remove " + path );
 		}
 	}
@@ -1433,13 +1648,18 @@ static void OnMessage( const wstring &msg )
 		if ( !g_hudPath.empty() && ReadAll( OriginalOf( g_hudPath ) + L"\\info.txt", info ) )
 			out = Widen( info.substr( info.find( '\n' ) + 1 ) );
 	}
-	else if ( op == L"restoreoriginal" ) // Back to how it was imported: answers how many files changed, a tab, how many couldn't be
+	else if ( op == L"restoreoriginal" ) // Back to how it was imported: "changed\tfailed\tlost" (see RestoreOriginal)
 	{
-		int failed, n = RestoreOriginal( failed );
+		int failed, lost, n = RestoreOriginal( failed, lost );
 		if ( n < 0 )
 			fail( L"There's no copy of this HUD as it was imported." );
 		else
-			out = std::to_wstring( n ) + L"\t" + std::to_wstring( failed );
+			out = std::to_wstring( n ) + L"\t" + std::to_wstring( failed ) + L"\t" + std::to_wstring( lost );
+	}
+	else if ( op == L"mergecvars" ) // (the self-check's: what putting the player's settings back makes of a config.cfg; body = it, \x01, the lines kept)
+	{
+		size_t at = body.find( L'\x01' );
+		out = Widen( MergeCvars( Utf8( body.substr( 0, at ) ), at == wstring::npos ? "" : Utf8( body.substr( at + 1 ) ) ) );
 	}
 	else if ( op == L"savesome" ) // body = paths in the HUD, one a line (a folder ends in /): kept as they are now; answers "saved<tab>still unsaved"
 	{
@@ -1930,6 +2150,11 @@ static LRESULT CALLBACK WndProc( HWND h, UINT m, WPARAM w, LPARAM l )
 			}
 			return 0;
 		}
+		if ( w == 6 )
+		{
+			RestoreCvars();
+			return 0;
+		}
 		if ( w == 5 ) // the game the editor started came to the front: the front goes back to the window the user had
 		{
 			HWND game = GameWindow();
@@ -1988,7 +2213,12 @@ int WINAPI wWinMain( HINSTANCE inst, HINSTANCE, LPWSTR, int show )
 		g_originals = g_custom + L"\\originals";
 	}
 	else
+	{
 		FindGame();
+		g_cvarKeep = data + L"\\cvars.txt";
+		g_cvarGameSeen = IsFile( g_cvarKeep ); // (left by an editor that closed before its game: put back once no game runs)
+		TidyOriginals();
+	}
 	Revert(); // left by an editor that didn't close normally
 
 	WNDCLASSEXW wc{ sizeof( wc ) };
@@ -2008,7 +2238,7 @@ int WINAPI wWinMain( HINSTANCE inst, HINSTANCE, LPWSTR, int show )
 	g_hwnd = CreateWindowW( wc.lpszClassName, APP_NAME L" " APP_VERSION, WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, 1500, 900, NULL, NULL, inst, NULL );
 	DarkTitle( g_hwnd );
 	if ( g_selftestOut.empty() )
-		ShowWindow( g_hwnd, show );
+		ShowWindow( g_hwnd, show ), SetTimer( g_hwnd, 6, 3000, NULL ); // (the player's settings: see RestoreCvars)
 	else
 		SetTimer( g_hwnd, 1, 60000, NULL ); // (the page's checks take about half that)
 
