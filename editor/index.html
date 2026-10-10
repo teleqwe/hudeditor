@@ -6824,7 +6824,10 @@ async function poll() {
   // a game started some other way while the editor is open: joined by itself, once (see joinGame)
   if (!live && !launching && !restarting && !joining && Date.now() - stateAsked > 3000) {
     stateAsked = Date.now();
-    call('gamestate').then(g => { if (g.startsWith('foreign ') && g !== joinTried && !live) { joinTried = g; joinGame(); } }).catch(() => {});
+    call('gamestate').then(g => {
+      if (!g.startsWith('foreign ') || live) return;
+      if (g !== joinTried) { joinTried = g; joinGame(); } else if (joinAgain && Date.now() - joinAgain > 10000) joinGame('quiet'); // (in a map: again)
+    }).catch(() => {});
   }
   const raw = await call('panels').catch(() => '');
   if (raw === liveRaw) return;
@@ -7577,32 +7580,42 @@ async function launchForHud(byHand = false) {
   }
 }
 // A game running without the editor's plugin, started some other way (Steam, a shortcut), before the editor or while
-// it's open: with -insecure, the exe loads the plugin into it (plugin_load); without, or if it doesn't answer, the old
-// way: quit it and Launch game. ("starting...": the game's window isn't up yet, or it's the editor's own game loading
-// its plugin: ask again.)
-let joining = false, joinTried = '', stateAsked = 0;
-async function joinGame() {
+// it's open: with -insecure, the exe loads the plugin into it (plugin_load); without, the old way: quit it and Launch
+// game. The game takes a plugin only at the main menu, not in a map: asked again every 10 s (poll; each time the
+// game's console says it can't), and Leave the map and join sends it to the main menu first. ("starting...": the
+// game's window isn't up yet, or it's the editor's own game loading its plugin: ask again.)
+let joining = false, joinTried = '', stateAsked = 0, joinAgain = 0;
+async function joinGame(how = '') { // ('quiet': asked again, nothing said; 'leave': out of its map first)
   if (joining || live) return;
-  joining = true; $('launch').hidden = true;
-  emptyText('Joining the game that\'s running...', 'The editor loads its plugin into it: the game shows up here in a few seconds.');
+  joining = true; joinAgain = 0;
+  if (how !== 'quiet') { $('launch').hidden = true; emptyText('Joining the game that\'s running...', 'The editor loads its plugin into it: the game shows up here in a few seconds.'); }
+  if (how === 'leave') { await call('attach', 'leave').catch(() => {}); await sleep(3000); }
   for (let i = 0; i < 60 && !live; i++) {
     try {
       await call('attach');
-      status('The game is already running: joining it (loading the editor\'s plugin into it)...');
+      if (how !== 'quiet') status('The game is already running: joining it (loading the editor\'s plugin into it)...');
       // the main menu was made before the plugin could put the HUD first: its buttons show after a restart (marked
       // once the plugin answers: poll clears the list while there's no game)
       joinedGame = true;
+      // (at the main menu the plugin answers within seconds: not by then, the game is in a map)
       setTimeout(() => {
         joining = false;
-        if (!live) { emptyText('The game didn\'t take the editor\'s plugin.', 'Quit it, then click Launch game.'); status('The game didn\'t take the editor\'s plugin. Quit it, then click Launch game.'); $('launch').hidden = false; }
-      }, 30000);
+        if (live) return;
+        joinAgain = Date.now();
+        if (how !== 'quiet') inMapText();
+      }, 8000);
       return;
     } catch (err) {
-      if (!/^starting/.test(err.message)) { joining = false; emptyText('The editor can\'t join this game.', err.message); status(err.message); $('launch').hidden = false; return; }
+      if (!/^starting/.test(err.message)) { joining = false; if (how !== 'quiet') { emptyText('The editor can\'t join this game.', err.message); status(err.message); $('launch').hidden = false; } return; }
       await sleep(2000);
     }
   }
   joining = false;
+}
+function inMapText() {
+  emptyText('The game is in a map: it takes the editor\'s plugin only at the main menu.', 'Disconnect and the editor joins it by itself, or:');
+  $('empty').insertBefore(el('button', { type: 'button', className: 'primary', textContent: 'Leave the map and join', onclick: () => joinGame('leave') }), $('launch'));
+  status('The game is in a map: disconnect and the editor joins it.');
 }
 async function start() {
   try {

@@ -938,8 +938,10 @@ static void MountHud()
 // left alone. The .vdf isn't put back: plugin_load doesn't need it, and a later start from Steam mustn't find it.
 // ("starting...": not yet, ask again shortly. The .vdf in addons: a game the editor started, which loads the plugin
 // itself (a plugin_load too would load it twice); no window: -hijack would find no game and show a message box.)
+// In a map the game refuses it ("plugin_load : cannot load a plugin while connected to a server", seen 2026-10-10):
+// leave sends only disconnect, back to the main menu, and the page attaches again after.
 static HWND GameWindow();
-static wstring Attach()
+static wstring Attach( bool leave = false )
 {
 	if ( !g_selftestOut.empty() ) // (--selftest stands an empty folder in for the game: never a real one)
 		return L"not in --selftest";
@@ -952,6 +954,8 @@ static wstring Attach()
 		return L"Couldn't read how the game was started. Quit it, then click Launch game.";
 	if ( low.find( L"-insecure" ) == wstring::npos )
 		return L"The game is running, started without -insecure, so the editor can't join it. Quit it, then click Launch game.";
+	if ( leave )
+		return (INT_PTR)ShellExecuteW( NULL, L"open", exe.c_str(), L"-hijack -game cstrike +disconnect", NULL, SW_SHOWNOACTIVATE ) <= 32 ? L"Couldn't reach the running game." : wstring();
 	wstring err = InstallPlugin( false );
 	if ( !err.empty() )
 		return err;
@@ -1373,13 +1377,13 @@ static void OnMessage( const wstring &msg )
 		else if ( ( out = Launch() ).size() )
 			ok = false;
 	}
-	else if ( op == L"attach" ) // a game running without the plugin (started from Steam): load the plugin into it
+	else if ( op == L"attach" ) // a game running without the plugin (started from Steam): load the plugin into it (arg "leave": leave its map first)
 	{
 		if ( g_game.empty() )
 			fail( noGame );
 		else if ( !GameRunning() )
 			fail( L"The game isn't running." );
-		else if ( !PluginLoaded() && ( out = Attach() ).size() )
+		else if ( !PluginLoaded() && ( out = Attach( arg == L"leave" ) ).size() )
 			ok = false;
 	}
 	else if ( op == L"gamestate" ) // "none", "plugin" (running with it), or "foreign <pid>" (running without it: the page joins it)
