@@ -37,8 +37,8 @@ static ComPtr<ICoreWebView2> g_web;
 static wstring g_game;        // ...\Counter-Strike Source\cstrike
 static wstring g_custom;      // g_game\custom, or the --selftest folder
 static wstring g_hudPath;     // the HUD being edited
-#define APP_NAME L"Tele HUD Editor (dev)" // the window's title, with the version (also in app.rc)
-#define APP_VERSION L"0.9.1 beta"     // (also in app.rc)
+#define APP_NAME L"Tele HUD Editor" // the window's title, with the version (also in app.rc)
+#define APP_VERSION L"0.10.0 beta"     // (also in app.rc)
 static wstring g_unsaved;     // saved versions of the files changed since the last save (see KeepSaved)
 static wstring g_settings;    // recent HUD folders, most recent first
 static wstring g_originals;   // each HUD as it was first made, imported or opened here (Back to how it was imported)
@@ -1677,7 +1677,7 @@ static void OnMessage( const wstring &msg )
 static void DarkTitle( HWND h )
 {
 	BOOL dark = TRUE;
-	COLORREF caption = RGB( 0x16, 0x1a, 0x20 ), edge = RGB( 0x31, 0x3a, 0x46 ), title = RGB( 0xe3, 0xe8, 0xef );
+	COLORREF caption = RGB( 0x19, 0x17, 0x1b ), edge = RGB( 0x42, 0x39, 0x41 ), title = RGB( 0xe6, 0xdf, 0xe4 );
 	DwmSetWindowAttribute( h, 20 /* DWMWA_USE_IMMERSIVE_DARK_MODE */, &dark, sizeof dark );
 	DwmSetWindowAttribute( h, 35 /* DWMWA_CAPTION_COLOR */, &caption, sizeof caption );
 	DwmSetWindowAttribute( h, 34 /* DWMWA_BORDER_COLOR */, &edge, sizeof edge );
@@ -1995,7 +1995,7 @@ int WINAPI wWinMain( HINSTANCE inst, HINSTANCE, LPWSTR, int show )
 	wc.lpfnWndProc = WndProc;
 	wc.hInstance = inst;
 	wc.hCursor = LoadCursor( NULL, IDC_ARROW );
-	wc.hbrBackground = CreateSolidBrush( RGB( 0x0f, 0x12, 0x16 ) ); // the page's background (--base)
+	wc.hbrBackground = CreateSolidBrush( RGB( 0x11, 0x10, 0x13 ) ); // the page's background (--base)
 	wc.lpszClassName = L"CSSHudEditor";
 	// the app's icon (app.ico), at the sizes Windows draws the window's big and small icons
 	wc.hIcon = (HICON)LoadImageW( inst, MAKEINTRESOURCEW( 1 ), IMAGE_ICON, GetSystemMetrics( SM_CXICON ), GetSystemMetrics( SM_CYICON ), 0 );

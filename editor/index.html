@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Tele HUD Editor (dev)</title>
+<title>Tele HUD Editor</title>
 <style>
-  /* Graphite Blue (the dev build): charcoal surfaces with a cool cast, blue kept for the main action, what's selected and focus */
-  :root { --base: #0f1216; --surface: #161a20; --raised: #1f252d; --field: #0c0f13; --text: #e3e8ef; --muted: #98a4b3; --line: #313a46;
-    --accent: #7cb1ff; --soft: #1a2a40; --radius: 6px; --thin: color-mix(in srgb, var(--line) 40%, transparent); --side: 408px;
-    --check: repeating-conic-gradient(#2c333d 0 25%, #161a20 0 50%); --accent-a: rgba(124, 177, 255, .14); color-scheme: dark; }
+  /* Graphite Rose: charcoal surfaces, pink kept for the chosen tab, the main action, what's selected and focus */
+  :root { --base: #111013; --surface: #19171b; --raised: #252127; --field: #0e0d10; --text: #e6dfe4; --muted: #a99ba4; --line: #423941;
+    --accent: #e8a2c7; --soft: #382333; --radius: 6px; --thin: color-mix(in srgb, var(--line) 40%, transparent); --side: 408px;
+    --check: repeating-conic-gradient(#3b3439 0 25%, #1d1a1f 0 50%); --accent-a: rgba(232, 162, 199, .14); color-scheme: dark; }
   @media (min-width: 1500px) { :root { --side: 440px; } }
   @media (max-width: 1050px) { :root { --side: 370px; } }
   * { box-sizing: border-box; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
@@ -356,7 +356,7 @@
   #importlist .pick .meta { grid-column: 1 / -1; overflow-wrap: anywhere; }
   #importlist .err { color: var(--accent); }
 
-  /* ---------- the dev build's frame: Dock (the panel beside the game) or Float (a card over it, more pinned) ----------
+  /* ---------- the frame: Dock (the panel beside the game) or Float (a card over it, more pinned) ----------
      One size scale throughout: controls 30px tall (32 in the top bar), icon buttons square, gaps 4/6/8, cards 10px round. */
   .i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
   .app-header { gap: 8px; padding: 9px 14px; }
@@ -5653,7 +5653,7 @@ function renderList() {
   list.append(...elementCards()); // (Dock, nothing picked: what's on screen, each with its eye)
 }
 
-// ---------- the dev build's panel: Dock (beside the game) or Float (a card over it, more pinned) ----------
+// ---------- the panel: Dock (beside the game) or Float (a card over it, more pinned) ----------
 // A selection's settings in five tabs, always in this order, each closed until opened (again for every part picked);
 // inside one, its first section, then Show more for the rest. Float shows the settings people change most first.
 const TABS = [['colour', 'Colours'], ['font', 'Fonts'], ['border', 'Borders'], ['position', 'Position'], ['size', 'Size'], ['show', 'Show/hide'],
@@ -5664,7 +5664,7 @@ const tabOf = (kind, title = '') => kind === 'layout' ? (/size|items|space insid
   : kind === 'other' && /^buttons$/i.test(title) ? 'buttons' : TAB_OF[kind] || 'misc';
 // (a row that sets a width, a height or a size: under Size, the section's places under Position)
 const isSizeRow = r => /\b(width|height|size)\b/i.test((r.querySelector && r.querySelector('input[aria-label]')?.getAttribute('aria-label')) || (r.dataset && r.dataset.q) || '');
-// Out of the dev build for now (the user's ask, 10-09): the killer panel and the round-end panel; the bomb screen and the
+// Left out for now (the user's ask, 10-09): the killer panel and the round-end panel; the bomb screen and the
 // whole-HUD colours and fonts aren't in the list either
 const DEV_OUT = new Set(['FreezePanel', 'WinPanel_Round']);
 // cardSel: what the main card (Float) or the panel (Dock) shows; pins: Float's pinned cards, each on its own part. The
@@ -6324,7 +6324,7 @@ const gridded = v => { const m = /^([rc]?)(-?[\d.]+)$/i.exec(v ?? ''); return !g
 function showGrid(t) {
   const box = $('boxes');
   if (!grid || !t) { box.style.backgroundImage = ''; return; }
-  const k = box.offsetWidth / live.W, step = grid * t.s * k, line = 'rgba(124, 177, 255, .22)'; // (in the preview's own pixels, zoomed with it)
+  const k = box.offsetWidth / live.W, step = grid * t.s * k, line = 'rgba(232, 162, 199, .22)'; // (in the preview's own pixels, zoomed with it)
   const origin = (key, full) => {
     const a = (/^\s*([rc]?)/i.exec(t.p[key] || '') || [, ''])[1].toLowerCase();
     if (a === 'c') return full / 2;
@@ -7207,7 +7207,7 @@ if (host) {
   $('search').oninput = () => render();
   $('undobtn').onclick = () => undo();
 }
-// ---------- the dev build's frame: Dock / Float, the divider, the bar under the game ----------
+// ---------- the frame: Dock / Float, the divider, the bar under the game ----------
 $('dockbtn').onclick = () => setLayout('dock');
 $('floatbtn').onclick = () => setLayout('float');
 $('globalbtn').onclick = () => {
