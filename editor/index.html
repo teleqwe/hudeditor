@@ -1914,6 +1914,8 @@ async function plantBomb() {
 const BUY_TABS = [['Pistols', 'pistols'], ['Shotguns', 'shotguns'], ['SMGs', 'submachineguns'], ['Rifles', 'rifles'], ['Machine guns', 'machineguns'], ['Equipment', 'equipment']];
 function buyPageRows(sel) {
   const page = live.panels.find(q => q.key === 'buysubmenu' && q.thing === sel.thing), r = el('div', { className: 'row action wrap' }), cmd = c => () => call('cmd', '', c).then(() => refreshSoon()).catch(() => {});
+  // (this side's menu closed, or the other side's open: its pages can't be opened from here)
+  if (!live.panels.includes(sel.thing)) return [noteRow('Open this buy menu in the game (B) to go through its pages here.')];
   if (!page) {
     r.append(...BUY_TABS.map(([t, n]) => el('button', { textContent: t, title: `Opens the ${t.toLowerCase()} page in the game`, onclick: cmd(`schemereload_press ${n}`) })));
     return [r, noteRow('Opens that page of the buy menu in the game, to click and edit it. Its file is read when the game makes the buy menu: changes show after a game restart (the ⚠ by Save HUD).')];
