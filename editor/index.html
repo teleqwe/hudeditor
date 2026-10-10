@@ -4903,9 +4903,10 @@ const GAME_MENU = `"GameMenu"\n{\n${[
   ['#GameUI_GameMenu_CreateServer', 'OpenCreateMultiplayerGameDialog'], ['#GameUI_GameMenu_Achievements', 'OpenCSAchievementsDialog'],
   ['#GameUI_ReportBug', 'engine bug'], ['#GameUI_LaunchBenchmark', 'OpenBenchmarkDialog'], ['#GameUI_GameMenu_Options', 'OpenOptionsDialog'],
   ['#GameUI_GameMenu_Quit', 'Quit']].map(([l, c, g], i) => `\t"${i + 1}"\n\t{\n\t\t"label" "${l}"\n\t\t"command" "${c}"\n${g ? '\t\t"OnlyInGame" "1"\n' : ''}\t}\n`).join('')}}\n`;
-const MENU_NAMES = { ResumeGame: 'Resume Game', Disconnect: 'Disconnect', OpenPlayerListDialog: 'Player List', OpenServerBrowser: 'Find Servers',
-  OpenCreateMultiplayerGameDialog: 'Create Server', OpenCSAchievementsDialog: 'Achievements', 'engine bug': 'Report Bug',
-  OpenBenchmarkDialog: 'Video Stress Test', OpenOptionsDialog: 'Options', Quit: 'Quit' };
+// (as the game writes them in English, in capitals: cstrike/resource/gameui_english.txt)
+const MENU_NAMES = { ResumeGame: 'RESUME GAME', Disconnect: 'DISCONNECT', OpenPlayerListDialog: 'PLAYER LIST', OpenServerBrowser: 'FIND SERVERS',
+  OpenCreateMultiplayerGameDialog: 'CREATE SERVER', OpenCSAchievementsDialog: 'ACHIEVEMENTS', 'engine bug': 'REPORT BUG',
+  OpenBenchmarkDialog: 'VIDEO STRESS TEST', OpenOptionsDialog: 'OPTIONS', Quit: 'QUIT' };
 // [[key, value]...] per button, in order
 const menuItems = f => f.parsed.sections.filter(s => s.path.length === 2)
   .map(s => f.parsed.entries.filter(e => samePath(e.path, s.path)).map(e => [e.key, e.value]));
@@ -4934,8 +4935,10 @@ function menuRows() {
       text.setAttribute('aria-label', 'Button text');
       text.style.width = '100%';
       text.onchange = () => {
-        const v = text.value.replace(/["\\]/g, '').trim();
-        if (v && v !== shown) setMenu(items.map((x, j) => j !== i ? x : x.some(([k]) => k.toLowerCase() === 'label') ? x.map(([k, val]) => [k, k.toLowerCase() === 'label' ? v : val]) : [['label', v], ...x]));
+        let v = text.value.replace(/["\\]/g, '').trim();
+        const game = defaults.find(d => cmd(d) === cmd(it));
+        if (game && v === MENU_NAMES[cmd(it)]) v = menuVal(game, 'label'); // (the game's own text again: its "#..." one, in the player's language)
+        if (v && v !== menuVal(it, 'label') && v !== shown) setMenu(items.map((x, j) => j !== i ? x : x.some(([k]) => k.toLowerCase() === 'label') ? x.map(([k, val]) => [k, k.toLowerCase() === 'label' ? v : val]) : [['label', v], ...x]));
       };
       name.append(text);
     }
@@ -7395,6 +7398,7 @@ async function parserCheck() {
   check(fromHex('#0a14ff', 128) === '10 20 255 128', 'hex -> rgba');
   const gmItems = menuItems({ parsed: parse(GAME_MENU) });
   check(gmItems.length === 11 && menuName(gmItems[3]) === '(gap)' && menuText(gmItems) === GAME_MENU, 'game menu buttons read and written back unchanged');
+  check(menuName(gmItems[gmItems.length - 1]) === 'QUIT' && menuName([['label', 'Quit'], ['command', 'Quit']]) === 'Quit', 'a game button shows its text as the game does (capitals), a typed one as typed');
   {
     const [path, , root, rootKeys, items] = SPEC_MENUS[0], text = specText(root, rootKeys, items), [r, rk, back] = specParse(text, 'x');
     const modes = specParse(specText(...SPEC_MENUS[1].slice(2)), 'x');
