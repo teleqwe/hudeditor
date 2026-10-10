@@ -95,6 +95,7 @@
   #empty { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 16px; color: var(--muted); text-align: center; pointer-events: none; }
   #empty p { max-width: 420px; margin: 4px 0; }
   #empty b { color: var(--text); font-weight: 550; }
+  #empty button { pointer-events: auto; height: 34px; margin-top: 14px; padding: 0 22px; }
   .preview-footer { display: flex; align-items: center; justify-content: space-between; gap: 15px; min-height: 40px; padding: 9px 17px; background: var(--surface); border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
   .preview-footer .msg { display: grid; min-width: 0; }
   .preview-footer .msg > * { grid-area: 1 / 1; transition: opacity .2s; }
@@ -523,9 +524,8 @@
   <button id="globalbtn" aria-pressed="false" disabled title="Settings for the whole HUD at once: for now, its fonts"><svg class="i" aria-hidden="true"><use href="#i-sliders-horizontal"/></svg>Global settings</button>
   <div class="app-actions">
     <button id="capture" hidden>Capture game</button>
-    <button id="launch" hidden>Launch game</button>
     <button id="zoom" class="zoombtn" hidden title="Zoomed in with the mouse wheel: click for 100%">100%</button>
-    <select id="res" class="gridbtn" aria-label="Game resolution" disabled title="The game's resolution, and so the preview's: see how the HUD looks on other screens. Your own comes back when the editor closes."><option>Game: -</option></select>
+    <select id="res" class="gridbtn" aria-label="Game resolution" hidden disabled title="The game's resolution, and so the preview's: see how the HUD looks on other screens. Your own comes back when the editor closes."><option>Game: -</option></select>
     <button id="rescaution" class="caution" hidden aria-haspopup="dialog">⚠</button>
     <select id="grid" class="gridbtn" aria-label="Grid" title="Dragged parts land on a grid this many units apart (a unit is the screen height / 480)"><option value="0">Grid: off</option><option value="2">Grid: 2</option><option value="4">Grid: 4</option><option value="5">Grid: 5</option><option value="8">Grid: 8</option><option value="10">Grid: 10</option><option value="16">Grid: 16</option><option value="20">Grid: 20</option></select>
     <button id="testserver" title="Offline game with a frozen bot and bhop/surf-style timer texts on screen"><svg class="i" aria-hidden="true"><use href="#i-play"/></svg>Test server</button>
@@ -575,7 +575,8 @@
   <main id="preview">
     <div id="stage" class="schematic">
       <canvas id="video" hidden></canvas>
-      <div id="empty"><p><b>Starting...</b></p></div>
+      <!-- (no game: what's going on, and Launch game while there's a HUD and no game starting) -->
+      <div id="empty"><p><b>Starting...</b></p><button id="launch" class="primary" hidden>Launch game</button></div>
       <div id="boxes"></div>
     </div>
     <!-- the game's corner, under its picture: what the game holds open for editing (in a map), the loading screen, and in
@@ -1545,7 +1546,7 @@ function gameWindowRows(sel) {
   const row = el('div', { className: 'row action' });
   row.append(go);
   row.dataset.q = 'game window default start over reset';
-  return [row, noteRow('Every part of this window as the game has it, the parts added to it gone: to start it over (the factory at the top does the same). ↺ at the top goes back to how it was when the HUD was opened.')];
+  return [row, noteRow('Every part of this window as the game has it, the parts added to it gone: to start it over (Default at the bottom does the same). ↺ at the top goes back to how it was when the HUD was opened.')];
 }
 function resPath(sel) {
   for (let p = sel.node || sel.control; p; p = p.parent) if (BUY_PAGES[p.key]) return BUY_PAGES[p.key];
@@ -2579,7 +2580,7 @@ function addRows(lay = F(L)) {
   if (lay !== F(L)) {
     r.dataset.q = 'add picture gif text box window';
     return [...addedList(lay), r, ...(lay.name === UI_RES.buy_ct ? [noteRow('What\'s added goes into both sides\' buy menu and every page, and shows straight away while the buy menu is open.')] : []),
-      ...(LOADING_TWIN[lay.name] && !loadingFree(lay) ? [noteRow('The game cuts what\'s outside the box: Extra > Layout > Parts anywhere on the screen lets pictures and texts go around it.')] : []),
+      ...(LOADING_TWIN[lay.name] && !loadingFree(lay) ? [noteRow('The game cuts what\'s outside the box: Position > Parts anywhere on the screen lets pictures and texts go around it.')] : []),
       // (a Label whose text starts and ends with one of its window's dialog variables shows the values, every %name% in
       // it; one starting or ending with a word prints as typed, seen 2026-10-09)
       ...(lay.name === UI_RES.scores ? [noteRow('A text that starts and ends with one of the scoreboard\'s values shows them live: %mapname%, %ct_teamname%, %t_teamname%, %ct_totalteamscore%, %t_totalteamscore%, %ct_alivecount%, %t_alivecount%, %spectators%, %sourcetv% ("%ct_totalteamscore% - %t_totalteamscore%" works; "CT %ct_totalteamscore%" prints as typed: put the word in a text of its own).')] : []),
@@ -6498,7 +6499,7 @@ function resOptions() {
     s.append(g);
   }
   s.value = now;
-  s.disabled = !live;
+  s.hidden = s.disabled = !live; // (no game: no size to show or pick)
 }
 $('res').onchange = () => {
   const [w, h] = $('res').value.split('x'), was = live ? `${live.W}x${live.H}` : '';
@@ -6622,7 +6623,7 @@ async function poll() {
   // another size: the picker, and the selection's fonts (their rows are the entry for this height)
   const size = live ? `${live.W}x${live.H}` : '';
   if (size !== shownSize) { const h = shownSize.split('x')[1]; shownSize = size; resOptions(); if (selected && live && h && h !== String(live.H)) render(); }
-  $('launch').hidden = !!live;
+  $('launch').hidden = !!live || launching || restarting || joining || !hudPath;
   $('gamestate').textContent = !live ? 'Waiting for the game' : `${loadingUp() ? 'Loading screen' : menuUp() ? 'Main menu' : live.local ? 'Test game' : 'In a game'} · ${live.W}×${live.H}`;
   if (!live) loadingHeld = null; // (a game that has gone holds nothing open)
   if (live) launching = false; // (it came up)
@@ -6705,7 +6706,7 @@ if (host) {
 function captureEnded() { // the game window closed
   if (frames) host.releaseBuffer(frames);
   frames = null; captured = false; autoTried = false;
-  if (!restarting) emptyText('The game has closed.', 'Launch game (at the top) starts it again with this HUD, or pick another HUD.');
+  if (!restarting) emptyText('The game has closed.', 'Start it again with this HUD, or pick another HUD.');
   $('video').hidden = true; $('empty').hidden = false; $('stage').classList.add('schematic'); drawBoxes();
 }
 
@@ -6800,7 +6801,7 @@ let restarting = false;
 // between: work to do while the game is down (moving a HUD whose font files it had open)
 async function restartGame(between = null) {
   if (restarting) return;
-  restarting = true;
+  restarting = true; $('launch').hidden = true;
   $('restartmark').disabled = true;
   emptyText('The game is restarting...', 'It shows up here again once it has loaded.');
   try {
@@ -7314,7 +7315,7 @@ window.addEventListener('focus', () => keysDown.clear());
 // one this editor launched it with (gameHud). hudPath: the open HUD's folder. menuSeen: the loadHud last checked.
 let startState = '', launching = false, gameHud = null, hudPath = null, menuSeen = null;
 const sameFolder = (a, b) => [a, b].map(p => (p || '').replace(/\//g, '\\').replace(/\\+$/, '').toLowerCase()).reduce((x, y) => !!x && x === y);
-const emptyText = (head, more) => { const p = el('p'); p.append(el('b', { textContent: head })); $('empty').replaceChildren(p, el('p', { textContent: more })); };
+const emptyText = (head, more) => { const p = el('p'); p.append(el('b', { textContent: head })); $('empty').replaceChildren(p, el('p', { textContent: more }), $('launch')); };
 // the game started with another HUD than the open one: its buttons show after a restart; back on that one, none needed
 function menuMark() {
   for (const w of [...restartFor]) if (/'s main menu buttons$/.test(w)) restartFor.delete(w);
@@ -7326,7 +7327,7 @@ function menuMark() {
 // alone: Launch game, once it's quit). byHand: the Launch game button.
 async function launchForHud(byHand = false) {
   if (live || launching || restarting || (!byHand && (!hudPath || startState === 'foreign'))) return;
-  launching = true;
+  launching = true; $('launch').hidden = true;
   gameHud = hudPath;
   emptyText('Starting Counter-Strike: Source...', 'The game window shows up here by itself once it has loaded.');
   try {
@@ -7348,7 +7349,7 @@ async function launchForHud(byHand = false) {
 let joining = false, joinTried = '', stateAsked = 0;
 async function joinGame() {
   if (joining || live) return;
-  joining = true;
+  joining = true; $('launch').hidden = true;
   emptyText('Joining the game that\'s running...', 'The editor loads its plugin into it: the game shows up here in a few seconds.');
   for (let i = 0; i < 60 && !live; i++) {
     try {
