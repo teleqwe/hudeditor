@@ -892,6 +892,9 @@ static wstring Launch()
 	if ( !err.empty() )
 		return err;
 	KeepCvars();
+	// (commands left for a game that never took them, by an earlier editor: past the plugin's 8 KB they would cut off
+	// this launch's own mount; the HUD's settings are sent again once it answers)
+	DeleteFileW( ( g_game + L"\\addons\\schemereload_cmd.txt" ).c_str() );
 	MountHud();
 	DeleteFileW( ( g_game + L"\\addons\\schemereload_panels.txt" ).c_str() );
 	// the game's console log (-condebug) only ever grows (35 MB by 2026-10-02): past 8 MB it starts again, the last one
@@ -2118,12 +2121,20 @@ static LRESULT CALLBACK WndProc( HWND h, UINT m, WPARAM w, LPARAM l )
 		if ( g_ctl )
 			g_ctl->NotifyParentWindowPositionChanged();
 		return 0;
-	case WM_CLOSE: // let the page ask about unsaved changes; a second click within 5 s closes anyway
-		if ( g_web && g_selftestOut.empty() && GetTickCount() - s_closeAsked > 5000 )
+	case WM_CLOSE: // let the page ask about unsaved changes; a second click within 5 s closes anyway (a page that hangs),
+		// but not one within 1.5 s of the first: a double-click on the X would have thrown the unsaved changes away
+		// before the page could ask
+		if ( g_web && g_selftestOut.empty() )
 		{
-			s_closeAsked = GetTickCount();
-			g_web->PostWebMessageAsString( L"!close" );
-			return 0;
+			DWORD since = GetTickCount() - s_closeAsked;
+			if ( since < 1500 )
+				return 0;
+			if ( since > 5000 )
+			{
+				s_closeAsked = GetTickCount();
+				g_web->PostWebMessageAsString( L"!close" );
+				return 0;
+			}
 		}
 		break;
 	case WM_CAPTURE_SIZE:

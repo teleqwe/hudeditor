@@ -44,7 +44,7 @@
   .key { font-family: ui-monospace, Consolas, monospace; overflow-wrap: anywhere; }
 
   /* the title strip: the HUD and saving */
-  .app-header { grid-column: 1 / -1; display: flex; align-items: center; gap: 18px; min-width: 0; padding: 11px 18px; background: var(--surface); border-bottom: 1px solid var(--line); }
+  .app-header { grid-column: 1 / -1; display: flex; align-items: center; gap: 18px; min-width: 0; padding: 11px 18px; background: var(--surface); border-bottom: 1px solid var(--line); position: relative; z-index: 21; } /* (above the HUD picker: its buttons work while it's open) */
   /* the HUD being edited (the app's name and version are in the window's title): a click lists the others */
   #hudbtn { flex: 0 1 auto; min-width: 140px; max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 6px 30px 6px 11px;
     font-weight: 600; background: var(--field) var(--chevron) no-repeat right 11px center / 9px 6px; }
@@ -92,7 +92,7 @@
   #stage.sharp #video { image-rendering: pixelated; }
   #stage.schematic { width: min(100%, calc(100cqh * var(--aspect, 1.7778))); aspect-ratio: var(--aspect, 1.7778); background: #0e0d10; border: 1px solid var(--line); }
   #video { display: block; max-width: 100%; max-height: 100cqh; }
-  #empty { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 16px; color: var(--muted); text-align: center; pointer-events: none; }
+  #empty { position: absolute; inset: 0; z-index: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 16px; color: var(--muted); text-align: center; pointer-events: none; } /* (above #boxes: its Launch game button is clicked; the rest lets clicks through) */
   #empty p { max-width: 420px; margin: 4px 0; }
   #empty b { color: var(--text); font-weight: 550; }
   #empty button { pointer-events: auto; height: 34px; margin-top: 14px; padding: 0 22px; }
@@ -242,7 +242,7 @@
   .row.colour .shares { margin-top: 2px; opacity: .8; }
   .row.colour > .arrows { align-self: end; margin-bottom: 5px; } /* level with the boxes, under their R G B */
   /* the colour pop-out: R G B (and opacity) sliders beside their numbers */
-  .cpop { position: fixed; z-index: 20; width: min(276px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow: auto; padding: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 12px 40px #0008; }
+  .cpop { position: fixed; z-index: 22; width: min(276px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow: auto; padding: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 12px 40px #0008; }
   .cpop header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
   .cpop h3 { margin: 0; font-size: 13px; font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cpop header button { flex: none; width: 28px; height: 28px; padding: 0; }
@@ -256,6 +256,8 @@
   .cpop footer .primary { margin-left: auto; }
   .cpop footer button:not(.primary) { background: transparent; }
   /* tick boxes in two columns: a border's sides, a font's effects */
+  .greyed { opacity: .45; } .greyed input, .greyed button { cursor: not-allowed; }
+  .infoi { display: inline-flex; vertical-align: -2px; margin-left: 5px; color: var(--muted); cursor: help; } .infoi .i { width: 13px; height: 13px; }
   :is(.row.sides, .row.flags) { display: grid; grid-template-columns: minmax(0, 1fr) auto; row-gap: 10px; align-items: center; }
   .opts { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .opts.one { grid-template-columns: 1fr; }
@@ -317,7 +319,7 @@
   /* font drop-down: a filter box over the names, faces drawn in themselves */
   .fontpick { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; padding: 6px 8px; background: var(--field); }
   .fontpick::after { content: ''; float: right; margin: 7px 0 0 6px; border-top: 5px solid var(--muted); border-left: 4px solid transparent; border-right: 4px solid transparent; }
-  .fpop { position: fixed; z-index: 20; width: 250px; display: grid; gap: 6px; padding: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 12px 40px #0008; }
+  .fpop { position: fixed; z-index: 22; width: 250px; display: grid; gap: 6px; padding: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 12px 40px #0008; }
   .fpop input { width: 100%; }
   .fpop .flist { position: relative; max-height: 280px; overflow: auto; display: flex; flex-direction: column; }
   .fpop .flist button { flex: none; padding: 5px 8px; border: 0; border-radius: 4px; background: none; text-align: left; font-size: 14px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -521,7 +523,7 @@
 </style>
 </head>
 <body>
-<svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" /> <circle cx="12" cy="12" r="3" /></symbol><symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49" /> <path d="M14.084 14.158a3 3 0 0 1-4.242-4.242" /> <path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143" /> <path d="m2 2 20 20" /></symbol><symbol id="i-rotate-ccw" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /> <path d="M3 3v5h5" /></symbol><symbol id="i-factory" viewBox="0 0 24 24"><path d="M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8l-7 5V8l-7 5V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z" /> <path d="M17 18h1" /> <path d="M12 18h1" /> <path d="M7 18h1" /></symbol><symbol id="i-pop-out" viewBox="0 0 24 24"><path d="M21 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h6" /> <path d="m21 3-9 9" /> <path d="M15 3h6v6" /></symbol><symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18" /> <path d="m6 6 12 12" /></symbol><symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 17v5" /> <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" /></symbol><symbol id="i-pin-off" viewBox="0 0 24 24"><path d="M12 17v5" /> <path d="M15 9.34V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H7.89" /> <path d="m2 2 20 20" /> <path d="M9 9v1.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h11" /></symbol><symbol id="i-grip-vertical" viewBox="0 0 24 24"><circle cx="9" cy="12" r="1" /> <circle cx="9" cy="5" r="1" /> <circle cx="9" cy="19" r="1" /> <circle cx="15" cy="12" r="1" /> <circle cx="15" cy="5" r="1" /> <circle cx="15" cy="19" r="1" /></symbol><symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" /></symbol><symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6" /></symbol><symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6" /></symbol><symbol id="i-undo-2" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5" /> <path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11" /></symbol><symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /> <path d="M3 3v5h5" /> <path d="M12 7v5l4 2" /></symbol><symbol id="i-panel-right" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" /> <path d="M15 3v18" /></symbol><symbol id="i-picture-in-picture-2" viewBox="0 0 24 24"><path d="M21 9V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v10c0 1.1.9 2 2 2h4" /> <rect width="10" height="7" x="12" y="13" rx="2" /></symbol><symbol id="i-list" viewBox="0 0 24 24"><path d="M3 12h.01" /> <path d="M3 18h.01" /> <path d="M3 6h.01" /> <path d="M8 12h13" /> <path d="M8 18h13" /> <path d="M8 6h13" /></symbol><symbol id="i-image" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" ry="2" /> <circle cx="9" cy="9" r="2" /> <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" /></symbol><symbol id="i-type" viewBox="0 0 24 24"><polyline points="4 7 4 4 20 4 20 7" /> <line x1="9" x2="15" y1="20" y2="20" /> <line x1="12" x2="12" y1="4" y2="20" /></symbol><symbol id="i-square" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" /></symbol><symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14" /> <path d="M12 5v14" /></symbol><symbol id="i-save" viewBox="0 0 24 24"><path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" /> <path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7" /> <path d="M7 3v4a1 1 0 0 0 1 1h7" /></symbol><symbol id="i-folder-open" viewBox="0 0 24 24"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2" /></symbol><symbol id="i-play" viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3" /></symbol><symbol id="i-triangle-alert" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" /> <path d="M12 9v4" /> <path d="M12 17h.01" /></symbol><symbol id="i-toggle-right" viewBox="0 0 24 24"><rect width="20" height="12" x="2" y="6" rx="6" ry="6" /> <circle cx="16" cy="12" r="2" /></symbol><symbol id="i-message-square" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></symbol><symbol id="i-table-2" viewBox="0 0 24 24"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18" /></symbol><symbol id="i-refresh-cw" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /> <path d="M21 3v5h-5" /> <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /> <path d="M8 16H3v5" /></symbol><symbol id="i-sliders-horizontal" viewBox="0 0 24 24"><line x1="21" x2="14" y1="4" y2="4" /> <line x1="10" x2="3" y1="4" y2="4" /> <line x1="21" x2="12" y1="12" y2="12" /> <line x1="8" x2="3" y1="12" y2="12" /> <line x1="21" x2="16" y1="20" y2="20" /> <line x1="12" x2="3" y1="20" y2="20" /> <line x1="14" x2="14" y1="2" y2="6" /> <line x1="8" x2="8" y1="10" y2="14" /> <line x1="16" x2="16" y1="18" y2="22" /></symbol><symbol id="i-loader" viewBox="0 0 24 24"><path d="M12 2v4" /> <path d="m16.2 7.8 2.9-2.9" /> <path d="M18 12h4" /> <path d="m16.2 16.2 2.9 2.9" /> <path d="M12 18v4" /> <path d="m4.9 19.1 2.9-2.9" /> <path d="M2 12h4" /> <path d="m4.9 4.9 2.9 2.9" /></symbol></svg>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" /> <circle cx="12" cy="12" r="3" /></symbol><symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49" /> <path d="M14.084 14.158a3 3 0 0 1-4.242-4.242" /> <path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143" /> <path d="m2 2 20 20" /></symbol><symbol id="i-rotate-ccw" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /> <path d="M3 3v5h5" /></symbol><symbol id="i-factory" viewBox="0 0 24 24"><path d="M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8l-7 5V8l-7 5V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z" /> <path d="M17 18h1" /> <path d="M12 18h1" /> <path d="M7 18h1" /></symbol><symbol id="i-pop-out" viewBox="0 0 24 24"><path d="M21 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h6" /> <path d="m21 3-9 9" /> <path d="M15 3h6v6" /></symbol><symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18" /> <path d="m6 6 12 12" /></symbol><symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 17v5" /> <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" /></symbol><symbol id="i-pin-off" viewBox="0 0 24 24"><path d="M12 17v5" /> <path d="M15 9.34V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H7.89" /> <path d="m2 2 20 20" /> <path d="M9 9v1.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h11" /></symbol><symbol id="i-grip-vertical" viewBox="0 0 24 24"><circle cx="9" cy="12" r="1" /> <circle cx="9" cy="5" r="1" /> <circle cx="9" cy="19" r="1" /> <circle cx="15" cy="12" r="1" /> <circle cx="15" cy="5" r="1" /> <circle cx="15" cy="19" r="1" /></symbol><symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" /></symbol><symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6" /></symbol><symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6" /></symbol><symbol id="i-undo-2" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5" /> <path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11" /></symbol><symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /> <path d="M3 3v5h5" /> <path d="M12 7v5l4 2" /></symbol><symbol id="i-panel-right" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" /> <path d="M15 3v18" /></symbol><symbol id="i-picture-in-picture-2" viewBox="0 0 24 24"><path d="M21 9V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v10c0 1.1.9 2 2 2h4" /> <rect width="10" height="7" x="12" y="13" rx="2" /></symbol><symbol id="i-list" viewBox="0 0 24 24"><path d="M3 12h.01" /> <path d="M3 18h.01" /> <path d="M3 6h.01" /> <path d="M8 12h13" /> <path d="M8 18h13" /> <path d="M8 6h13" /></symbol><symbol id="i-image" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" ry="2" /> <circle cx="9" cy="9" r="2" /> <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" /></symbol><symbol id="i-type" viewBox="0 0 24 24"><polyline points="4 7 4 4 20 4 20 7" /> <line x1="9" x2="15" y1="20" y2="20" /> <line x1="12" x2="12" y1="4" y2="20" /></symbol><symbol id="i-square" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" /></symbol><symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14" /> <path d="M12 5v14" /></symbol><symbol id="i-save" viewBox="0 0 24 24"><path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" /> <path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7" /> <path d="M7 3v4a1 1 0 0 0 1 1h7" /></symbol><symbol id="i-folder-open" viewBox="0 0 24 24"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2" /></symbol><symbol id="i-play" viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3" /></symbol><symbol id="i-triangle-alert" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" /> <path d="M12 9v4" /> <path d="M12 17h.01" /></symbol><symbol id="i-toggle-right" viewBox="0 0 24 24"><rect width="20" height="12" x="2" y="6" rx="6" ry="6" /> <circle cx="16" cy="12" r="2" /></symbol><symbol id="i-message-square" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></symbol><symbol id="i-table-2" viewBox="0 0 24 24"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18" /></symbol><symbol id="i-refresh-cw" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /> <path d="M21 3v5h-5" /> <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /> <path d="M8 16H3v5" /></symbol><symbol id="i-sliders-horizontal" viewBox="0 0 24 24"><line x1="21" x2="14" y1="4" y2="4" /> <line x1="10" x2="3" y1="4" y2="4" /> <line x1="21" x2="12" y1="12" y2="12" /> <line x1="8" x2="3" y1="12" y2="12" /> <line x1="21" x2="16" y1="20" y2="20" /> <line x1="12" x2="3" y1="20" y2="20" /> <line x1="14" x2="14" y1="2" y2="6" /> <line x1="8" x2="8" y1="10" y2="14" /> <line x1="16" x2="16" y1="18" y2="22" /></symbol><symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /> <path d="M12 16v-4" /> <path d="M12 8h.01" /></symbol><symbol id="i-loader" viewBox="0 0 24 24"><path d="M12 2v4" /> <path d="m16.2 7.8 2.9-2.9" /> <path d="M18 12h4" /> <path d="m16.2 16.2 2.9 2.9" /> <path d="M12 18v4" /> <path d="m4.9 19.1 2.9-2.9" /> <path d="M2 12h4" /> <path d="m4.9 4.9 2.9 2.9" /></symbol></svg>
 <header class="app-header">
   <button id="hudbtn" title="The HUD you're editing: click to pick another, rename one, or add one">No HUD open</button>
   <button id="explore" class="ib" title="Open the HUD's folder" aria-label="Open the HUD's folder"><svg class="i" aria-hidden="true"><use href="#i-folder-open"/></svg></button>
@@ -672,7 +674,7 @@ const HUD = {
   // block says, and fades with its own opacity; both seen 2026-10-05)
   HudRadar: { name: 'Radar', square: true },
   HudLocation: { name: 'Location name', noPos: true, fixed: 'It sits under the radar, where the game puts it: move the radar to move it. Its font is ChatFont.' },
-  overview: { name: 'Map overview' },
+  overview: { name: 'Map overview', shownBy: () => !!live && live.panels.some(q => q === q.thing && q.key === 'specgui') }, // (drawn only while spectating)
   HudShoppingCart: { name: 'Buy zone icon', colours: [HIGHLIGHT], layoutColours: [['Icon', 'IconColor', 'HudIcon_Green']] },
   HudC4: { name: 'Bomb icon', colours: [HIGHLIGHT, WARN], layoutColours: [['Icon', 'IconColor', 'HudIcon_Green'], ['Flash', 'FlashColor', 'HudIcon_Red']] },
   HudDefuser: { name: 'Defuse kit icon', colours: [HIGHLIGHT], layoutColours: [['Icon', 'IconColor', 'HudIcon_Green']] },
@@ -1123,6 +1125,7 @@ async function loadAll() {
   }
   await Promise.all(SB_PAGES.map(uiFile));
   await Promise.all(KIND_RES().map(([p]) => uiFile(p))); // (colours by kind reads every window's own colours: the HUD's copies)
+  try { primeKinds(); } catch {} // (as opened: Global settings' ↺ and Undo)
   for (const path of [CVAR_CFG, VALVE_RC, CS_LOGO, SB_SELECT, ...BD_PIECES.map(([n]) => BD_PATH(n))]) { // the scoreboard's name colours and highlight, the logo, the windows' box, when the HUD has them
     const text = await readHud(path);
     if (text != null) files.push({ name: path, path, text, parsed: parse(''), bases: [] });
@@ -1495,7 +1498,7 @@ function thingInfo(t) {
   // seen live and after a restart in a fresh game, 2026-10-08)
   if (/^gamemenubutton2?$/.test(t.key)) return { kind: 'window', id: 'gamelogo', name: t.key.endsWith('2') ? 'Logo, second line' : 'Logo', file: C, title: t.key.endsWith('2') ? 2 : 1 };
   const win = WINDOWS[t.key];
-  if (win || t.frame) return { kind: 'window', id: t.key, name: win || prettify(t.name), file: schemeOf(t) };
+  if (win || t.frame) return { kind: 'window', id: t.key, name: win || prettify(t.name) || (/QueryBox$/i.test(t.cls || '') ? 'Question box' : /MessageBox$/i.test(t.cls || '') ? 'Message box' : 'Window'), file: schemeOf(t) };
   return null;
 }
 const prettify = n => n.replace(/^Hud/, '').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/_/g, ' ').trim() || n;
@@ -1545,13 +1548,15 @@ function buyPageFile(p, start = p) {
 }
 // A window's files that are open in the editor (↺ Reset window): its .res (the buy menu's is both sides'), the loading
 // screen's VAC one, the buy menu's main page, the class pages.
-const windowFiles = sel => [UI_RES[sel.info.id], sel.info.id === 'loadingdialog' && LOADING_VAC, BUY_PAGES[`buysubmenu_${sel.info.id.replace(/^buy_/, '')}`],
+const windowPaths = sel => [UI_RES[sel.info.id], sel.info.id === 'loadingdialog' && LOADING_VAC, BUY_PAGES[`buysubmenu_${sel.info.id.replace(/^buy_/, '')}`],
   ...(BUY_SIDES[sel.info.id] ? [...BUY_FILES(BUY_SIDES[sel.info.id]), BUY_LOADOUT, ...BUY_INFO.map(classPage)] : []),
-  ...(CLASS_PAGES[sel.info.id] || []).map(classPage)].filter(Boolean).map(p => F(p)).filter(Boolean);
+  ...(CLASS_PAGES[sel.info.id] || []).map(classPage)].filter(Boolean);
+const windowFiles = sel => windowPaths(sel).map(p => F(p)).filter(Boolean);
 // The game's window: its files as the game has them (every part, the added ones gone), one Ctrl+Z. Reset window goes back
 // to how the HUD was opened, which for a HUD that had the window already is its own look.
-function toGameWindow(fs) {
-  const change = fs.filter(f => f.text !== gameOf(f.name).text);
+async function toGameWindow(sel) {
+  await Promise.all(windowPaths(sel).map(p => uiFile(p).catch(() => null)));
+  const fs = windowFiles(sel).filter(f => gameOf(f.name)?.text != null), change = fs.filter(f => f.text !== gameOf(f.name).text);
   if (!change.length) return status('This window is the game\'s already.');
   if (!confirm('Put this whole window back as the game has it? Every part goes back to the game\'s place and colours, and what was added to it goes (Ctrl+Z brings it all back).')) return;
   const group = burstGroup();
@@ -1569,7 +1574,7 @@ function toGameWindow(fs) {
 function gameWindowRows(sel) {
   const fs = windowFiles(sel).filter(f => gameOf(f.name)?.text != null);
   if (!fs.length) return [];
-  const go = el('button', { className: 'ghost', textContent: 'The game\'s window', onclick: () => toGameWindow(fs) });
+  const go = el('button', { className: 'ghost', textContent: 'The game\'s window', onclick: () => toGameWindow(sel) });
   const row = el('div', { className: 'row action' });
   row.append(go);
   row.dataset.q = 'game window default start over reset';
@@ -1797,7 +1802,7 @@ const CMD_PRESETS = [['say !r', 'Restart'], ['say !rtv', 'Rock the vote'], ['say
 // Every button's place, the ones the game shows only now and then too (Spectate, VIP), which can't be clicked in the preview.
 function buttonPlaceRows(f, thing = null) {
   const shown = b => !!live && !!thing && live.panels.some(q => q.thing === thing && q !== thing && q.w > 0 && q.x < live.W && q.x + q.w > 0 && (q.name || '').toLowerCase() === b.toLowerCase());
-  return f.parsed.sections.filter(s => s.path.length === 2 && /button$/i.test(layoutProps(f, s.path[1]).controlname || ''))
+  return f.parsed.sections.filter(s => s.path.length === 2 && /button$/i.test(layoutProps(f, s.path[1]).controlname || '') && !partHidden(f, s.path[1]))
     .flatMap(s => {
       const b = s.path[1], p = layoutProps(f, b), place = [numRow(f, b, 'xpos', `${prettify(b)}: X`, p.xpos), numRow(f, b, 'ypos', `${prettify(b)}: Y`, p.ypos)];
       return shown(b) ? place : [...place, numRow(f, b, 'wide', `${prettify(b)}: width`, p.wide), numRow(f, b, 'tall', `${prettify(b)}: height`, p.tall)];
@@ -2238,7 +2243,8 @@ const LOADING_SEL = () => ({ thing: { name: 'LoadingDialog', key: 'loadingdialog
 const LOADING_TWIN = { [UI_RES.loadingdialog]: LOADING_VAC, [LOADING_VAC]: UI_RES.loadingdialog };
 const loadingTwin = f => (f && LOADING_TWIN[f.name] && F(LOADING_TWIN[f.name])) || null;
 // a number being typed in the panel or a card (a re-render would take it away)
-function typingInCard() { const a = activeEl(); return !!a && a.tagName === 'INPUT' && !!a.closest('#list, .nx-pin'); }
+const isTyping = a => !!a && (a.isContentEditable || a.tagName === 'TEXTAREA' || a.tagName === 'SELECT' || (a.tagName === 'INPUT' && !/^(checkbox|radio|range|button|color|submit|reset|file)$/.test(a.type)));
+function typingInCard() { const a = activeEl(); return isTyping(a) && !!a.closest('#list, .nx-pin'); }
 let loadingVac = false; // the box as VAC-secured servers show it (its file is the one clicked parts write first)
 let loadingHeld = null, loadingAsked = 0; // what the plugin was last asked for ('show', 'vac' or null: closed), and when
 const loadingUp = () => !!live && live.panels.some(p => p === p.thing && p.key === 'loadingdialog');
@@ -2598,7 +2604,7 @@ function customRows(id, lay = F(L)) {
     const pick = el('input', { type: 'file', accept: 'image/png,image/jpeg,image/gif,image/webp', hidden: true });
     pick.onchange = async () => {
       if (!pick.files[0]) return;
-      try { status('Making the picture...'); const old = p.image; save(lay, 'image', (await importPicture(pick.files[0])).image, id); dropPicture(old); }
+      try { status('Making the picture...'); const old = layoutProps(lay, id).image; save(lay, 'image', (await importPicture(pick.files[0])).image, id); dropPicture(old); }
       catch (err) { status(`Couldn't use that picture: ${err.message}`); }
     };
     const r = el('div', { className: 'row action' });
@@ -2925,9 +2931,10 @@ function scoreboardSections(sel, shownFonts) {
   // the dead/MVP icon) too, which can't be clicked in the preview
   // (read from the CT list: the list's place is where the rows start; a template's own Y does nothing, NOTES)
   const cy = v => { const m = /^c([+-]?\d+)$/i.exec(v || ''); return m ? +m[1] : null; }, top = cy(layoutProps(f, 'CTPlayerArea').ypos);
+  const y0 = top === null ? {} : Object.fromEntries(ROW_PARTS.map(b => [b, cy(layoutProps(f, b).ypos)]));
   if (top !== null) rows.splice(1, 0, inputRow('Rows start at', top, v => {
-    const d = +v - cy(layoutProps(f, 'CTPlayerArea').ypos);
-    if (d) for (const b of ROW_PARTS) { const y = cy(layoutProps(f, b).ypos); if (y !== null) save(f, 'ypos', `c${y + d}`, b); }
+    const d = +v - top;
+    if (Number.isFinite(d)) for (const b of ROW_PARTS) { const y = y0[b]; if (y !== null && y !== undefined) save(f, 'ypos', `c${y + d}`, b); }
     refreshSoon();
   }, { type: 'number', step: 1, title: 'From the centre. Both teams\' first rows and the list under them move together' }));
   // the player rows' columns: the game puts each row's avatar, name, icon and numbers where these row templates are
@@ -2957,6 +2964,14 @@ function rowHeightRow(f, team) {
 
 async function select(sel, into = null) { // (into: a pinned card it opens in, from that card's own links)
   also = []; // parts Ctrl+clicked with the last selection
+  // a list row drawn before the last panel read holds that read's panel: the one there now (the poll finds open cards'
+  // panels again only when the list changes, so a stale one would say "not on screen now" and outline the wrong place)
+  const fresh = x => {
+    if (!x || !live || !x.thing || live.panels.includes(x.thing)) return x;
+    const t = live.panels.find(p => p === p.thing && p.key === x.thing.key && (x.thing.key || p.cls === x.thing.cls)), same = q => q && live.panels.find(p => p.thing === t && p.key === q.key && p.cls === q.cls);
+    return t ? { ...x, thing: t, info: thingInfo(t) || x.info, control: same(x.control) || x.control, node: same(x.node) || x.node } : x;
+  };
+  sel = fresh(sel);
   // loaded before it becomes the selection: the panel poll copies the selection, and a copy made while this waited
   // would never get the file
   if (sel) sel.res = await uiFile(resPath(sel));
@@ -2967,6 +2982,7 @@ async function select(sel, into = null) { // (into: a pinned card it opens in, f
     await uiFile(classPage(n));
     if (!classGame[n] && host) try { const t = await call('vanilla', `${n}.res`); classGame[n] = { text: t, parsed: parse(t), bases: [] }; } catch {}
   }));
+  if (sel) { const res = sel.res; sel = fresh(sel); sel.res = res; } // (a panel read during the waits: the current one)
   const pin = sel && layoutMode === 'float' ? (into && pins.includes(into) ? into : pins.find(p => samePart(p.sel, sel))) : null;
   if (pin) { pin.sel = selected = sel; holdShown(); render(); drawBoxes(); return; } // (picked again: its pinned card is the one in use)
   selected = cardSel = sel;
@@ -3389,7 +3405,7 @@ function rangeRow(label, value, onChange, id = null, dflt = null) {
 
 function noteRow(text) {
   const row = el('div', { className: 'row note meta' });
-  row.append(renameable(text));
+  row.append(el('span', { textContent: text })); // (help, not a name: not renamable)
   row.dataset.q = '';
   return row;
 }
@@ -3729,6 +3745,16 @@ const kindAlpha = (own, top, a) => top ? Math.max(1, Math.min(255, Math.round(ow
 const WHERE = [[C, 'In game'], [S, 'Menus'], [CH, 'Chat']];
 const placeWords = p => !p.sub ? `${p.key} (${WHERE.find(([s]) => s === p.scheme)[1].toLowerCase()})`
   : /^borders$/i.test(p.sub[0]) ? `${p.sub[1]}: ${p.sub[2]} line ${p.sub[3]}` : `${p.path.split('/').pop()}: ${p.sub.join(' / ')} ${p.key}`;
+// Each kind's colours as the HUD was opened (↺ and Global settings' Undo go back to them), taken as it loads
+function primeKinds() {
+  if (!F(C)) return;
+  const all = colourValues();
+  for (const [kind] of KINDS) {
+    const mine = all.filter(p => p.kind === kind && shows(p));
+    for (const p of mine) opened[`kind|${p.id}`] ??= p.value;
+    opened[`kinds|${kind}`] ??= mine.map(p => p.value).join();
+  }
+}
 function kindRows() {
   const all = colourValues(), rows = [], warn = el('div', { className: 'row note meta' });
   const showHard = (l = colourValues()) => { const hard = readability(l); warn.hidden = !hard.length;
@@ -3770,7 +3796,7 @@ function kindRows() {
     void fold;
     rows.push(row);
   }
-  return [warn, ...rows];
+  return [...rows, warn];
   // noteRow('Each colour keeps its own see-through amount, so see-through things stay see-through. A kind changes only what\'s listed under it: things of other kinds that shared a colour with it keep theirs.'),
   // noteRow('In no kind (change them where they are): team colours, greyed-out text, tooltips, the main menu logo, the bomb screen, your own row on the scoreboard, pictures, and colours nothing in CS:S draws (All other colours).')
 }
@@ -4115,7 +4141,13 @@ function borderRows(file, name) {
   const sides = el('div', { className: 'row sides' }), opts = el('div', { className: 'opts' }), on = () => sidesOf(cur);
   const boxes = {}, undo = undoArrow(`${file}/${name}/sides`, on(), v => v, v => { for (const s of SIDES) boxes[s].checked = cur.on[s] = v.split(', ').includes(s); write(); }, true);
   opts.append(...['Top', 'Right', 'Bottom', 'Left'].map(s => {
-    const l = el('label'), box = boxes[s] = el('input', { type: 'checkbox', checked: cur.on[s], onchange: () => { cur.on[s] = box.checked; undo.update(on()); write(); refreshSoon(); } }); // (its colour row comes and goes)
+    const l = el('label'), box = boxes[s] = el('input', { type: 'checkbox', checked: cur.on[s], onchange: () => {
+      cur.on[s] = box.checked;
+      // (a side ticked on a fully see-through border would draw nothing: it gets the border's colour, solid; the
+      // see-through sides keep theirs)
+      if (box.checked && toRgba(cur.side[s] || cur.colour)[3] === 0) cur.side = { ...cur.side, [s]: [...toRgba(cur.side[s] || cur.colour).slice(0, 3), 255].join(' ') };
+      undo.update(on()); write(); refreshSoon();
+    } }); // (its colour row comes and goes)
     l.append(box, s);
     return l;
   }));
@@ -4230,7 +4262,7 @@ function resRows(f, block, defaults, schemeFile, ctl) {
     const deflt = CONTROL_FONTS[ctl] && CONTROL_FONTS[ctl][0][1];
     // (its font goes under Fonts, its alignment under Layout: see selectionSections)
     const tag = (r, cat, head) => { Object.assign(r.dataset, { cat, head }); rows.push(r); };
-    if (/^hudeditor_/i.test(block) && (p.font || deflt)) tag(pickRow('Font group', p.font || deflt, () => fontNames(schemeFile), v => save(f, 'font', v, block),
+    if (/^hudeditor_/i.test(block) && (p.font || deflt)) tag(pickRow('Font group', p.font || deflt, () => fontNames(schemeFile), v => { save(f, 'font', v, block); writing.then(render); },
       { id: `${f.name}/${block}/font`, note: `A font of ${schemeFile}: parts with the same one change together (its look is below)`, keys: ['font'], dflt: g.font || deflt || null }), 'font', 'Its font');
     else if (!CODE_FONTS[block.toLowerCase()] && (p.font || deflt))
       for (const r of separateFontRows(schemeFile, p.font || deflt, g.font || deflt, (v, group) => save(f, 'font', v, block, group), `${f.name}/${block}/font`, ['font'])) tag(r, 'font', 'Separate font');
@@ -4362,7 +4394,7 @@ function globalFontSections() {
     addFontFile(FONT_FILES.map(([f]) => f).filter(F), fam => { symRow.children[1].set(fam); globalSym = fam; }, 'Use as symbol font makes it the symbol font');
   } });
   return [['Every text font', every, 'font'], ['Symbol font (arrows, ticks, window buttons)', symbol, 'font'],
-    ...FONT_FILES.map(([file, where]) => [{ 'in game': 'In-game fonts', menus: 'Menu fonts', chat: 'Chat fonts' }[where], fontNames(file).map(n => fontFold(file, n, '')), 'font']).filter(([, rows]) => rows.length)];
+    ...FONT_FILES.map(([file, where]) => [{ 'in game': 'In-game fonts', menus: 'Menu fonts', chat: 'Chat fonts' }[where], fontNames(file).map(n => fontFold(file, n, where)), 'font']).filter(([, rows]) => rows.length)];
 }
 // (the old list's All fonts, kept for the self-check: the same sections in one fold)
 let openAllFonts = false;
@@ -4635,14 +4667,15 @@ function inputRow(label, value, onChange, attrs = {}) {
 }
 
 // On/off: a tick box at the right (the whole row clicks it). row.set(on) shows a new value.
-function toggleRow(label, on, onChange, note = '', id = null, dflt = null) {
+function toggleRow(label, on, onChange, note = '', id = null, dflt = null, info = '') { // (info: an ⓘ by the name, its text on hover)
   const row = el('label', { className: 'row toggle' }), box = el('input', { type: 'checkbox' }), word = v => v ? 'on' : 'off';
   const undo = undoArrow(id || `${rowScope}|${label}`, word(on), v => v, v => { row.set(v === 'on'); onChange(on); }, true);
   row.set = v => { on = v; box.checked = v; undo.update(word(on)); };
   box.onchange = () => { row.set(box.checked); onChange(on); };
   const name = el('div'), meta = el('div', { className: 'meta' });
   name.append(renameable(label));
-  if (note) { meta.append(renameable(note)); row.title = note; }
+  if (info) { const i = el('span', { className: 'infoi', title: info, onclick: e => e.preventDefault() }); i.setAttribute('aria-label', info); i.innerHTML = '<svg class="i" aria-hidden="true"><use href="#i-info"/></svg>'; name.append(i); } // (a click to read it isn't the tick's)
+  if (note) { meta.append(renameable(note)); row.title = info ? `${note}. ${info}` : note; }
   row.append(name, box, undo, meta);
   row.set(on);
   row.dataset.q = label.toLowerCase();
@@ -4655,11 +4688,12 @@ function toggleRow(label, on, onChange, note = '', id = null, dflt = null) {
 // 10-04: SWEEP.md): underline and strike-through draw only without anti-aliasing (with it, only a mark in the spaces),
 // "rotary" is a line through the middle; Characters and Custom change nothing to see, so + doesn't offer them ('hide':
 // shown only when a font has them already, to be taken out).
-const FONT_FLAGS = [['outline', 'Outline', 'flag', '1', 'Turns Additive off'], ['dropshadow', 'Drop shadow', 'flag', '1', 'Turns Additive off'],
-  ['additive', 'Additive', 'flag', '1', 'Adds its light to what\'s behind (not a glow: Blur is)'], ['antialias', 'Anti-aliasing', 'flag', '1', 'Smooth edges']];
+const FONT_FLAGS = [['outline', 'Outline', 'flag', '1', 'Turns Additive off'], ['dropshadow', 'Drop shadow', 'flag', '1', 'Turns Additive and Anti-aliasing off: it only fills fully clear pixels by a letter, which smooth edges leave few of'],
+  ['additive', 'Additive', 'flag', '1', 'Adds its light to what\'s behind (not a glow: Blur is)', '', 'Makes the text slightly see-through: its light is added to what\'s behind it instead of covering it, so it melts into a bright background (seen on the jhud text, CenterPrintText; the same on every text using this font)'],
+  ['antialias', 'Anti-aliasing', 'flag', '1', 'Smooth edges']];
 const FONT_EXTRA = [['italic', 'Italic', 'flag', '1'], ['underline', 'Underline', 'flag', '1', 'Turns Anti-aliasing off: it only draws without'],
   ['strikeout', 'Strike-through', 'flag', '1', 'Turns Anti-aliasing off: it only draws without'],
-  ['scanlines', 'Scan lines', 'num', '2', 'Dark lines every this many pixels (not with Additive)'], ['range', 'Characters', 'text', '0x0000 0x017F', 'Unicode range it covers (nothing changes to see)', 'hide'],
+  ['scanlines', 'Scan lines', 'num', '2', 'Dark lines every this many pixels: only on fonts with Additive on'], ['range', 'Characters', 'text', '0x0000 0x017F', 'Unicode range it covers (nothing changes to see)', 'hide'],
   ['symbol', 'Symbol font', 'flag', '1', 'For icon fonts: letters become symbols'], ['rotary', 'Line through', 'flag', '1', 'Across the middle, smooth edges kept'],
   ['custom', 'Custom', 'flag', '1', 'Does nothing in CS:S', 'hide']];
 
@@ -4823,15 +4857,26 @@ function fontRows(file, font) {
   // underline and strike-through only draw without anti-aliasing (checked in game): turn that off for them
   const needs = key => {
     if ((key === 'outline' || key === 'dropshadow') && +(p.additive ?? 0) > 0) { flags.additive.set(false); put('additive', '0'); p.additive = '0'; }
-    if ((key === 'underline' || key === 'strikeout') && +(p.antialias ?? 0) > 0) { flags.antialias.set(false); put('antialias', '0'); p.antialias = '0'; }
+    if ((key === 'underline' || key === 'strikeout' || key === 'dropshadow') && +(p.antialias ?? 0) > 0) { flags.antialias.set(false); put('antialias', '0'); p.antialias = '0'; }
   };
-  const rowFor = ([key, label, kind = 'flag', , note = '']) => kind !== 'flag'
+  // what does nothing on this font as it is, greyed (with why): Scan lines without Additive
+  const greyed = () => {
+    const noAdd = !(+(p.additive ?? 0) > 0), why = 'Scan lines show only on fonts with Additive on (seen in game): tick Additive first';
+    for (const r of [scanRow, ...menu.querySelectorAll('[data-k="scanlines"]')].filter(Boolean)) {
+      r.classList.toggle('greyed', noAdd);
+      for (const i of r.matches('button') ? [r] : r.querySelectorAll('input, button:not(.undo):not(.unrename)')) i.disabled = noAdd;
+      r.title = noAdd ? why : (r.dataset.tip || '');
+    }
+  };
+  let scanRow = null;
+  const rowFor = ([key, label, kind = 'flag', , note = '', , info = '']) => kind !== 'flag'
     ? inputRow(label, p[key] ?? '', val => put(key, val), { ...(kind === 'num' ? { type: 'number', step: 1, min: 0 } : {}), title: note, undoId: id(key), dflt: dv(key) })
     : flags[key] = toggleRow(label, +p[key] > 0, on => {
       put(key, on ? '1' : '0');
       if (on) needs(key);
       p[key] = on ? '1' : '0';
-    }, note, id(key), gp ? +(gp[key] ?? 0) > 0 : null);
+      greyed();
+    }, note, id(key), gp ? +(gp[key] ?? 0) > 0 : null, info);
   // on/off settings as tick boxes in two columns (Effects); + lists what the font can also have and adds it (switched
   // on, or a starting value): ticks join Effects, numbers and text go under it
   const effects = el('div', { className: 'row flags' }), opts = el('div', { className: 'opts' }), isFlag = x => (x[2] || 'flag') === 'flag';
@@ -4839,29 +4884,34 @@ function fontRows(file, font) {
   effects.append(el('div', { textContent: 'Effects' }), opts);
   effects.dataset.q = FONT_FLAGS.map(x => x[1]).join(' ').toLowerCase();
   const extras = FONT_EXTRA.filter(x => !isFlag(x) && x[0] in p).map(rowFor);
+  scanRow = extras.find((r, i) => FONT_EXTRA.filter(x => !isFlag(x) && x[0] in p)[i][0] === 'scanlines') || null;
+  if (scanRow) scanRow.dataset.tip = scanRow.title || '';
   let last = extras[extras.length - 1] || effects;
   const add = el('div', { className: 'row addkey' }), plus = el('button', { className: 'plus', textContent: '+', title: 'Add a font option' });
   plus.setAttribute('aria-label', 'Add a font option');
   plus.setAttribute('aria-expanded', 'false');
   const menu = el('div', { className: 'chips', hidden: true });
-  const fill = () => menu.replaceChildren(...FONT_EXTRA.filter(x => !(x[0] in p) && x[5] !== 'hide').map(x => el('button', { textContent: x[1], title: x[4] || '', onclick: () => {
+  const fill = () => { menu.replaceChildren(...FONT_EXTRA.filter(x => !(x[0] in p) && x[5] !== 'hide').map(x => { const b = el('button', { textContent: x[1], title: x[4] || '', onclick: () => {
     p[x[0]] = x[3];
     put(x[0], x[3]);
     if (isFlag(x)) needs(x[0]);
     const r = rowFor(x);
     if (isFlag(x)) opts.append(r); else { last.after(r); last = r; }
+    if (x[0] === 'scanlines') { scanRow = r; r.dataset.tip = r.title || ''; }
     fill();
     if (!menu.childElementCount) { menu.hidden = true; plus.disabled = true; }
-  } })));
+  } }); b.dataset.k = x[0]; b.dataset.tip = x[4] || ''; return b; })); greyed(); };
   plus.onclick = () => { menu.hidden = !menu.hidden; plus.setAttribute('aria-expanded', String(!menu.hidden)); };
   fill();
   plus.disabled = !menu.childElementCount;
   add.append(el('div', { className: 'addhead', textContent: 'Font options' }), plus, menu);
   add.dataset.q = FONT_EXTRA.map(x => x[1]).join(' ').toLowerCase();
   // the size: pixels for a range of heights, or (no range) 480-line units that grow with the screen
-  const size = inputRow('Size', p.tall || '', val => put('tall', val), { type: 'number', step: 1, undoId: id('tall'), dflt: dv('tall') });
-  if (/^\d+$/.test(p.tall || '')) size.lastElementChild.textContent = p.yres ? `Pixels, for ${p.yres.trim().replace(/\s+/, 'p to ')}p`
-    : fixedFont(file, font) ? 'Pixels, the same at every resolution (menus don\'t scale it)' : `Scales with resolution: ${Math.round(entryPx(p, H, false, fontBase(file, font)))} px at ${H}p`;
+  // (its note says the size in pixels now: written again as the size changes)
+  const sizeNote = () => { if (/^\d+$/.test(p.tall || '')) size.lastElementChild.textContent = p.yres ? `Pixels, for ${p.yres.trim().replace(/\s+/, 'p to ')}p`
+    : fixedFont(file, font) ? 'Pixels, the same at every resolution (menus don\'t scale it)' : `Scales with resolution: ${Math.round(entryPx(p, H, false, fontBase(file, font)))} px at ${H}p`; };
+  const size = inputRow('Size', p.tall || '', val => { put('tall', val); p.tall = val; sizeNote(); }, { type: 'number', step: 1, undoId: id('tall'), dflt: dv('tall') });
+  sizeNote();
   // one entry per resolution (see splitText), with a caution when screen sizes share one size in pixels
   const text = !SYMBOL_FACES.has((p.name || '').toLowerCase()) && !SYMBOL_BLOCKS.includes(font.toLowerCase()) && !(+(p.symbol || 0) > 0), shared = text ? sharedHeights(f, font) : [];
   const split = el('div', { className: 'row action' }), done = text && isSplit(f, font);
@@ -4969,7 +5019,7 @@ function backgroundRows() {
   add.append(pick, el('button', { className: 'primary', textContent: 'Import a picture…', onclick: () => pick.click() }),
     el('button', { className: 'ghost', textContent: 'The game\'s picture', onclick: () => setBackground(null) }));
   add.dataset.q = 'background picture image wallpaper import';
-  return [add, noteRow('PNG, JPG, WebP, or an animated GIF or WebP, which moves at its own speed (up to 120 frames: 25 to 30 a second looks smooth). It keeps the picture\'s own pixels, cropped to fill the screen, and shows straight away. A still one is uncompressed (6 MB at 1080p); an animated one is compressed, about 1 MB a frame at 1080p.')];
+  return [add, noteRow('PNG, JPG, WebP, or an animated GIF or WebP, which moves at its own speed (up to 120 frames: 25 to 30 a second looks smooth). It keeps the picture\'s own pixels, cropped to fill the screen, and shows straight away. A still one is uncompressed (about 20 MB at 1080p, a copy for each screen shape); an animated one is compressed, about 1 MB a frame at 1080p.')];
 }
 // The background as a thing of its own (the list at the main menu, or a click on the empty background there).
 const BG_SEL = () => ({ thing: { name: 'MenuBackground', key: 'menubackground' }, info: { kind: 'window', id: 'menubg', name: 'Menu background', file: C, tag: 'Picture' }, control: null });
@@ -5464,7 +5514,8 @@ async function addStartupBackground(name, tex) {
 const mine = rows => { for (const r of rows) r.dataset.own = '1'; return rows; };
 function selectionSections(sel) {
   const groups = { show: [], colour: [], font: [], border: [], layout: [], custom: [], missing: [], other: [] }, add = (kind, title, rows) => groups[kind].push([title, rows]);
-  if (sel.info.id === 'global') return globalFontSections();
+  if (sel.info.id === 'global') return [...(F(C) ? [['Colours by kind', [...kindRows(),
+    noteRow('Each changes every colour of its kind across the HUD, windows and menus at once; each keeps its own see-through amount. Team colours, the logo and pictures are left alone: change them on the part.')], 'colour']] : []), ...globalFontSections()];
   const { info, control } = sel, fonts = fontsOf(sel), own = sel.res && ownBlock(sel);
   // the main menu's background and logo: their own few settings
   if (info.id === 'menubg') return [['Menu background', backgroundRows(), 'other']];
@@ -5501,6 +5552,13 @@ function selectionSections(sel) {
     add('other', `${info.name}: settings`, [...hudSettingRows(info.id, info.hud), ...(info.hud.extraCvars ? [...cvarRows(info.hud.extraCvars),
       noteRow('A game setting: the HUD keeps it in cfg/hudeditor_colours.cfg, which the game runs at startup. A player\'s own autoexec.cfg runs after it and wins.')] : [])]);
     if (info.id === 'HudChat' && sel.res) add('layout', 'Chat: space inside', chatPaddingRows(sel));
+    // the chat's scroll bar shows only once it holds more lines than fit (it can't be clicked before): its width and
+    // colours here too (the same rows as on the scroll bar itself)
+    if (info.id === 'HudChat' && F(CH) && !control) {
+      add('colour', 'Colours: the chat\'s scroll bar', [noteRow('The chat shows its scroll bar once it holds more lines than fit, even while it is closed. Keep it see-through (low opacity) or it stays on screen.'),
+        ...schemeRows(CH, CONTROLS.find(([c]) => c === 'ScrollBar')[2])]);
+      add('layout', 'Chat: scroll bar', [scrollWideRow(CH)].filter(Boolean));
+    }
     // parts moved off screen (the chat's Filters button) can't be clicked any more
     add('show', 'Show or hide', showHideRows(sel));
     add('missing', 'HUD parts HudLayout leaves out', missingRows(F(L)));
@@ -5531,7 +5589,7 @@ function selectionSections(sel) {
     // the MOTD's parts: its message boxes are empty (so not there to click) until a server sends one
     if (info.id === 'info' && sel.res) add('layout', 'Part places', ['MessageTitle', 'HTMLMessage', 'TextMessage', 'ok'].flatMap(b => {
       const p = layoutProps(sel.res, b), what = { MessageTitle: 'Title', HTMLMessage: 'Web page message', TextMessage: 'Text message', ok: 'OK' }[b];
-      return Object.keys(p).length ? POS.map(([k, l]) => numRow(sel.res, b, k, `${what}: ${l.replace(' position', '')}`, p[k])) : [];
+      return Object.keys(p).length && !partHidden(sel.res, b) ? POS.map(([k, l]) => numRow(sel.res, b, k, `${what}: ${l.replace(' position', '')}`, p[k])) : []; // (hidden: its place is kept aside)
     }));
     }
     // (the buy menu's go into BuyMenu.res, both sides and every page: a main page button's own file is its page's)
@@ -5566,7 +5624,10 @@ function selectionSections(sel) {
     const hf = info.hud.scheme || C, missing = (HUD_FONTS[info.id] || []).filter(n => F(hf) && !hasFont(hf, n));
     add('font', 'Font the game is missing', missing.map(n => {
       const b = el('button', { textContent: `Add ${n} to the HUD` });
-      b.onclick = () => { save(F(hf), n, [['1', [['name', 'Verdana'], ['tall', '9'], ['weight', '700'], ['antialias', '1']]]], ['Fonts']); refreshSoon(); };
+      b.onclick = () => {
+        const dv = fontVariants(F(hf), 'Default'), d = dv && dv.size ? dv.get(activeVariant(dv, live ? live.H : 1080)) : null; // (what "every text font" set)
+        save(F(hf), n, [['1', [['name', (d && d.name) || 'Verdana'], ['tall', '9'], ['weight', (d && d.weight) || '700'], ['antialias', '1']]]], ['Fonts']); refreshSoon();
+      };
       const r = noteRow(`The game draws this with the font ${n}, which it doesn't come with, so it uses a stand-in. Add it to set its look. `);
       r.append(b);
       return r;
@@ -5645,6 +5706,7 @@ onPage('pointerup', () => {
 }, true);
 
 function render() {
+  try { shownKey = screenKey(); } catch {}
   if (pointerDown) { renderOnRelease = true; return; }
   // a row drawn now would show the value from before an edit still waiting to be written (a tick box would untick)
   if (waiting.size) { renderAfterSave = true; return; }
@@ -5839,7 +5901,7 @@ function elementCards() {
   out.push(card(live ? 'On screen now' : 'HUD parts', parts));
   const added = F(L) && !inMap() ? addedList() : [];
   if (added.length) out.push(card('Added to the HUD', [...added, noteRow('In a map (Test server) they show; pick a HUD part there to add more (its Add custom tab).')]));
-  const rest = otherParts(things).map(t => partRow(t));
+  const rest = (inMap() ? otherParts(things) : []).map(t => partRow(t)); // (in a map only, as Hide / Show)
   if (rest.length) {
     const d = el('details');
     d.open = openOther;
@@ -5906,7 +5968,7 @@ function buildSelection(box, tabs, pin = null) {
 // colours and fonts are in, its pictures. Other parts' changes in those files are kept with them (whole files).
 function partPaths(sel) {
   const fs = new Set(), add = f => { const x = typeof f === 'string' ? F(f) : f; if (x) fs.add(x); };
-  if (sel.info.id === 'global') for (const [n] of FONT_FILES) add(n);
+  if (sel.info.id === 'global') { for (const [n] of FONT_FILES) add(n); add(L); for (const [path] of KIND_RES()) add(path); }
   else {
     add(sel.res);
     if (sel.info.kind === 'window') for (const f of windowFiles(sel)) add(f);
@@ -5932,7 +5994,7 @@ async function savePart(sel) {
     const gone = await dropUnused(); // (what Save HUD takes out first: pictures nothing uses...)
     const [saved, left] = (await call('savesome', '', [...partPaths(sel), ...gone].join('\n'))).split('\t').map(Number);
     if (!left) setDirty(false);
-    const name = sel.info.id === 'global' ? 'the fonts' : shownName(sel);
+    const name = sel.info.id === 'global' ? 'Global settings' : shownName(sel);
     status(saved ? `Saved ${name} (${saved} file${saved > 1 ? 's' : ''})${left ? `. ${left} other file${left > 1 ? 's are' : ' is'} still unsaved: Save HUD keeps everything.` : '. Nothing else is unsaved.'}`
       : `Nothing unsaved in ${name}'s files.`);
   } catch (err) { status(`Couldn't save: ${err.message}`); }
@@ -5993,6 +6055,7 @@ function tabCards(sections, sel, tabs) {
 }
 // Float's simple settings: the part's own colours (and opacity), then its font and the font's size, named for what they change.
 function quickRows(sections, sel) {
+  if (sel.info.id === 'global') return []; // (its tabs: colours by kind and every font)
   const rows = [], key = r => ((r.dataset && r.dataset.q) || '').split(' ')[0], all = sections.flatMap(s => s[1]);
   const first = sections.find(s => s[2] === 'colour' && s[1].some(r => r.classList.contains('colour')));
   if (first) {
@@ -6031,10 +6094,10 @@ function resetButton(sel, sections, quick = []) {
   const what = part || sel.info.kind === 'hud' && !sel.control ? 'part' : win ? 'window' : 'all';
   const b = iconButton('rotate-ccw', part ? 'Reset: this part\'s own settings back to how they were when the HUD was opened (the colours it shares with others stay)'
     : win ? `Reset: this window back to how it was when the HUD was opened, every setting here${UI_RES[sel.info.id] ? ' and every part in it' : ''}`
-    : sel.info.id === 'global' ? 'Reset: every font back to how it was when the HUD was opened'
+    : sel.info.id === 'global' ? 'Reset: every font and colour here back to how it was when the HUD was opened'
     : 'Reset: every setting here back to how it was when the HUD was opened', () => {
-      const undos = sel.info.id === 'global' ? [] : rows.filter(r => !part || r.dataset.own).flatMap(r => [...r.querySelectorAll('.undo:not(.off)')]);
-      // (Global settings: every scheme's fonts and font files as opened, whatever was built on screen; colours stay)
+      const undos = rows.filter(r => sel.info.id === 'global' ? r.classList.contains('colour') : !part || r.dataset.own).flatMap(r => [...r.querySelectorAll('.undo:not(.off)')]);
+      // (Global settings: its colours' ↺, then every scheme's fonts and font files as opened, whatever was built on screen)
       const asOpened = f => ({ ...f, text: f.opened, parsed: parse(f.opened) });
       const fontBack = sel.info.id !== 'global' ? [] : FONT_FILES.map(([n]) => F(n)).filter(f => f && f.opened != null && f.text !== f.opened
         && ['Fonts', 'CustomFontFiles'].some(b => { const o = topBlock(asOpened(f), b), c = topBlock(f, b); return !o !== !c || (o && c && gameBlock(asOpened(f), b) !== gameBlock(f, b)); }));
@@ -6110,7 +6173,7 @@ function defaultButton(sel) {
   const b = iconButton('factory', !d ? 'The game\'s default: none for this one (↺ puts it back as it was when the HUD was opened)'
     : d.fs ? 'The game\'s default: the whole window as the game has it (what was added to it goes; Ctrl+Z brings yours back)'
     : 'The game\'s default: this part\'s own settings as the game has them (the colours and fonts it shares with others stay; Ctrl+Z brings yours back)', () => {
-      if (d.fs) return toGameWindow(d.fs);
+      if (d.fs) return toGameWindow(sel);
       const game = gameBlock(d.g, d.block), group = burstGroup();
       let same = false;
       commit(d.f, `${d.f.name}/${d.block}/gamedefault`, () => { const next = withGameBlock(d.f, d.block, game); same = next === d.f.text; return next; }, group);
@@ -6317,6 +6380,7 @@ function viewBar() {
   $('globalbtn').disabled = !files.length;
   loadBtn(loading);
   $('elembtn').hidden = !files.length || !live;
+  if ($('elembtn').hidden && nxPop && nxPop.owner === $('elembtn')) closeNxPop();
   const hidden = Object.keys(HUD).filter(id => canHide(id) && isHidden(id) && !DEV_OUT.has(id)).length
     + (F(C) && menuUp() ? LOGO_KEYS.filter((_, i) => !logoShown(i + 1)).length : 0);
   $('hiddencount').hidden = !hidden;
@@ -6386,7 +6450,8 @@ function eyeRowBtn(name, title, on, toggle) {
 }
 // Speed & timer (the test game): its sample texts, each shown or not
 const TEXT_ROWS = [[1, 'Timer', 'Timer box (font HudHintText) and right-side text (HudHintTextSmall)'], [8, 'Record times', 'Record times in the top left corner (font CenterPrintText, ClientScheme)'],
-  [2, 'Small speed', 'Speed in the centre print (font Trebuchet24, SourceScheme)'], [4, 'Large speed', 'Large speed text under it, like jhud (font CenterPrintText, ClientScheme)']];
+  [2, 'Small speed', 'Speed in the centre print (font Trebuchet24, SourceScheme)'], [4, 'Large speed', 'Large speed text under it, like jhud (font CenterPrintText, ClientScheme)'],
+  [16, 'Chat lines', 'A chat line every few seconds (font ChatFont, ChatScheme): fills the chat, so its scroll bar shows (Chat on in the bar to click it)']];
 const textsPop = () => [el('h3', { textContent: 'Sample texts' }), ...TEXT_ROWS.map(([bit, name, title]) => eyeRowBtn(name, title, !!(texts & bit), () => toggleText(bit)))];
 // More screens (the test game): parts that show only now and then, kept on screen to edit (each outlined and clicked
 // only while kept, as the chat only while kept open), and screens almost never seen, shown with their card (closing
@@ -6407,7 +6472,11 @@ function moreScreensPop() {
     el('h3', { textContent: 'Show' }),
     s('Round end panel', 'Shows it as for a CT win with you as MVP, and opens its card', () => showRare('WinPanel_Round')),
     s('Killer panel', 'Shows it with you as the killer (your name, avatar and health), and opens its card', () => showRare('FreezePanel')),
-    s('Bomb screen', 'Joins the Terrorists, plants a bomb on site B looking down at it, and opens its card', () => { select(C4_SEL()); plantBomb(); })];
+    s('Bomb screen', 'Joins the Terrorists, plants a bomb on site B looking down at it, and opens its card', () => { select(C4_SEL()); plantBomb(); }),
+    // the test game's situations (Test tools' values): a full scoreboard to style its rows, low health, money...
+    el('h3', { textContent: 'Test values' }),
+    ...[...$('values').querySelectorAll('button')].filter(b => !/^(Round end|Killer panel|Hide panels)$/.test(b.textContent))
+      .map(b => { const r = row(b.textContent === 'Kill feed' ? 'Kill the bots' : b.textContent, b.title || b.textContent, () => b.click()); r.querySelector('.meta').textContent = ''; return r; })];
 }
 // Keep on screen: the kill feed full of made-up kills (the plugin, the test server only), the pickup history's rows held
 // (hud_drawhistory_time, given again now and then: a HUD reload drops them), the weapon selection held open
@@ -6600,7 +6669,7 @@ $('boxes').onmousedown = e => {
   else if (zoom.z > 1) pan = { x: e.clientX - zoom.x, y: e.clientY - zoom.y, moved: false }; // zoomed in: the empty game moves the view
 };
 window.addEventListener('mousemove', e => {
-  if (!drag) return;
+  if (!drag || !live) return; // (the game gone mid-drag)
   const [fx, fy] = stagePoint(e), dx = (fx - drag.at[0]) * live.W, dy = (fy - drag.at[1]) * live.H;
   if (!drag.moved) {
     if (Math.hypot(dx, dy) < 6) return;
@@ -6671,16 +6740,16 @@ $('boxes').onclick = async e => {
   // the same spot again: the next one under it, round to the top again after the last
   const at = again && selected && !e.ctrlKey ? hits.findIndex(h => pickKey(h) === pickKey(selected)) : -1;
   if (at >= 0) hit = hits[(at + 1) % hits.length];
-  if (hit && e.ctrlKey && selected && !sameSel(hit, selected)) {
+  if (hit && e.ctrlKey && selected && pickKey(hit) !== pickKey(selected)) {
     if (!movable(hit)) return status('That one can\'t be moved: the game places it itself.');
-    const i = also.findIndex(a => sameSel(a, hit));
+    const i = also.findIndex(a => pickKey(a) === pickKey(hit));
     if (i >= 0) also.splice(i, 1);
     else { hit.res = await uiFile(resPath(hit)); also.push(hit); }
     render(); drawBoxes();
     return;
   }
   if (hit) { $('search').value = ''; select(hit); }
-  else if (menuUp()) { $('search').value = ''; select(BG_SEL()); } // the main menu's empty background
+  else if (menuUp() && !frontOnly()) { $('search').value = ''; select(BG_SEL()); } // the main menu's empty background
 };
 
 // ---------- the game's resolution (the preview's) ----------
@@ -6891,16 +6960,33 @@ async function poll() {
     also = also.map(again);
   }
   drawBoxes();
-  if (typingInCard()) pendingRender = true; else renderOnScreenOnly();
+  // (typing in a card: the redraw waits, and only if one is due; every changed panel list set it before, so moving from
+  // one box to the next redrew the card and emptied what was typed into its forms, a command button's text and command)
+  renderOnScreenOnly(); // (it waits itself while typing in a card or a pop-out is open)
 }
-onPage('focusout', e => { if (pendingRender && e.target.closest && e.target.closest('#list, .nx-pin')) setTimeout(render); });
+// (the redraw that waited: once the typing leaves the card, not when it moves to another box in it)
+onPage('focusout', e => {
+  if (!pendingRender || !e.target.closest || !e.target.closest('#list, .nx-pin')) return;
+  const to = e.relatedTarget;
+  if (isTyping(to) && to.closest('#list, .nx-pin')) return;
+  setTimeout(render);
+});
 
 // Re-render only when the set of things on screen (or the buy menu's page) changed, so the rows being edited stay put.
 let shownKey = '';
 const screenKey = () => onScreen().map(t => t.info.id).join() + '|' + (live ? live.panels.filter(p => p.key === 'buysubmenu').map(p => (buySubPage(p) || ['main'])[0]).join() : '');
+// A part that comes and goes every moment (the timer box while a server resends its hint text: seen 2026-10-11 with the
+// test game's Timer text, on and off four times in 3 s) redrew every card each time, closing the colour pop-out a moment
+// after it opened: only a change that has lasted a second redraws, and not while a colour or font pop-out is open (it
+// is redrawn once that closes).
+let keySeen = '', keySince = 0, keyCheck = 0;
 function renderOnScreenOnly() {
   const key = screenKey();
-  if (key !== shownKey) { shownKey = key; render(); }
+  clearTimeout(keyCheck);
+  if (key === shownKey) { keySeen = key; return; }
+  if (key !== keySeen) { keySeen = key; keySince = Date.now(); }
+  if (Date.now() - keySince < 1000 || cpop || fpop || typingInCard()) { keyCheck = setTimeout(renderOnScreenOnly, 1100); return; }
+  shownKey = key; render();
 }
 
 // The preview: the exe captures the game's window itself (no share dialog) and writes frames into a buffer shared
@@ -7406,8 +7492,10 @@ if (host) {
   $('grid').value = String(grid);
   $('grid').onchange = () => { grid = +$('grid').value; try { localStorage.setItem('grid', grid); } catch {} };
   onPage('keydown', e => {
-    const a = activeEl(), typing = a && /^(INPUT|TEXTAREA)$/.test(a.tagName) && a.type !== 'range';
-    if (e.ctrlKey && !e.shiftKey && e.code === 'KeyZ' && !typing) { e.preventDefault(); undo(); }
+    // (typing: a box text goes into, where Ctrl+Z is its own undo; a tick box or slider just clicked isn't one. The key by
+    // its letter, so Ctrl+Z on AZERTY and other layouts is the Z the user sees)
+    const typing = isTyping(activeEl());
+    if (e.ctrlKey && !e.shiftKey && !e.altKey && (e.key.toLowerCase() === 'z' || (!/^[a-z]$/i.test(e.key) && e.code === 'KeyZ')) && !typing) { e.preventDefault(); undo(); } // (a layout without Latin letters: the key where Z is)
   });
   $('explore').onclick = () => call('explore');
   for (const b of $('values').querySelectorAll('button')) b.onclick = () => {
@@ -7617,7 +7705,8 @@ async function joinGame(quiet = false) { // (quiet: asked again, the countdown s
   joining = false;
 }
 setInterval(() => {
-  if (!joinAgain || live) return;
+  if (live) { joinAgain = 0; return; }
+  if (!joinAgain || launching || restarting) return;
   const left = Math.ceil((joinAgain + JOIN_AGAIN - Date.now()) / 1000);
   if (left <= 0) { joinInMap = true; joinGame(true); return; }
   if (!joinInMap) return;
@@ -7626,7 +7715,7 @@ setInterval(() => {
 }, 1000);
 function gameClosedText() {
   startState = ''; // (picking a HUD starts it again)
-  emptyText('The game has closed.', 'Start it again with this HUD, or pick another HUD.'); status('The game has closed.'); $('launch').hidden = false;
+  emptyText('The game has closed.', 'Start it again with this HUD, or pick another HUD.'); status('The game has closed.'); $('launch').hidden = !hudPath;
 }
 async function start() {
   try {
@@ -8492,8 +8581,9 @@ if (host && location.hash === '#hosttest') (async () => {
       && resRows(sb, 'MapName', [], C, 'Label').some(r => r.dataset.head === 'Separate font' && r.querySelector('input[type=text]')) && allFonts().ontoggle,
       `fonts for everything: the main menu's own, a control type's default, a control's Separate font (${menuFonts})`);
     const gs = selectionSections(GLOBAL_SEL());
-    check(gs[0][0] === 'Every text font' && gs.every(([, , kind]) => kind === 'font') && gs.some(([t, rows]) => t === 'Menu fonts' && rows.length > 5),
-      `Global settings: every text font at once first, then the symbol font and each scheme's fonts (${gs.map(([t, r]) => `${t}:${r.length}`)})`);
+    check(gs[0][0] === 'Colours by kind' && gs[0][2] === 'colour' && gs[0][1].some(r => r.classList && r.classList.contains('colour'))
+      && gs[1][0] === 'Every text font' && gs.slice(1).every(([, , kind]) => kind === 'font') && gs.some(([t, rows]) => t === 'Menu fonts' && rows.length > 5),
+      `Global settings: colours by kind, then every text font at once, the symbol font and each scheme's fonts (${gs.map(([t, r]) => `${t}:${r.length}`)})`);
     const listFonts = fontsOf({ info: { kind: 'window', id: 'cserverbrowserdialog', file: S }, thing: { key: 'cserverbrowserdialog' }, control: { cls: 'CGameListPanel', key: 'gamelist' } })
       .map(([, n, w]) => `${n}:${w}`).join();
     check(listFonts === 'DefaultSmall:servers, column headers' && hideHow('TextMessage').join() === 'xpos,9999',
