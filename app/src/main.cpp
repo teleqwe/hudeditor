@@ -939,9 +939,9 @@ static void MountHud()
 // ("starting...": not yet, ask again shortly. The .vdf in addons: a game the editor started, which loads the plugin
 // itself (a plugin_load too would load it twice); no window: -hijack would find no game and show a message box.)
 // In a map the game refuses it ("plugin_load : cannot load a plugin while connected to a server", seen 2026-10-10):
-// leave sends only disconnect, back to the main menu, and the page attaches again after.
+// the page asks again until it's at the main menu.
 static HWND GameWindow();
-static wstring Attach( bool leave = false )
+static wstring Attach()
 {
 	if ( !g_selftestOut.empty() ) // (--selftest stands an empty folder in for the game: never a real one)
 		return L"not in --selftest";
@@ -954,8 +954,6 @@ static wstring Attach( bool leave = false )
 		return L"Couldn't read how the game was started. Quit it, then click Launch game.";
 	if ( low.find( L"-insecure" ) == wstring::npos )
 		return L"The game is running, started without -insecure, so the editor can't join it. Quit it, then click Launch game.";
-	if ( leave )
-		return (INT_PTR)ShellExecuteW( NULL, L"open", exe.c_str(), L"-hijack -game cstrike +disconnect", NULL, SW_SHOWNOACTIVATE ) <= 32 ? L"Couldn't reach the running game." : wstring();
 	wstring err = InstallPlugin( false );
 	if ( !err.empty() )
 		return err;
@@ -1377,13 +1375,13 @@ static void OnMessage( const wstring &msg )
 		else if ( ( out = Launch() ).size() )
 			ok = false;
 	}
-	else if ( op == L"attach" ) // a game running without the plugin (started from Steam): load the plugin into it (arg "leave": leave its map first)
+	else if ( op == L"attach" ) // a game running without the plugin (started from Steam): load the plugin into it
 	{
 		if ( g_game.empty() )
 			fail( noGame );
 		else if ( !GameRunning() )
 			fail( L"The game isn't running." );
-		else if ( !PluginLoaded() && ( out = Attach( arg == L"leave" ) ).size() )
+		else if ( !PluginLoaded() && ( out = Attach() ).size() )
 			ok = false;
 	}
 	else if ( op == L"gamestate" ) // "none", "plugin" (running with it), or "foreign <pid>" (running without it: the page joins it)
@@ -2156,6 +2154,11 @@ static LRESULT CALLBACK WndProc( HWND h, UINT m, WPARAM w, LPARAM l )
 		}
 		if ( w == 6 )
 		{
+			// a game that loaded the plugin itself (+plugin_load beside -insecure in its launch options), not started or
+			// joined by the editor: its settings kept and the HUD put first, as for those (once per game)
+			static DWORD found;
+			if ( DWORD pid = GamePid(); pid && pid != found && !g_cvarKeep.empty() && !IsFile( g_cvarKeep ) && PluginLoaded() )
+				found = pid, KeepCvars(), MountHud();
 			RestoreCvars();
 			return 0;
 		}
@@ -2179,8 +2182,9 @@ static LRESULT CALLBACK WndProc( HWND h, UINT m, WPARAM w, LPARAM l )
 	case WM_DESTROY:
 		StopCapture();
 		Revert(); // unsaved changes (the page asked about them first)
-		// commands no game took (a HUD opened, the game never started): not for a game started from Steam later
-		if ( !g_game.empty() && !GameRunning() )
+		// commands no game took (a HUD opened, the game never started or never took the plugin): not for a game that
+		// loads the plugin later (+plugin_load in its launch options), which runs the file as it loads
+		if ( !g_game.empty() && ( !GameRunning() || !PluginLoaded() ) )
 			DeleteFileW( ( g_game + L"\\addons\\schemereload_cmd.txt" ).c_str() );
 		{
 			std::error_code ec; // the last import's copy (a dropped folder's other files, an archive's)

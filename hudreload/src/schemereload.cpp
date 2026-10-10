@@ -2387,10 +2387,19 @@ public:
 };
 
 static CSchemeReloadPlugin g_Plugin;
+static int g_nLoads; // (loads of g_Plugin not yet unloaded: see Load)
 EXPOSE_SINGLE_INTERFACE_GLOBALVAR( CSchemeReloadPlugin, IServerPluginCallbacks, INTERFACEVERSION_ISERVERPLUGINCALLBACKS, g_Plugin );
 
 bool CSchemeReloadPlugin::Load( CreateInterfaceFn interfaceFactory, CreateInterfaceFn gameServerFactory )
 {
+	// loaded already: +plugin_load in the game's launch options and the editor's .vdf both, in a game the editor starts.
+	// Both loads get this one object (g_Plugin), and the game calls Unload for a load that failed too (seen 2026-10-10:
+	// it stopped the first): that Unload only counts down.
+	if ( g_nLoads++ )
+	{
+		Msg( "[schemereload] already loaded\n" );
+		return false;
+	}
 	ConnectTier1Libraries( &interfaceFactory, 1 );
 
 	g_pFS = (IFileSystem *)interfaceFactory( FILESYSTEM_INTERFACE_VERSION, NULL );
@@ -2439,6 +2448,8 @@ bool CSchemeReloadPlugin::Load( CreateInterfaceFn interfaceFactory, CreateInterf
 
 void CSchemeReloadPlugin::Unload()
 {
+	if ( --g_nLoads > 0 ) // (a second load's, refused: the first stays)
+		return;
 	SR_StopTimer();
 	if ( g_EditorBorders.Count() && SR_SafeCall( RemoveEditorBorders ) )
 		SR_SafeCall( StepPanels ); // panels fetch their borders again

@@ -5830,8 +5830,9 @@ const hudThing = ([id, hud]) => ({ thing: { name: id, key: id.toLowerCase() }, i
 // parts that only show now and then (kill feed, pickup history, weapon selection...), so they can be picked and hidden too
 const otherParts = things => !live || !F(L) ? [] : Object.entries(HUD).filter(([id]) => !things.some(t => t.info.id === id) && canHide(id) && !DEV_OUT.has(id)).map(hudThing);
 function elementCards() {
+  if (!live) return []; // (no game: nothing on screen to list)
   const things = onScreen(), out = [];
-  shownKey = things.map(t => t.info.id).join();
+  shownKey = screenKey();
   const parts = things.length ? things.map(t => partRow(t)) : [el('p', { className: 'meta', style: 'padding: 8px 12px; margin: 0', textContent: 'Nothing editable on screen right now.' })];
   // at the main menu, its background is a thing of its own too (clicking the empty background selects it as well)
   if (menuUp()) parts.push(partRow({ thing: BG_SEL().thing, info: BG_SEL().info }));
@@ -6315,7 +6316,7 @@ function viewBar() {
   $('globalbtn').setAttribute('aria-pressed', String([cardSel, ...pins.map(p => p.sel)].some(s => s && s.info.id === 'global')));
   $('globalbtn').disabled = !files.length;
   loadBtn(loading);
-  $('elembtn').hidden = !files.length;
+  $('elembtn').hidden = !files.length || !live;
   const hidden = Object.keys(HUD).filter(id => canHide(id) && isHidden(id) && !DEV_OUT.has(id)).length
     + (F(C) && menuUp() ? LOGO_KEYS.filter((_, i) => !logoShown(i + 1)).length : 0);
   $('hiddencount').hidden = !hidden;
@@ -6825,8 +6826,11 @@ async function poll() {
   if (!live && !launching && !restarting && !joining && Date.now() - stateAsked > 3000) {
     stateAsked = Date.now();
     call('gamestate').then(g => {
-      if (!g.startsWith('foreign ') || live) return;
-      if (g !== joinTried) { joinTried = g; joinGame(); } else if (joinAgain && Date.now() - joinAgain > 10000) joinGame('quiet'); // (in a map: again)
+      if (!g.startsWith('foreign ')) { // (the game gone, or it has the plugin now)
+        if (joinAgain && g === 'none') gameClosedText();
+        joinAgain = 0;
+      }
+      else if (g !== joinTried && !live && !joinAgain) { joinTried = g; joinGame(); }
     }).catch(() => {});
   }
   const raw = await call('panels').catch(() => '');
@@ -6893,8 +6897,9 @@ onPage('focusout', e => { if (pendingRender && e.target.closest && e.target.clos
 
 // Re-render only when the set of things on screen (or the buy menu's page) changed, so the rows being edited stay put.
 let shownKey = '';
+const screenKey = () => onScreen().map(t => t.info.id).join() + '|' + (live ? live.panels.filter(p => p.key === 'buysubmenu').map(p => (buySubPage(p) || ['main'])[0]).join() : '');
 function renderOnScreenOnly() {
-  const key = onScreen().map(t => t.info.id).join() + '|' + (live ? live.panels.filter(p => p.key === 'buysubmenu').map(p => (buySubPage(p) || ['main'])[0]).join() : '');
+  const key = screenKey();
   if (key !== shownKey) { shownKey = key; render(); }
 }
 
@@ -7581,41 +7586,47 @@ async function launchForHud(byHand = false) {
 }
 // A game running without the editor's plugin, started some other way (Steam, a shortcut), before the editor or while
 // it's open: with -insecure, the exe loads the plugin into it (plugin_load); without, the old way: quit it and Launch
-// game. The game takes a plugin only at the main menu, not in a map: asked again every 10 s (poll; each time the
-// game's console says it can't), and Leave the map and join sends it to the main menu first. ("starting...": the
-// game's window isn't up yet, or it's the editor's own game loading its plugin: ask again.)
-let joining = false, joinTried = '', stateAsked = 0, joinAgain = 0;
-async function joinGame(how = '') { // ('quiet': asked again, nothing said; 'leave': out of its map first)
+// game. The game takes a plugin only at the main menu, not in a map: asked again every 5 s, a countdown shown (each
+// time the game's console says it can't). +plugin_load addons/schemereload beside -insecure in the game's launch
+// options has it loaded from the start. ("starting...": the game's window isn't up yet, or it's the editor's own game
+// loading its plugin: ask again.)
+let joining = false, joinTried = '', stateAsked = 0, joinAgain = 0, joinInMap = false;
+const JOIN_AGAIN = 5000;
+async function joinGame(quiet = false) { // (quiet: asked again, the countdown stays)
   if (joining || live) return;
-  joining = true; joinAgain = 0;
-  if (how !== 'quiet') { $('launch').hidden = true; emptyText('Joining the game that\'s running...', 'The editor loads its plugin into it: the game shows up here in a few seconds.'); }
-  if (how === 'leave') { await call('attach', 'leave').catch(() => {}); await sleep(3000); }
+  joining = true;
+  if (!quiet) { joinInMap = false; $('launch').hidden = true; emptyText('Joining the game that\'s running...', 'The editor loads its plugin into it: the game shows up here in a few seconds.'); }
   for (let i = 0; i < 60 && !live; i++) {
     try {
       await call('attach');
-      if (how !== 'quiet') status('The game is already running: joining it (loading the editor\'s plugin into it)...');
+      if (!quiet) status('The game is already running: joining it (loading the editor\'s plugin into it)...');
       // the main menu was made before the plugin could put the HUD first: its buttons show after a restart (marked
       // once the plugin answers: poll clears the list while there's no game)
       joinedGame = true;
-      // (at the main menu the plugin answers within seconds: not by then, the game is in a map)
-      setTimeout(() => {
-        joining = false;
-        if (live) return;
-        joinAgain = Date.now();
-        if (how !== 'quiet') inMapText();
-      }, 8000);
+      joining = false; joinAgain = Date.now(); // (sent: at the main menu it answers within seconds, else asked again)
       return;
     } catch (err) {
-      if (!/^starting/.test(err.message)) { joining = false; if (how !== 'quiet') { emptyText('The editor can\'t join this game.', err.message); status(err.message); $('launch').hidden = false; } return; }
+      if (!/^starting/.test(err.message)) {
+        joining = false; joinAgain = 0;
+        if (/isn't running/.test(err.message)) gameClosedText(); else { emptyText('The editor can\'t join this game.', err.message); status(err.message); $('launch').hidden = false; }
+        return;
+      }
       await sleep(2000);
     }
   }
   joining = false;
 }
-function inMapText() {
-  emptyText('The game is in a map: it takes the editor\'s plugin only at the main menu.', 'Disconnect and the editor joins it by itself, or:');
-  $('empty').insertBefore(el('button', { type: 'button', className: 'primary', textContent: 'Leave the map and join', onclick: () => joinGame('leave') }), $('launch'));
-  status('The game is in a map: disconnect and the editor joins it.');
+setInterval(() => {
+  if (!joinAgain || live) return;
+  const left = Math.ceil((joinAgain + JOIN_AGAIN - Date.now()) / 1000);
+  if (left <= 0) { joinInMap = true; joinGame(true); return; }
+  if (!joinInMap) return;
+  if (!$('empty').textContent.startsWith('Can\'t load')) status('Can\'t load while the game is in a map: go back to the main menu.');
+  emptyText('Can\'t load while the game is in a map.', `Go back to the main menu. Retrying in ${left} s...`);
+}, 1000);
+function gameClosedText() {
+  startState = ''; // (picking a HUD starts it again)
+  emptyText('The game has closed.', 'Start it again with this HUD, or pick another HUD.'); status('The game has closed.'); $('launch').hidden = false;
 }
 async function start() {
   try {
