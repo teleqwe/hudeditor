@@ -131,6 +131,9 @@
   .ingame.chips button[aria-pressed="false"] { opacity: .5; text-decoration: line-through; }
   .toolsbtn[aria-expanded="true"] { border-color: var(--accent); background: var(--soft); }
   .toolsbtn::after { content: ''; display: inline-block; width: 9px; height: 6px; margin-left: 7px; vertical-align: 2px; background: var(--chevron) no-repeat center / 9px 6px; }
+  /* (the bar's menus open upwards: the arrow points up, and down while open, to close) */
+  #viewbar .toolsbtn::after { transform: rotate(180deg); }
+  #viewbar .toolsbtn[aria-expanded="true"]::after { transform: none; }
   .parts > summary { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; color: var(--muted); }
   .parts > summary::before { display: none; }
   .parts > summary::after { content: '⌄'; }
@@ -441,8 +444,9 @@
   .nx-cat.open > .nx-cath .i { transform: rotate(90deg); }
   .nx-cath small { margin-left: auto; min-width: 0; max-width: 62%; font-size: 11.5px; font-weight: 400; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .nx-catb { padding: 0 12px 4px; }
-  .nx-catb > .card > .sub { margin: 14px 0 2px; font-size: 11.5px; font-weight: 600; color: var(--muted); }
+  .nx-catb > .card > .sub { margin: 4px 0 4px; font-size: 11px; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; color: var(--text); }
   .nx-catb > .card:first-child > .sub { margin-top: 10px; }
+  .nx-catb > .card + .card, .nx-catb > .card + details, .nx-catb > details + .card { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
   .nx-catb > .card:first-child > .row:first-child { border-top: 0; }
   .nx-more { width: calc(100% + 24px); display: flex; align-items: center; justify-content: center; gap: 6px; height: 36px; margin: 6px -12px -4px; padding: 0; border: 0; border-top: 1px solid var(--line); border-radius: 0 0 9px 9px; background: var(--raised); color: var(--text); font-size: 12px; font-weight: 500; }
   .nx-more:hover { color: var(--accent); background: var(--soft); }
@@ -503,7 +507,7 @@
     max-width: calc(100% - 24px); min-height: 0; padding: 0; background: none; border: 0; overflow: visible; pointer-events: none; }
   #preview > .viewbar button { pointer-events: auto; height: 32px; padding: 0 12px; background: var(--surface); border: 1px solid var(--line); box-shadow: 0 2px 10px rgba(0, 0, 0, .4); }
   #preview > .viewbar button:hover { border-color: var(--accent); }
-  #preview > .viewbar button[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); background: var(--soft); }
+  #preview > .viewbar button[aria-pressed="true"], #preview > .viewbar button[aria-expanded="true"] { color: var(--accent); border-color: var(--accent); background: var(--soft); }
   #preview > .viewbar #ingame, #preview > .viewbar .ingame { gap: 8px; }
   #preview > .viewbar .ingame.chips button { height: 28px; border-radius: 14px; }
   #preview > .viewbar [hidden], body:not(.float) #preview > .viewbar .float-only { display: none !important; }
@@ -528,7 +532,7 @@
     <select id="res" class="gridbtn" aria-label="Game resolution" hidden disabled title="The game's resolution, and so the preview's: see how the HUD looks on other screens. Your own comes back when the editor closes."><option>Game: -</option></select>
     <button id="rescaution" class="caution" hidden aria-haspopup="dialog">⚠</button>
     <select id="grid" class="gridbtn" aria-label="Grid" title="Dragged parts land on a grid this many units apart (a unit is the screen height / 480)"><option value="0">Grid: off</option><option value="2">Grid: 2</option><option value="4">Grid: 4</option><option value="5">Grid: 5</option><option value="8">Grid: 8</option><option value="10">Grid: 10</option><option value="16">Grid: 16</option><option value="20">Grid: 20</option></select>
-    <button id="testserver" title="Offline game with a frozen bot and bhop/surf-style timer texts on screen"><svg class="i" aria-hidden="true"><use href="#i-play"/></svg>Test server</button>
+    <button id="testserver" title="Offline game on de_dust2 with a frozen bot; bhop/surf-style timer and speed texts under Speed &amp; timer"><svg class="i" aria-hidden="true"><use href="#i-play"/></svg>Test server</button>
     <span class="sep" aria-hidden="true"></span>
     <div class="seg" role="group" aria-label="Where the settings go">
       <button id="dockbtn" aria-pressed="true" title="Dock: the settings in a panel beside the game (drag the bar between them to resize)"><svg class="i" aria-hidden="true"><use href="#i-panel-right"/></svg>Dock</button>
@@ -567,7 +571,7 @@
       <button data-cmd="bot_kill" title="Kills every bot: a line each in the kill feed">Kill feed</button>
       <button data-cmd="schemereload_testvalue mvps 3" title="Three MVP stars beside your name on the scoreboard">3 MVPs</button>
       <button data-cmd="schemereload_showpanel win" title="The round-end panel, as for a CT win with you as MVP">Round end</button>
-      <button data-cmd="schemereload_showpanel freeze" title="The killer panel, as if the bot had killed you">Killer panel</button>
+      <button data-cmd="schemereload_showpanel freeze" title="The killer panel, with you as the killer (your name, avatar and health)">Killer panel</button>
       <button data-cmd="schemereload_showpanel hide" title="Hides the round-end and killer panels">Hide panels</button>
       <button data-cmd='bot_prefix ""; bot_kick; bot_join_team T; bot_quota 1; mp_roundtime 9; mp_restartgame 1; schemereload_testvalue mvps -1' title="Back to one frozen bot, a 9:00 round and no test MVPs">Reset</button>
     </div>
@@ -582,23 +586,15 @@
     <!-- the game's corner, under its picture: what the game holds open for editing (in a map), the loading screen, and in
          Float the element list and show/hide (in Dock the panel lists them); only the ones for the screen it's on -->
     <div class="viewbar" id="viewbar">
-    <button id="elembtn" class="float-only" aria-haspopup="dialog" title="Every part on screen now, and the ones that show now and then"><svg class="i" aria-hidden="true"><use href="#i-list"/></svg>Element list</button>
-    <button id="showhidebtn" class="float-only" aria-haspopup="dialog" title="Hidden and shown parts, each with its eye"><svg class="i" aria-hidden="true"><use href="#i-eye"/></svg>Show/hide<span class="count" id="hiddencount" hidden></span></button>
+    <button id="elembtn" class="toolsbtn" aria-haspopup="dialog" aria-expanded="false" title="Every element: the hidden ones, then the shown ones, each with its eye; click one to edit it"><svg class="i" aria-hidden="true"><use href="#i-eye"/></svg>Hide / Show<span class="count" id="hiddencount" hidden></span></button>
     <div id="ingame">
       <div class="ingame">
         <button id="scores" aria-pressed="false" title="Keep the scoreboard open to edit it. Click again to close it.">Scoreboard</button>
         <button id="keepchat" aria-pressed="false" title="Keep the chat open (typing) to edit it: opened again after a change reloads the HUD. Click again to close it.">Chat</button>
         <button id="netgraphbtn" aria-pressed="false" title="Show the net graph in the editor's game (net_graph) to edit it. Not saved in the HUD: its own setting is in the Net graph's rows.">Net graph</button>
-        <button id="showposbtn" aria-pressed="false" title="Show the position text in the editor's game (cl_showpos) to edit it. Not saved in the HUD.">Position</button>
-        <button id="textsbtn" class="toolsbtn" aria-expanded="false">Speed &amp; timer</button>
-        <button id="morebtn" aria-haspopup="dialog" title="Parts that show now and then, kept on screen to edit, and screens almost never seen">More screens</button>
-      </div>
-      <!-- the test game's sample texts, each on or off (remembered): the bhop/surf timer and speed texts -->
-      <div id="textchips" class="ingame chips" hidden>
-        <button data-bit="1" title="Timer box (font HudHintText) and right-side text (HudHintTextSmall)">Timer</button>
-        <button data-bit="8" title="Record times in the top left corner (font CenterPrintText, ClientScheme)">Record times</button>
-        <button data-bit="2" title="Speed in the centre print (font Trebuchet24, SourceScheme)">Small speed</button>
-        <button data-bit="4" title="Large speed text under it, like jhud (font CenterPrintText, ClientScheme)">Large speed</button>
+        <button id="showposbtn" aria-pressed="false" title="Show the position text in the editor's game (cl_showpos) to edit it. Not saved in the HUD.">Showpos</button>
+        <button id="textsbtn" class="toolsbtn" aria-haspopup="dialog" aria-expanded="false">Speed &amp; timer</button>
+        <button id="morebtn" class="toolsbtn" aria-haspopup="dialog" aria-expanded="false" title="Parts that show now and then, kept on screen to edit, and screens almost never seen">More screens</button>
       </div>
     </div>
     <button id="loadbtn" aria-pressed="false" title="The box that shows while a map loads: the game holds it open while you edit it">Loading screen</button>
@@ -1147,10 +1143,10 @@ async function loadGame() {
   const put = (name, text) => { GAME[name.toLowerCase()] = { name, text, parsed: parse(text), bases: [] }; };
   put(GM, GAME_MENU);
   if (!host) return;
-  const res = [...new Set([...Object.values(UI_RES), ...Object.values(BUY_PAGES), ...SB_PAGES, LOADING_VAC, C4])];
+  const res = [...new Set([...Object.values(UI_RES), ...Object.values(BUY_PAGES), ...BUY_FILES('_CT'), ...BUY_FILES('_TER'), BUY_LOADOUT, ...SB_PAGES, LOADING_VAC, C4])];
   await Promise.all([call('defaultlayout').then(t => put(L, t)), ...[C, S, CH].map(n => call('vanilla', n).then(t => put(n, t))),
     ...res.map(p => call('vanilla', p.split('/').pop()).then(t => put(p, t))),
-    ...Object.values(CLASS_PAGES).flat().map(n => call('vanilla', `${n}.res`).then(t => put(classPage(n), t)))].map(p => p.catch(() => {})));
+    ...[...Object.values(CLASS_PAGES).flat(), ...BUY_INFO].map(n => call('vanilla', `${n}.res`).then(t => put(classPage(n), t)))].map(p => p.catch(() => {})));
   render();
 }
 const gameOf = name => GAME[(name || '').toLowerCase()] || null;
@@ -1268,7 +1264,8 @@ function setDirty(d) {
 // button that restarts the game.
 // A .res file's settings without the editor's own blocks (hudeditor_...): what the game's own controls get.
 const gameBlocks = text => parse(text).entries.filter(e => !/^hudeditor/i.test(e.path[1] || '')).map(e => `${e.path.join('/')}|${e.key}|${e.value}`).join('\n');
-const RESTART_FILES = [[/^resource\/GameMenu\.res$/i, 'main menu buttons'], [/^servers\//i, 'server browser'], [/^resource\/UI\/BuyMenu/i, 'buy menu'],
+const RESTART_FILES = [[/^resource\/GameMenu\.res$/i, 'main menu buttons'], [/^servers\//i, 'server browser'], [/^resource\/UI\/(Buy\w+|Loadout)\.res$/i, 'buy menu'],
+  [/^classes\/base_(weapon|weapon_small|equipment)\.res$/i, 'buy menu'],
   [/^resource\/spectator(menu|modes)\.res$/i, 'spectator drop-down menus']];
 const restartFor = new Set();
 // (kept for the HUD while the game runs, so the editor opened again over a running game still shows it)
@@ -1518,12 +1515,38 @@ const UI_RES = { scores: 'resource/UI/scoreboard.res', specgui: 'resource/UI/spe
   // the chat's messages, typing line and Filters button, in 480-line units inside the chat. The game's own file (Half-Life
   // 2's) places the chat too, which would win over HudLayout on a reload, so the editor's copy leaves that block out
   hudchat: 'resource/UI/BaseChat.res' };
-// The buy menu's main page (BuySubMenu_CT / _TER) has a file of its own, where its controls' own settings go; its
-// other pages all make a panel named BuySubMenu, so they aren't told apart here yet.
+// The buy menu's main page (BuySubMenu_CT / _TER) has a file of its own, where its controls' own settings go; the pages
+// its buttons open all make a panel named BuySubMenu, told apart by their buttons (only one page is on screen at a time;
+// equipment's CT page has the defuser, so it's looked for first). A weapon's info box (its button's, under the mouse) is
+// classes/<weapon>.res, which only #bases one of three shared looks: the editor edits those, every weapon at once.
+// The favourites box on the main page is Loadout.res. The buy menu reads all of them when the game makes it: changes
+// show after a game restart.
 const BUY_PAGES = { buysubmenu_ct: 'resource/UI/BuyMenu_CT.res', buysubmenu_ter: 'resource/UI/BuyMenu_TER.res' };
+// [a button both sides' page has, its file (%s: _CT or _TER, from the buy window's side), the look its weapons' info boxes
+// #base: the game's classes/<weapon>.res]
+const BUY_SUBPAGES = [['glock18', 'resource/UI/BuyPistols%s.res', 'base_weapon'], ['m3', 'resource/UI/BuyShotguns.res', 'base_weapon_small'],
+  ['mp5', 'resource/UI/BuySubMachineGuns%s.res', 'base_weapon'], ['scout', 'resource/UI/BuyRifles%s.res', 'base_weapon_small'],
+  ['m249', 'resource/UI/BuyMachineGuns.res', 'base_weapon'], ['kevlar', 'resource/UI/BuyEquipment%s.res', 'base_equipment']];
+const BUY_SIDES = { buy_ct: '_CT', buy_ter: '_TER' };
+const BUY_FILES = side => BUY_SUBPAGES.map(([, f]) => f.replace('%s', side)); // (a side's page files)
+const BUY_LOADOUT = 'resource/UI/Loadout.res', BUY_INFO = ['base_weapon', 'base_weapon_small', 'base_equipment'];
+const buySubPage = p => {
+  const page = live && p && p.key === 'buysubmenu' && BUY_SUBPAGES.find(([k]) => live.panels.some(q => q.parent === p && q.key === k));
+  return page && [page[0], page[1].replace('%s', BUY_SIDES[p.thing && p.thing.key] || '_CT'), page[2]];
+};
+// p: a panel the clicked one is in (or itself, start): the file its block is in, if it's on a buy menu page
+function buyPageFile(p, start = p) {
+  if (!live) return null;
+  if (p.key === 'loadoutpanel') return p === start ? null : BUY_LOADOUT; // (the box itself: the main page's)
+  const kids = live.panels.filter(q => q.parent === p), names = kids.map(q => q.key);
+  if (names.includes('pricelabel') && names.includes('classimage')) { const page = buySubPage(p.parent); return page ? classPage(page[2]) : null; } // (an info box)
+  const page = buySubPage(p);
+  return page ? page[1] : null;
+}
 // A window's files that are open in the editor (↺ Reset window): its .res (the buy menu's is both sides'), the loading
 // screen's VAC one, the buy menu's main page, the class pages.
 const windowFiles = sel => [UI_RES[sel.info.id], sel.info.id === 'loadingdialog' && LOADING_VAC, BUY_PAGES[`buysubmenu_${sel.info.id.replace(/^buy_/, '')}`],
+  ...(BUY_SIDES[sel.info.id] ? [...BUY_FILES(BUY_SIDES[sel.info.id]), BUY_LOADOUT, ...BUY_INFO.map(classPage)] : []),
   ...(CLASS_PAGES[sel.info.id] || []).map(classPage)].filter(Boolean).map(p => F(p)).filter(Boolean);
 // The game's window: its files as the game has them (every part, the added ones gone), one Ctrl+Z. Reset window goes back
 // to how the HUD was opened, which for a HUD that had the window already is its own look.
@@ -1532,7 +1555,7 @@ function toGameWindow(fs) {
   if (!change.length) return status('This window is the game\'s already.');
   if (!confirm('Put this whole window back as the game has it? Every part goes back to the game\'s place and colours, and what was added to it goes (Ctrl+Z brings it all back).')) return;
   const group = burstGroup();
-  if (change.some(f => /^classes\//i.test(f.name))) needRestart('class pictures'); // (the game copies them when it makes the menu)
+  if (change.some(f => /^classes\//i.test(f.name) && !/^classes\/base_/i.test(f.name))) needRestart('class pictures'); // (the game copies them when it makes the menu; the buy menu's info boxes ask for theirs, RESTART_FILES)
   for (const f of change) {
     for (const pic of f.text.match(/replay\/thumbnails\/[^"\s]+/gi) || []) dropPicture(pic); // (on Save, if nothing names it)
     // the borders of its added boxes: borders of their own in the scheme (see setEdge), unused once they go
@@ -1553,7 +1576,8 @@ function gameWindowRows(sel) {
   return [row, noteRow('Every part of this window as the game has it, the parts added to it gone: to start it over (Default at the bottom does the same). ↺ at the top goes back to how it was when the HUD was opened.')];
 }
 function resPath(sel) {
-  for (let p = sel.node || sel.control; p; p = p.parent) if (BUY_PAGES[p.key]) return BUY_PAGES[p.key];
+  const start = sel.node || sel.control;
+  for (let p = start; p; p = p.parent) { if (BUY_PAGES[p.key]) return BUY_PAGES[p.key]; const page = buyPageFile(p, start); if (page) return page; }
   return sel.thing.key === 'loadingdialog' && loadingVac ? LOADING_VAC : UI_RES[sel.thing.key];
 }
 // A HUD without the file starts from the game's own copy (written into the HUD on the first change).
@@ -1882,6 +1906,21 @@ async function plantBomb() {
   await cmd('-attack', 800);
   await cmd('setang 75 0 0', 300);
   status('Planted: its screen is at your feet. It goes off in 90 seconds.');
+}
+
+// The buy menu's card: the main page's buttons open the other pages (the plugin presses one on screen); on a page, each
+// weapon's button shows its info box as the mouse over it would (the plugin's schemereload_hover), which the mouse over
+// the preview never does. Then click what shows to edit it.
+const BUY_TABS = [['Pistols', 'pistols'], ['Shotguns', 'shotguns'], ['SMGs', 'submachineguns'], ['Rifles', 'rifles'], ['Machine guns', 'machineguns'], ['Equipment', 'equipment']];
+function buyPageRows(sel) {
+  const page = live.panels.find(q => q.key === 'buysubmenu' && q.thing === sel.thing), r = el('div', { className: 'row action wrap' }), cmd = c => () => call('cmd', '', c).then(() => refreshSoon()).catch(() => {});
+  if (!page) {
+    r.append(...BUY_TABS.map(([t, n]) => el('button', { textContent: t, title: `Opens the ${t.toLowerCase()} page in the game`, onclick: cmd(`schemereload_press ${n}`) })));
+    return [r, noteRow('Opens that page of the buy menu in the game, to click and edit it. Its file is read when the game makes the buy menu: changes show after a game restart (the ⚠ by Save HUD).')];
+  }
+  const weapons = live.panels.filter(q => q.parent === page && /button/i.test(q.cls) && !/cancel/i.test(q.key));
+  r.append(...weapons.map(w => el('button', { textContent: w.name, title: `Shows ${w.name}'s info box, as the mouse over its button would`, onclick: cmd(`schemereload_hover ${w.name}`) })));
+  return [r, noteRow('Shows that weapon\'s info box, as the mouse over its button would: then click it to edit it. Its look is shared by every weapon (or every piece of equipment) and shows after a game restart. 0 in the game goes back to the main page.')];
 }
 
 // Match the HUD: screens almost never seen take the look of parts that are styled anyway. The round-end and killer
@@ -2977,6 +3016,9 @@ function historyRect(p, W, H) {
 // A window that covers the HUD (scoreboard, team and class select, MOTD, buy menu) is open: only it has boxes and clicks.
 const COVERING = new Set(['scores', 'team', 'class_ct', 'class_ter', 'info', 'buy_ct', 'buy_ter', 'loadingdialog']); // (the loading box: over its background)
 const covered = () => !!live && live.panels.some(p => p.thing === p && COVERING.has(p.key));
+// full-screen windows that are see-through in the middle: picked by their parts (the spectator bars' top and bottom), not
+// by a click anywhere on the screen; under a covering window not at all, like the HUD
+const SEE_THROUGH = new Set(['specgui']);
 // Everything under the mouse, the one a click picks first: a click on the same spot again picks the next (a box behind
 // the scoreboard's lists, the window itself last).
 function pickAll(fx, fy) {
@@ -2996,7 +3038,7 @@ function pickAll(fx, fy) {
     if (!p.thing || p.w * p.h <= 0 || CONTAINERS.has(p.key) || p.key.startsWith('frame_') && p.key.endsWith('grip')) continue;
     if (front && p.thing !== front) continue; // (it's in front of everything: only its parts)
     const info = thingInfo(p.thing);
-    if (!info || (p === p.thing && NO_CLICK.has(p.key)) || (cover && info.kind === 'hud')) continue;
+    if (!info || (p === p.thing && NO_CLICK.has(p.key)) || (cover && (info.kind === 'hud' || SEE_THROUGH.has(p.thing.key)))) continue;
     if (!seenInGame(info)) continue;
     const r = clickRects(p, info, live.W, live.H).find(inside);
     if (!r) continue;
@@ -3004,7 +3046,7 @@ function pickAll(fx, fy) {
     // windows themselves or their see-through frame pieces, which span most of the screen. A menu dialog (server
     // browser, options, console) pops up over the main menu and its logo, see-through or not.
     const area = r.w * r.h, layer = p.module !== 'ClientDLL' ? (p.thing.frame ? 3 : 2) : info.kind === 'window' && p !== p.thing && /button/i.test(p.cls) ? 1 : 0;
-    if (area > 0.9 * live.W * live.H && p !== p.thing) continue;
+    if (area > 0.9 * live.W * live.H && (p !== p.thing || SEE_THROUGH.has(p.key))) continue;
     found.push({ p, info, area, layer, r });
   }
   // (a window's parts under another window here, as class select's under the MOTD: after everything of the front one's)
@@ -4199,9 +4241,9 @@ function resRows(f, block, defaults, schemeFile, ctl) {
     // (only windows whose texts stay as their file says: the spectator top bar's and the loading box's the game writes)
     const said = p.labeltext;
     if (!/^hudeditor_/i.test(block) && said && !said.includes('%') && /label|button/i.test(ctl || '') && block.toLowerCase() !== 'messagetitle'
-      && /UI\/(TeamMenu|ClassMenu_(CT|TER)|TextWindow|scoreboard|bottomspectator|BuyMenu\w*)\.res$/i.test(f.path)) {
+      && /(UI\/(TeamMenu|ClassMenu_(CT|TER)|TextWindow|scoreboard|bottomspectator|Buy\w+|Loadout)|^classes\/base_\w+)\.res$/i.test(f.path)) {
       // (the buy menu: its ⚠ comes with every change to its files, see RESTART_FILES)
-      const buy = /BuyMenu/i.test(f.path), later = buy || (!/button/i.test(ctl) && !/UI\/(scoreboard|bottomspectator)\.res$/i.test(f.path));
+      const buy = /UI\/(Buy\w+|Loadout)\.res$|^classes\/base_/i.test(f.path), later = buy || (!/button/i.test(ctl) && !/UI\/(scoreboard|bottomspectator)\.res$/i.test(f.path));
       const r = inputRow('Text', said, v => { save(f, 'labelText', v.replace(/["\\]/g, ''), block); if (later && !buy) needRestart('texts in windows'); },
         { undoId: `${f.name}/${block}/labeltext`, title: 'Starting with # it is the game\'s own text, in the player\'s language' });
       if (said.startsWith('#')) r.lastElementChild.textContent = 'The game\'s own text (in the player\'s language) until you type your own';
@@ -5771,12 +5813,12 @@ function nxNote(head, rest) { const d = el('div', { className: 'nx-note' }); d.a
 
 // A part in the element list: its name, what it is, and (a HUD part) its eye. close: it's in a pop-out, which closes.
 function partRow(t, close = false) {
-  const hud = t.info.kind === 'hud' && canHide(t.info.id), hidden = hud && isHidden(t.info.id);
+  const logo = t.info.id === 'gamelogo' && !!F(C), hud = (t.info.kind === 'hud' && canHide(t.info.id)) || logo, hidden = logo ? !logoShown(t.info.title) : hud && isHidden(t.info.id);
   const b = el('button', { className: 'thing-btn' + (selected && selected.info.id === t.info.id ? ' sel' : '') + (hidden ? ' hidden' : '') });
   b.append(el('span', { className: 'name', textContent: t.info.name }), el('span', { className: 'meta', textContent: hidden ? 'hidden' : t.info.tag || (t.info.kind === 'hud' ? 'HUD' : 'Window') }));
   if (hud) {
     const eye = eyeIcon(el('span', { role: 'button' }), !hidden, 'this part');
-    eye.onclick = e => { e.stopPropagation(); setHidden(t.info.id, !hidden); refreshSoon(); };
+    eye.onclick = e => { e.stopPropagation(); if (logo) setLogoShown(t.info.title, hidden); else setHidden(t.info.id, !hidden); refreshSoon(); writing.then(() => { render(); fillNxPop(); }); };
     b.append(eye);
   } else b.append(el('span', { className: 'eye none' })); // (can't be hidden: the eye's room, so the rows line up)
   b.onclick = () => { if (close) closeNxPop(); select({ thing: t.thing, info: t.info, control: null }); };
@@ -5838,6 +5880,7 @@ function buildSelection(box, tabs, pin = null) {
   if (also.length && sel === inUse) body.append(card(`Line up ${also.length + 1} parts`, lineUpRows(), false));
   if (sel.thing.key === 'loadingdialog') body.append(card('', loadingHoldRows(), false)); // (above the tabs: which box)
   if (MATCH[sel.info.id] && !sel.control) body.append(card('', matchRows(sel), false)); // (the screens almost never seen: their look in one click)
+  if (/^buy_(ct|ter)$/.test(sel.thing.key) && !sel.control && live) body.append(card('', buyPageRows(sel), false)); // (its pages and the weapons' info boxes)
   if (quick.length) {
     const q = el('section', { className: 'nx-quick' }), all = el('button', { className: 'nx-all', type: 'button', title: 'Every setting, in tabs', onclick: () => setAdvanced(true) });
     q.append(...quick);
@@ -5923,7 +5966,7 @@ function tabCards(sections, sel, tabs) {
   for (const [k, name] of TABS) {
     const list = by.get(k);
     if (!list.length) continue;
-    const open = tabs.open.has(k), more = tabs.more.has(k), sec = el('section', { className: `nx-cat${open ? ' open' : ''}` });
+    const open = tabs.open.has(k), sec = el('section', { className: `nx-cat${open ? ' open' : ''}` });
     sec.dataset.tab = k;
     const head = el('button', { className: 'nx-cath', type: 'button', onclick: () => { tabs.open[open ? 'delete' : 'add'](k); render(); } });
     head.setAttribute('aria-expanded', String(open));
@@ -5936,14 +5979,9 @@ function tabCards(sections, sel, tabs) {
       : n ? `${n} setting${n > 1 ? 's' : ''}` : '' }));
     sec.append(head);
     if (open) {
-      const b = el('div', { className: 'nx-catb' }), shown = more ? list : list.slice(0, 1);
-      b.append(...(k === 'font' ? fontsCards(shown) : shown.map(([t, r]) => card(t, r, false))));
+      const b = el('div', { className: 'nx-catb' }); // (every section of the tab: no Show more, the user asked)
+      b.append(...(k === 'font' ? fontsCards(list) : list.map(([t, r]) => card(t, r, false))));
       if (k === 'font') b.append(...allResRows(sel));
-      if (list.length > 1) {
-        const m = el('button', { className: 'nx-more', type: 'button', onclick: () => { tabs.more[more ? 'delete' : 'add'](k); render(); } });
-        m.append(icon('chevron-down', more ? 'flip' : ''), more ? 'Show less' : `Show more (${list.length - 1})`);
-        b.append(m);
-      }
       sec.append(b);
     }
     out.push(sec);
@@ -6268,14 +6306,16 @@ function setLayout(mode) {
   render(); drawBoxes();
 }
 
-// The bar under the game: the toggles (in a map), the loading screen, and (Float) the element list and show/hide.
+// The bar under the game: the toggles (in a map), the loading screen (at the main menu), and (Float) Hide / Show.
 function viewBar() {
   const loading = [cardSel, ...pins.map(p => p.sel)].some(s => s && s.thing.key === 'loadingdialog');
   $('loadbtn').setAttribute('aria-pressed', String(loading));
   $('globalbtn').setAttribute('aria-pressed', String([cardSel, ...pins.map(p => p.sel)].some(s => s && s.info.id === 'global')));
   $('globalbtn').disabled = !files.length;
-  $('loadbtn').hidden = !files.length;
-  const hidden = Object.keys(HUD).filter(id => canHide(id) && isHidden(id) && !DEV_OUT.has(id)).length;
+  loadBtn(loading);
+  $('elembtn').hidden = !files.length;
+  const hidden = Object.keys(HUD).filter(id => canHide(id) && isHidden(id) && !DEV_OUT.has(id)).length
+    + (F(C) && menuUp() ? LOGO_KEYS.filter((_, i) => !logoShown(i + 1)).length : 0);
   $('hiddencount').hidden = !hidden;
   $('hiddencount').textContent = hidden;
 }
@@ -6301,15 +6341,50 @@ function fillNxPop() {
 function closeNxPop() { if (!nxPop) return; nxPop.owner.setAttribute('aria-expanded', 'false'); nxPop.remove(); nxPop = null; }
 function elementPop() {
   if (!files.length) return [el('p', { className: 'meta empty', textContent: 'Open a HUD first.' })];
-  const things = onScreen(), rest = otherParts(things);
-  const out = [el('h3', { textContent: live ? 'On screen now' : 'HUD parts' }), ...(things.length ? things.map(t => partRow(t, true)) : [el('p', { className: 'meta empty', textContent: 'Nothing editable on screen right now.' })])];
-  if (menuUp()) out.push(partRow({ thing: BG_SEL().thing, info: BG_SEL().info }, true));
-  const added = F(L) && !inMap() ? addedList() : [];
+  // what this screen has: the loading screen (or a question box) alone while it's up; at the main menu its own parts; in a
+  // map (or with no game) the HUD's parts, the ones that show now and then too, and the windows open
+  const front = frontOnly(), things = onScreen().filter(t => !front || t.thing === front), map = !live || inMap();
+  const all = [...things, ...(menuUp() && !front ? [{ thing: BG_SEL().thing, info: BG_SEL().info }] : []), ...(map && !front ? otherParts(things) : [])];
+  const hiddenOf = t => (t.info.kind === 'hud' && canHide(t.info.id) && isHidden(t.info.id)) || (t.info.id === 'gamelogo' && !!F(C) && !logoShown(t.info.title));
+  const off = all.filter(hiddenOf), on = all.filter(t => !hiddenOf(t));
+  const away = t => live && !things.includes(t) && t.info.id !== BG_SEL().info.id; // (not on screen now: said in its row)
+  const row = t => { const r = partRow(t, true); if (away(t) && !hiddenOf(t)) r.querySelector('.meta').textContent = 'not on screen now'; return r; };
+  const head = el('h3', { textContent: `Hidden (${off.length})` });
+  if (off.length) head.append(el('button', { type: 'button', textContent: 'Show them all', onclick: () => { for (const t of off) if (t.info.id === 'gamelogo') setLogoShown(t.info.title, true); else setHidden(t.info.id, false); refreshSoon(); writing.then(() => { render(); fillNxPop(); }); } }));
+  const out = [head, ...(off.length ? off.map(row) : [el('p', { className: 'meta empty', textContent: 'Nothing hidden. The eye by an element hides it.' })]),
+    el('h3', { textContent: `Shown (${on.length})` }), ...on.map(row)];
+  for (const t of things.filter(t => t.info.kind === 'window' && !['gamemenu', 'gamelogo', 'menubg'].includes(t.info.id))) {
+    const rows = windowShowRows(t);
+    if (rows.length) out.push(el('h3', { textContent: t.info.name }), ...rows);
+  }
+  const added = F(L) && !inMap() && !front ? addedList() : [];
   for (const r of added) r.addEventListener('click', e => { const b = e.target.closest('button'); if (b && !/^Remove/.test(b.title || '')) closeNxPop(); });
   if (added.length) out.push(el('h3', { textContent: 'Added to the HUD' }), ...added);
-  if (rest.length) out.push(el('h3', { textContent: 'Not on screen now' }), ...rest.map(t => partRow(t, true)));
   return out;
 }
+// A window on screen: the rows of its own Show/hide tab (the loading screen's text, bar and Cancel; the scoreboard's...),
+// hidden ones first. Its file read first if the editor hasn't it yet (the list is filled again then).
+function windowShowRows(t) {
+  const sel = { thing: t.thing, info: t.info, control: null, node: null }, path = resPath(sel);
+  sel.res = path ? F(path) : null;
+  if (path && !sel.res) { uiFile(path).then(f => f && fillNxPop()).catch(() => {}); return []; }
+  if (t.info.id === 'loadingdialog' && !F(UI_RES.loadingdialog)) { uiFile(UI_RES.loadingdialog).then(f => f && fillNxPop()).catch(() => {}); return []; }
+  let rows = [];
+  rowScope = t.thing.key;
+  try { rows = selectionSections(sel).filter(([, , kind]) => kind === 'show').flatMap(([, r]) => r); } catch { rows = []; } finally { rowScope = ''; }
+  const off = r => !!r.querySelector('.eye.off');
+  return rows.filter(r => r.querySelector && r.querySelector('.eye')).sort((a, b) => off(b) - off(a));
+}
+// A pop-up's row with an eye: its name, and shown (the eye open) or not; a click on it switches it
+function eyeRowBtn(name, title, on, toggle) {
+  const b = el('button', { type: 'button', className: 'thing-btn' + (on ? '' : ' hidden'), title, onclick: async () => { try { await toggle(); } catch {} fillNxPop(); } });
+  b.append(el('span', { className: 'name', textContent: name }), el('span', { className: 'meta', textContent: on ? 'shown' : 'hidden' }), eyeIcon(el('span'), on, name.toLowerCase()));
+  return b;
+}
+// Speed & timer (the test game): its sample texts, each shown or not
+const TEXT_ROWS = [[1, 'Timer', 'Timer box (font HudHintText) and right-side text (HudHintTextSmall)'], [8, 'Record times', 'Record times in the top left corner (font CenterPrintText, ClientScheme)'],
+  [2, 'Small speed', 'Speed in the centre print (font Trebuchet24, SourceScheme)'], [4, 'Large speed', 'Large speed text under it, like jhud (font CenterPrintText, ClientScheme)']];
+const textsPop = () => [el('h3', { textContent: 'Sample texts' }), ...TEXT_ROWS.map(([bit, name, title]) => eyeRowBtn(name, title, !!(texts & bit), () => toggleText(bit)))];
 // More screens (the test game): parts that show only now and then, kept on screen to edit (each outlined and clicked
 // only while kept, as the chat only while kept open), and screens almost never seen, shown with their card (closing
 // the card hides them again, see holdShown)
@@ -6320,7 +6395,7 @@ function moreScreensPop() {
     if (on !== null) b.setAttribute('aria-pressed', String(on));
     return b;
   };
-  const k = (label, what, title) => row(label, title, () => keep(what, !kept.has(what)), kept.has(what));
+  const k = (label, what, title) => eyeRowBtn(label, title, kept.has(what), () => keep(what, !kept.has(what)));
   const s = (label, title, go) => row(label, title, () => { closeNxPop(); go(); });
   return [el('h3', { textContent: 'Keep on screen' }),
     k('Kill feed', 'killfeed', 'Made-up kills keep its lines up, to click and edit it'),
@@ -6328,7 +6403,7 @@ function moreScreensPop() {
     k('Weapon selection', 'weapons', 'Holds it open, to click and edit it (fast weapon switch is off meanwhile)'),
     el('h3', { textContent: 'Show' }),
     s('Round end panel', 'Shows it as for a CT win with you as MVP, and opens its card', () => showRare('WinPanel_Round')),
-    s('Killer panel', 'Shows it as if the bot had killed you, and opens its card', () => showRare('FreezePanel')),
+    s('Killer panel', 'Shows it with you as the killer (your name, avatar and health), and opens its card', () => showRare('FreezePanel')),
     s('Bomb screen', 'Joins the Terrorists, plants a bomb on site B looking down at it, and opens its card', () => { select(C4_SEL()); plantBomb(); })];
 }
 // Keep on screen: the kill feed full of made-up kills (the plugin, the test server only), the pickup history's rows held
@@ -6361,15 +6436,6 @@ function showRare(id) {
   rareUp = true; rareSent = Date.now();
   select(hudThing([id, HUD[id]]));
 }
-function showHidePop() {
-  if (!files.length) return [el('p', { className: 'meta empty', textContent: 'Open a HUD first.' })];
-  const all = [...onScreen(), ...otherParts(onScreen())].filter(t => t.info.kind === 'hud' && canHide(t.info.id));
-  const off = all.filter(t => isHidden(t.info.id)), on = all.filter(t => !isHidden(t.info.id));
-  const head = el('h3', { textContent: `Hidden (${off.length})` });
-  if (off.length) head.append(el('button', { type: 'button', textContent: 'Show them all', onclick: () => { for (const t of off) setHidden(t.info.id, false); refreshSoon(); } }));
-  return [head, ...(off.length ? off.map(t => partRow(t, true)) : [el('p', { className: 'meta empty', textContent: 'Nothing hidden. The eye by a part hides it; hidden parts are listed here to show again.' })]),
-    el('h3', { textContent: `Shown (${on.length})` }), ...on.map(t => partRow(t, true))];
-}
 
 // ---------- preview boxes ----------
 // What the preview offers to click and outlines: not a part hidden with its eye (still laid out by the game, not seen),
@@ -6385,7 +6451,7 @@ function boxList() {
     for (const p of live.panels) {
       if (!p.thing || p !== p.thing || (front && p !== front)) continue; // (the loading screen, a question box: only its box)
       const info = thingInfo(p);
-      if (!info || NO_CLICK.has(p.key) || (cover && info.kind === 'hud') || !seenInGame(info)) continue;
+      if (!info || NO_CLICK.has(p.key) || (cover && (info.kind === 'hud' || SEE_THROUGH.has(p.thing.key))) || !seenInGame(info)) continue;
       for (const r of clickRects(p, info, live.W, live.H))
         if (r.w * r.h <= 0.9 * live.W * live.H && r.x < live.W && r.y < live.H && r.x + r.w > 0 && r.y + r.h > 0) boxes.push({ thing: p, info, r, cls: 'thing' });
     }
@@ -6750,6 +6816,7 @@ let pendingRender = false, captured = false, autoTried = false, shownSize = ''; 
 let keepScores = false, scoresSent = 0, keepChat = false, chatSent = 0, joinedGame = false;
 async function poll() {
   if (live && live.local) keepTick();
+  if (live && live.local && !textsSent) { textsSent = true; call('cmd', '', `schemereload_testtext ${texts}`).catch(() => {}); }
   // capture once the plugin answers (a game started from Steam: once the editor has joined it, see start)
   if (live && !captured && !autoTried) { autoTried = true; capture(true); }
   // a game started some other way while the editor is open: joined by itself, once (see joinGame)
@@ -6766,7 +6833,7 @@ async function poll() {
   if (size !== shownSize) { const h = shownSize.split('x')[1]; shownSize = size; resOptions(); if (selected && live && h && h !== String(live.H)) render(); }
   $('launch').hidden = !!live || launching || restarting || joining || !hudPath;
   $('gamestate').textContent = !live ? 'Waiting for the game' : `${loadingUp() ? 'Loading screen' : menuUp() ? 'Main menu' : live.local ? 'Test game' : 'In a game'} · ${live.W}×${live.H}`;
-  if (!live) loadingHeld = null; // (a game that has gone holds nothing open)
+  if (!live) loadingHeld = null, textsSent = false; // (a game that has gone holds nothing open; the next one has no sample texts on)
   if (live) launching = false; // (it came up)
   testTools();
   inGameRow();
@@ -6797,7 +6864,16 @@ async function poll() {
         const t = live.panels.find(p => p === p.thing && p.key === s.thing.key);
         const ctl = t && s.control && live.panels.find(p => p.thing === t && p.key === s.control.key && p.cls === s.control.cls);
         const node = t && s.node && live.panels.find(p => p.thing === t && p.key === s.node.key && p.cls === s.node.cls);
-        done.set(s, t ? { ...s, thing: t, info: thingInfo(t) || s.info, control: ctl || s.control, node: node || s.node } : s);
+        let next = t ? { ...s, thing: t, info: thingInfo(t) || s.info, control: ctl || s.control, node: node || s.node } : s;
+        // (a buy menu page's parts share names with the other pages' (Title, a weapon's info box): found on another page,
+        // the file would be the old one's, so back to the whole window)
+        if (t && s.res && (next.control || next.node) && resPath(next) !== s.res.name) {
+          next = { ...next, control: null, node: null };
+          const path = resPath(next);
+          next.res = F(path) || null; // (the window's own file: open in the editor already, else read now)
+          if (!next.res) { const n = next; uiFile(path).then(f => { n.res = f; render(); }).catch(() => {}); }
+        }
+        done.set(s, next);
       }
       return done.get(s);
     };
@@ -6810,10 +6886,10 @@ async function poll() {
 }
 onPage('focusout', e => { if (pendingRender && e.target.closest && e.target.closest('#list, .nx-pin')) setTimeout(render); });
 
-// Re-render only when the set of things on screen changed, so the rows being edited stay put.
+// Re-render only when the set of things on screen (or the buy menu's page) changed, so the rows being edited stay put.
 let shownKey = '';
 function renderOnScreenOnly() {
-  const key = onScreen().map(t => t.info.id).join();
+  const key = onScreen().map(t => t.info.id).join() + '|' + (live ? live.panels.filter(p => p.key === 'buysubmenu').map(p => (buySubPage(p) || ['main'])[0]).join() : '');
   if (key !== shownKey) { shownKey = key; render(); }
 }
 
@@ -6858,15 +6934,14 @@ const TEST_SETUP = 'disconnect; sv_cheats 1; mp_autokick 0; mp_ignore_round_win_
   + 'mp_startmoney 16000; mp_timelimit 0; mp_maxrounds 0; mp_winlimit 0; bot_quota 1; bot_join_team T; bot_stop 1; bot_chatter off; '
   + 'motdfile hudeditor_nomotd.txt; maxplayers 32; vgui_cache_res_files 0; map de_dust2';
 // Sample server texts the test game keeps on screen, added up like the plugin's schemereload_testtext:
-// 1 timer box and right side, 2 speed, 4 jhud, 8 top left. Remembered between runs.
-let texts = 15;
-try { texts = +(localStorage.getItem('texts') ?? 15); } catch {}
-const showTexts = () => { for (const b of document.querySelectorAll('#texts button, #textchips button')) b.setAttribute('aria-pressed', !!(texts & b.dataset.bit)); };
+// 1 timer box and right side, 2 speed, 4 jhud, 8 top left. All off as the test server starts (they overlap: the user,
+// 10-10), switched on one by one under Speed & timer.
+let texts = 0, textsSent = false;
+const showTexts = () => { for (const b of document.querySelectorAll('#texts button')) b.setAttribute('aria-pressed', !!(texts & b.dataset.bit)); fillNxPop(); };
 
 async function toggleText(bit) {
   texts ^= bit;
   showTexts();
-  try { localStorage.setItem('texts', texts); } catch {}
   await call('cmd', '', `schemereload_testtext ${texts}`);
 }
 
@@ -6905,7 +6980,12 @@ const MENU_TOO = new Set(['CNetGraphPanel', 'CFPSPanel']);
 const inMap = () => !!live && live.panels.some(p => p.module === 'ClientDLL' && HUD[p.name] && !MENU_TOO.has(p.name));
 const ingameEl = $('ingame'); // (in the bar under the game)
 let shownInMap = false;
+// Loading screen: at the main menu (where it's picked to edit), and while it's held open (to let it go)
+function loadBtn(held = [cardSel, ...pins.map(p => p.sel)].some(s => s && s.thing.key === 'loadingdialog')) {
+  $('loadbtn').hidden = !files.length || !(held || menuUp());
+}
 function inGameRow() {
+  loadBtn();
   const on = inMap(), local = on && live.local;
   if (on !== shownInMap) { shownInMap = on; render(); }
   $('ingame').hidden = !on; // (out of a map: not there at all, not greyed out)
@@ -6916,7 +6996,7 @@ function inGameRow() {
   if (!on && kept.size) for (const w of [...kept]) keep(w, false); // (out of the map: let them go)
   if (!local) rareUp = false;
   $('textsbtn').title = local ? 'The test game\'s sample timer and speed texts: each on or off' : 'Only in the test game (Test server): the sample timer and speed texts';
-  if (!local) { $('textchips').hidden = true; $('textsbtn').setAttribute('aria-expanded', 'false'); }
+  if (!local && nxPop && nxPop.owner === $('textsbtn')) closeNxPop();
   if (!on && (keepScores || keepChat)) {
     if (keepChat && live) call('cmd', '', 'schemereload_chat 0').catch(() => {});
     keepScores = keepChat = false;
@@ -6934,7 +7014,8 @@ const topBar = () => { $('top').hidden = !$('parts').childElementCount; };
 async function testServer() {
   if (!live) { status('Start the game first.'); return; }
   status('Starting an offline test game on de_dust2...');
-  await call('cmd', '', `schemereload_testtext ${texts}; ${TEST_SETUP}`);
+  texts = 0; showTexts(); // (the sample texts start off: Speed & timer has a switch for each)
+  await call('cmd', '', `schemereload_testtext 0; ${TEST_SETUP}`);
   // (the MOTD and team select show as on a server, to edit them: the player closes the MOTD and picks a team in the game)
   for (let i = 0; i < 90; i++) {
     await sleep(1000);
@@ -7352,8 +7433,7 @@ if (host) {
     drawBoxes(); // (its outline comes and goes with it)
   };
   $('texts').onclick = e => { const b = e.target.closest('button'); if (b) toggleText(+b.dataset.bit); };
-  $('textchips').onclick = e => { const b = e.target.closest('button'); if (b) toggleText(+b.dataset.bit); };
-  $('textsbtn').onclick = () => { const open = $('textchips').hidden; $('textchips').hidden = !open; $('textsbtn').setAttribute('aria-expanded', String(open)); };
+  $('textsbtn').onclick = () => openNxPop($('textsbtn'), textsPop);
   showTexts();
   $('capture').onclick = () => capture(false);
   $('launch').onclick = () => launchForHud(true);
@@ -7372,7 +7452,6 @@ $('loadbtn').onclick = () => {
   if (pin) closePin(pin); else if (cardSel && cardSel.thing.key === 'loadingdialog') select(null); else select(LOADING_SEL());
 };
 $('elembtn').onclick = () => openNxPop($('elembtn'), elementPop);
-$('showhidebtn').onclick = () => openNxPop($('showhidebtn'), showHidePop);
 $('morebtn').onclick = () => openNxPop($('morebtn'), moreScreensPop);
 onPage('pointerdown', e => { if (nxPop && !nxPop.contains(e.target) && !nxPop.owner.contains(e.target)) closeNxPop(); }, true);
 // (Float: the main card and the pinned ones kept on screen: a smaller window, a place saved on a bigger one)
@@ -7784,7 +7863,11 @@ async function parserCheck() {
     const front1 = pickAt(1200 / 2560, 400 / 1440);
     live = two([['info', 'CCSTextWindow', 'MessageTitle'], ['class_ct', 'CClassMenu', 'joinClass', 'urban']]);
     const front2 = pickAt(1200 / 2560, 400 / 1440);
+    // (the spectator bars under team select: their full-screen window never picked)
+    live = two([['specgui', 'CCSSpectatorGUI', 'topbar'], ['class_ct', 'CClassMenu', 'joinClass', 'urban']]);
+    const bare = pickAll(100 / 2560, 700 / 1440).map(pickKey);
     live = kept;
+    check(bare.length && !bare.some(k => k.startsWith('specgui')), `team select over the spectator bars: no click picks the bars (${bare})`);
     check(front1?.thing.key === 'info' && front1.control?.name === 'MessageTitle' && front2?.thing.key === 'class_ct' && front2.control?.name === 'urban', `two windows open: a click picks the front one's part (${front1 && pickKey(front1)}, ${front2 && pickKey(front2)})`);
   }
   {
@@ -7955,6 +8038,19 @@ async function parserCheck() {
   const gv = [gridded('13'), gridded('c-29'), gridded('r3'), gridded('f0')].join();
   grid = g0;
   check(gv === '16,c-32,r0,f0', `grid: positions land on multiples, from their own anchor (${gv})`);
+  { // the buy menu's pages told apart by their buttons, the info boxes' looks by their page, the favourites box's parts
+    const was = live, P = (key, parent, extra = {}) => ({ key, parent, thing: { key: 'buy_ct' }, x: 0, y: 0, w: 10, h: 10, ...extra });
+    const page = P('buysubmenu', null), kev = P('kevlar', page), def = P('defuser', page), box = P('', page), price = P('pricelabel', box), img = P('classimage', box);
+    const rifles = P('buysubmenu', null, { thing: { key: 'buy_ter' } }), r1 = P('scout', rifles), rbox = P('', rifles), rp = P('pricelabel', rbox), ri = P('classimage', rbox, { h: 999 });
+    const lo = P('loadoutpanel', null), loKid = P('primary', lo);
+    live = { H: 1440, panels: [page, kev, def, box, price, img, rifles, r1, rbox, rp, ri, lo, loKid] };
+    try {
+      const sel = n => ({ thing: { key: 'buy_ct' }, control: n, node: null });
+      const got = [resPath(sel(def)), resPath(sel(price)), resPath(sel(rp)), resPath(sel(r1)), resPath(sel(lo)), resPath(sel(loKid))];
+      check(got.join() === ['resource/UI/BuyEquipment_CT.res', 'classes/base_equipment.res', 'classes/base_weapon_small.res', 'resource/UI/BuyRifles_TER.res', 'resource/UI/BuyMenu.res', BUY_LOADOUT].join(),
+        `buy menu parts go to their page's file, their info box's look (by the page, not its size) and the favourites box's (${got})`);
+    } finally { live = was; }
+  }
   { // where the kill feed and weapon selection really draw in their full-screen panels (no HUD: the game's defaults;
     // seen in game at 2560x1440: the feed's lines at the panel's right edge, the selection's boxes centred)
     const [kf] = killFeedRect({ x: 640, y: 36, w: 1884, h: 1404 }, 2560, 1440), [ws] = weaponSelectRect({ x: 0, y: 48, w: 2560, h: 1392 }, 2560, 1440);
@@ -8477,6 +8573,8 @@ if (host && location.hash === '#hosttest') (async () => {
     check(await call('new', 'myhud').then(() => false, () => true), 'existing HUD not overwritten');
     check(await call('gamemem').then(() => false, () => true), 'the game\'s memory: none without the game');
     check(await call('gamestate') === 'none', 'no game to join in --selftest');
+    check(/BuyPistols_CT/i.test(await call('vanilla', 'BuyPistols_CT.res')) && /pricelabel/i.test(await call('vanilla', 'base_weapon.res')) && /mainBackground/i.test(await call('vanilla', 'Loadout.res')),
+      'the game\'s buy menu pages, favourites box and weapon info looks are in the exe');
     // the player's own settings back in config.cfg after the editor's game: each kept line as it was, one it didn't have
     // taken out, the rest untouched
     const merged = await call('mergecvars', '', 'name "x"\r\ncl_radaralpha "0"\r\nnet_graph "1"\r\nsensitivity "2"\r\n\x01// kept\ncl_radaralpha "150"\n');

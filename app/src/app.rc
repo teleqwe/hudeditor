@@ -37,6 +37,22 @@ V_ARCTIC RCDATA "../defaults/ui/classes/arctic.res"
 V_GUERILLA RCDATA "../defaults/ui/classes/guerilla.res"
 V_AUTOSELECT_CT RCDATA "../defaults/ui/classes/autoselect_ct.res"
 V_AUTOSELECT_T RCDATA "../defaults/ui/classes/autoselect_t.res"
+// the buy menu's other pages (each opened by a main page button), its favourites box, and the weapon info boxes' shared
+// looks (classes/<weapon>.res #base one of these)
+V_BUYPISTOLS_CT RCDATA "../defaults/ui/buypistols_ct.res"
+V_BUYPISTOLS_TER RCDATA "../defaults/ui/buypistols_ter.res"
+V_BUYSHOTGUNS RCDATA "../defaults/ui/buyshotguns.res"
+V_BUYSUBMACHINEGUNS_CT RCDATA "../defaults/ui/buysubmachineguns_ct.res"
+V_BUYSUBMACHINEGUNS_TER RCDATA "../defaults/ui/buysubmachineguns_ter.res"
+V_BUYRIFLES_CT RCDATA "../defaults/ui/buyrifles_ct.res"
+V_BUYRIFLES_TER RCDATA "../defaults/ui/buyrifles_ter.res"
+V_BUYMACHINEGUNS RCDATA "../defaults/ui/buymachineguns.res"
+V_BUYEQUIPMENT_CT RCDATA "../defaults/ui/buyequipment_ct.res"
+V_BUYEQUIPMENT_TER RCDATA "../defaults/ui/buyequipment_ter.res"
+V_LOADOUT RCDATA "../defaults/ui/loadout.res"
+V_BASE_WEAPON RCDATA "../defaults/ui/classes/base_weapon.res"
+V_BASE_WEAPON_SMALL RCDATA "../defaults/ui/classes/base_weapon_small.res"
+V_BASE_EQUIPMENT RCDATA "../defaults/ui/classes/base_equipment.res"
 // the version (file properties); keep it the same as APP_VERSION in main.cpp
 1 VERSIONINFO
 FILEVERSION 0,10,0,0

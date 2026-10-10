@@ -902,6 +902,17 @@ CON_COMMAND( schemereload_press, "schemereload_press <panel name>[/<child name>]
 		Msg( "[schemereload] no panel named %s\n", args.Arg( 1 ) );
 }
 
+// As the mouse coming onto that button (one on screen) would: a buy menu weapon's button shows its info box (MouseOverButton),
+// which the mouse over the editor's preview never does. It stays until the mouse leaves the button.
+CON_COMMAND( schemereload_hover, "schemereload_hover <panel name>: as if the mouse came onto that button (one on screen)" )
+{
+	VPANEL p = args.ArgC() > 1 && g_pVGui ? FindShown( TopPanel(), args.Arg( 1 ), 0 ) : 0;
+	if ( p )
+		g_pVGui->PostMessage( p, new KeyValues( "CursorEntered" ), 0 );
+	else
+		Msg( "[schemereload] no panel named %s\n", args.ArgC() > 1 ? args.Arg( 1 ) : "" );
+}
+
 // A reload knocks the main menu about. The logo (GameMenuButton, GameMenuButton2) is left see-through, and the menu
 // only fades it back in when a dialog opens or closes. The items get their own defaults (MenuLarge, 12 pixels) in place
 // of the larger font and item height the menu gave them at startup. So keep what they had. Label::SetFont/GetFont,
@@ -2078,7 +2089,7 @@ CON_COMMAND( schemereload_testvalue, "schemereload_testvalue health|armor|money|
 }
 
 // Panels the game shows only now and then, on the test server: the round-end panel (as for a CT win, with the player
-// as MVP and a fun fact), the killer panel (as if a bot had killed the player), or neither (hide).
+// as MVP and a fun fact), the killer panel (the player as the killer), or neither (hide).
 static IGameEventManager2 *g_pGameEvents;
 CON_COMMAND( schemereload_showpanel, "schemereload_showpanel win|freeze|hide: shows the round-end or killer panel on the test server" )
 {
@@ -2114,8 +2125,8 @@ CON_COMMAND( schemereload_showpanel, "schemereload_showpanel win|freeze|hide: sh
 		} );
 		fire( "round_mvp", []( IGameEvent *e, int me, int ) { e->SetInt( "userid", me ); e->SetInt( "reason", 1 ); } );
 	}
-	else if ( !Q_stricmp( what, "freeze" ) )
-		fire( "show_freezepanel", []( IGameEvent *e, int, int bot ) { e->SetInt( "killer", bot ? bot : 1 ); } );
+	else if ( !Q_stricmp( what, "freeze" ) ) // (the player as the killer: the bot is mostly out of sight, never sent to the game,
+		fire( "show_freezepanel", []( IGameEvent *e, int, int ) { e->SetInt( "killer", 1 ); } ); // so it had no name ("[unknown]") or health)
 	else
 	{
 		fire( "hide_freezepanel", NULL );
