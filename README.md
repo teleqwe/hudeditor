@@ -1,3 +1,14 @@
+human note here:                                                                                                        
+this is purely a for-fun vibe code project with the goal of making custom huds easier to create for the people that arent
+interested in digging through thousand line text files.
+
+im not sure i will maintain this forever but for now ill try work towards a full release.
+
+if you have suggestions or issues feel free to lmk on discord: tele4
+
+this is currently only for windows due to it using webview2 with no plans on porting it to linux. sorry. (if you are interested feel free to fork and i will point users there.)
+
+
 # Tele HUD Editor (beta)
 
 Edit Counter-Strike: Source HUDs while the game is running. Click a part of the game, change it, and see the change
