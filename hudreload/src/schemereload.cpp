@@ -1813,7 +1813,7 @@ static void SendHints( CHostFilter &filter, const char *hint, const char *key )
 	g_pEngineServer->MessageEnd();
 }
 
-// ShowHudText: x/y are screen fractions (-1 = centred). Held 0.5 s, so it goes away by itself once no longer sent.
+// ShowHudText: x/y are screen fractions (-1 = centred). Held 0.12 s, so it goes away by itself once no longer sent.
 static void SendHudText( CHostFilter &filter, int channel, float x, float y, const char *text )
 {
 	bf_write *msg = g_pEngineServer->UserMessageBegin( &filter, g_msgHudMsg );
@@ -1825,7 +1825,8 @@ static void SendHudText( CHostFilter &filter, int channel, float x, float y, con
 	msg->WriteByte( 0 );		// effect
 	msg->WriteFloat( 0.0f );	// fade in
 	msg->WriteFloat( 0.0f );	// fade out
-	msg->WriteFloat( 0.5f );	// hold (re-sent every 0.1 s)
+	msg->WriteFloat( 0.12f );	// hold: just over the 0.1 s resend. The game keeps every copy still held and draws each
+								// (NOTES "How the game draws text"): 0.5 s drew it 5 times, its edges rough
 	msg->WriteFloat( 0.0f );	// fx time
 	msg->WriteString( text );
 	g_pEngineServer->MessageEnd();
