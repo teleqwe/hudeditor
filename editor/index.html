@@ -277,7 +277,7 @@
   .row.menuitem button, .row.cmdbtn > button { padding: 3px 0; }
   .row.cmdbtn { display: grid; grid-template-columns: 1fr auto 1.3fr auto 30px; gap: 4px; align-items: center; }
   .row.lineup { display: grid; grid-template-columns: 54px repeat(4, 1fr); gap: 4px; align-items: center; }
-  .row.lineup button { padding: 4px 2px; font-size: 11px; }
+  .row.lineup button { padding: 4px 2px; font-size: 11px; white-space: nowrap; }
   .row.menuadd { display: grid; grid-template-columns: 1fr auto; gap: 6px 8px; }
   .row.menuadd > .meta, .row.menuadd > .wide { grid-column: 1 / -1; }
   .row.menuadd > .meta { color: var(--text); font-size: 12px; font-weight: 550; }
@@ -462,8 +462,22 @@
   .nx-pop .thing-btn { border-radius: 6px; }
   .nx-pop .meta.empty { padding: 4px 10px 8px; }
 
+  /* (a long HUD name ends in "..." inside its button, not cut off both sides: a flex box can't ellipsis) */
+  .app-header #hudbtn { display: block; }
+  /* (a narrow window: Global settings, Test server, Dock and Float as their icons; their tooltips still name them) */
+  @media (max-width: 1100px) { #globalbtn, #testserver, .seg button { width: 32px; gap: 0; padding: 0; font-size: 0; } }
+  /* (the line-up and loading-screen boxes above the tabs, panels like the tabs, their rows on the same edge) */
+  .nx-body > .card { flex: none; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+  .nx-body > .card > .sub { margin: 10px 0 2px; font-size: 11.5px; font-weight: 600; color: var(--muted); }
+  .nx-body > .card > .row:first-child { border-top: 0; }
+  /* (the bar under the game wraps instead of hiding its end) */
+  .viewbar { flex-wrap: wrap; overflow: visible; }
+  /* (keyboard focus visible on Dock and Float, and on the divider) */
+  .seg button:focus-visible { outline-offset: -2px; }
+  #divider:focus-visible { background: var(--accent); }
   @media (max-width: 860px) { body, body.float { grid-template-columns: 1fr; grid-template-rows: auto 50vh minmax(0, 1fr); } #divider { display: none; } aside { grid-column: 1; grid-row: 3; border-top: 1px solid var(--line); }
-    body.float aside { position: static; width: auto; height: auto; max-height: none; resize: none; border-radius: 0; box-shadow: none; border: 0; border-top: 1px solid var(--line); } }
+    body.float aside { position: static; width: auto; height: auto; max-width: none; max-height: none; resize: none; border-radius: 0; box-shadow: none; border: 0; border-top: 1px solid var(--line); }
+    body.float .nx-head { cursor: default; padding-left: 14px; } body.float .nx-head .grip { display: none; } }
   @media (max-width: 440px) { .settings-layout { grid-template-columns: 80px minmax(0, 1fr); } .section-stack { padding: 6px 10px 15px; } .category-button { padding: 8px 4px; font-size: 12px; } }
 </style>
 </head>
@@ -537,7 +551,7 @@
     <span class="vlabel">Show</span>
     <div id="ingame">
       <div class="ingame">
-        <button id="scores" aria-pressed="false" title="Keep the scoreboard open to edit it. Click again (or press Tab in the game) to close it.">Scoreboard</button>
+        <button id="scores" aria-pressed="false" title="Keep the scoreboard open to edit it. Click again to close it.">Scoreboard</button>
         <button id="keepchat" aria-pressed="false" title="Keep the chat open (typing) to edit it: opened again after a change reloads the HUD. Click again to close it.">Chat</button>
         <button id="netgraphbtn" aria-pressed="false" title="Show the net graph in the editor's game (net_graph) to edit it. Not saved in the HUD: its own setting is in the Net graph's rows.">Net graph</button>
         <button id="showposbtn" aria-pressed="false" title="Show the position text in the editor's game (cl_showpos) to edit it. Not saved in the HUD.">Position</button>
@@ -712,7 +726,7 @@ const WINDOWS = { info: 'Server message (MOTD)', team: 'Team select', class_ct: 
 const WINDOW_COLOURS = {
   [C]: [['Window background', 'Frame.BgColor', ''], ['Backdrop', 'BgColor', 'Small frames on the scoreboard; the box of team and class select, the MOTD and the buy menu (there only its opacity counts)'], ['Title', 'FrameTitleBar.TextColor', ''],
     ['Text', 'Label.TextColor', 'Shared by in-game windows and the buy menu'], ['Borders', 'Border.Bright|Border.Dark', '']],
-  [S]: [['Window background', 'Frame.BgColor', ''], ['Window background, not focused', 'Frame.OutOfFocusBgColor', ''],
+  [S]: [['Window background', 'Frame.BgColor', ''], ['Window background, window behind', 'Frame.OutOfFocusBgColor', ''],
     ['Title', 'FrameTitleBar.TextColor', ''], ['Title bar', 'FrameTitleBar.BgColor', ''], ['Title, window behind', 'FrameTitleBar.DisabledTextColor', 'A window behind another one'],
     ['Title bar, window behind', 'FrameTitleBar.DisabledBgColor', ''], ['Text', 'Label.TextColor', ''], ['Borders', 'Border.Bright|Border.Dark', ''],
     // (checked 2026-10-02: a plain start shows tooltips in these; a reload gave the box the text fields' colours until a
@@ -722,7 +736,7 @@ const WINDOW_COLOURS = {
 };
 // The menus' right-click menus and drop-down lists (the server list's, the options' boxes): only there while one is open
 const MENU_COLOURS = [['Menu text', 'Menu.TextColor', 'Right-click menus and drop-down lists, in every menu window'], ['Menu background', 'Menu.BgColor', ''],
-  ['Menu text (mouse over)', 'Menu.ArmedTextColor', ''], ['Menu row (mouse over)', 'Menu.ArmedBgColor', '']];
+  ['Menu text (mouse over)', 'Menu.ArmedTextColor', ''], ['Menu background (mouse over)', 'Menu.ArmedBgColor', '']];
 const EXTRA = {
   gamemenu: [['Menu text', 'MainMenu.TextColor', 'Resume Game, Find Servers, Options...'], ['Menu text (mouse over)', 'MainMenu.ArmedTextColor', ''],
     ['Menu text (clicked)', 'MainMenu.DepressedTextColor', ''], ['Background dim', 'MainMenu.Backdrop', 'Darkens the game behind the menu']],
@@ -1090,7 +1104,8 @@ async function loadGame() {
   if (!host) return;
   const res = [...new Set([...Object.values(UI_RES), ...Object.values(BUY_PAGES), ...SB_PAGES, LOADING_VAC, C4])];
   await Promise.all([call('defaultlayout').then(t => put(L, t)), ...[C, S, CH].map(n => call('vanilla', n).then(t => put(n, t))),
-    ...res.map(p => call('vanilla', p.split('/').pop()).then(t => put(p, t)))].map(p => p.catch(() => {})));
+    ...res.map(p => call('vanilla', p.split('/').pop()).then(t => put(p, t))),
+    ...Object.values(CLASS_PAGES).flat().map(n => call('vanilla', `${n}.res`).then(t => put(classPage(n), t)))].map(p => p.catch(() => {})));
   render();
 }
 const gameOf = name => GAME[(name || '').toLowerCase()] || null;
@@ -1471,6 +1486,7 @@ function toGameWindow(fs) {
   if (!change.length) return status('This window is the game\'s already.');
   if (!confirm('Put this whole window back as the game has it? Every part goes back to the game\'s place and colours, and what was added to it goes (Ctrl+Z brings it all back).')) return;
   const group = burstGroup();
+  if (change.some(f => /^classes\//i.test(f.name))) needRestart('class pictures'); // (the game copies them when it makes the menu)
   for (const f of change) {
     for (const pic of f.text.match(/replay\/thumbnails\/[^"\s]+/gi) || []) dropPicture(pic); // (on Save, if nothing names it)
     // the borders of its added boxes: borders of their own in the scheme (see setEdge), unused once they go
@@ -1640,7 +1656,7 @@ function showHideRows(sel) {
       && !live.panels.some(q => q.thing && q.thing.key === sel.thing.key && q.key === k)) {
       const node = { key: k, name: b, cls: ctl[0], parent: sel.thing, thing: sel.thing, scheme: sel.thing.scheme, module: sel.thing.module, x: 0, y: 0, w: 0, h: 0 };
       row.firstElementChild.append(el('button', { className: 'mini', textContent: 'Edit', title: 'Not on screen now: pick it to change its text, colours and font',
-        onclick: e => { e.stopPropagation(); select({ ...sel, control: node, node }); } }));
+        onclick: (into => e => { e.stopPropagation(); select({ ...sel, control: node, node }, into); })(curPin) }));
     }
     rows.push(row);
   }
@@ -2094,7 +2110,7 @@ function holdLoading(on, again = false) {
   loadingHeld = want;
   loadingAsked = want ? Date.now() : 0;
   // ("Opening it" becomes Show it again if it never came; not while a number is being typed, as poll)
-  if (want) setTimeout(() => { if (selected && selected.thing.key === 'loadingdialog' && !loadingUp()) typingInCard() ? pendingRender = true : render(); }, 2600);
+  if (want) setTimeout(() => { if ([cardSel, ...pins.map(p => p.sel)].some(s => s && s.thing.key === 'loadingdialog') && !loadingUp()) typingInCard() ? pendingRender = true : render(); }, 2600);
   return live && call('cmd', '', `schemereload_loading ${want || 'hide'}`).catch(() => {});
 }
 // The game cuts what's in the loading box at its window's edge, so a picture or text around the box didn't show
@@ -2404,7 +2420,7 @@ async function addToHud(kind, file, lay = F(L)) {
   await sleep(400);
   await writing;
   if (!inWindow) return select({ thing: { name, key: name.toLowerCase() }, info: customInfo(name), control: null });
-  if (box && !loadingUp()) { status('Added: its settings are under Custom and Layout here. Show the box (top of this page) to see it.'); return refreshSoon(); }
+  if (box && !loadingUp()) { status('Added: its settings are under Add custom and Extra here. Show the box (top of this card) to see it.'); return refreshSoon(); }
   // in a window: selected as if clicked (clicked again until it's the one, if something is over its middle), once the
   // game has made it
   // (in this window: the HUD's own added parts are numbered from 1 too, so hudeditor_pic1 can be on screen twice)
@@ -2423,13 +2439,13 @@ function customRows(id, lay = F(L)) {
   const p = layoutProps(lay, id), rows = [], inWindow = lay !== F(L), kind = (p.controlname || '').toLowerCase();
   if (inWindow && kind === 'imagepanel') rows.push(colorRow('Tint', 'For this picture only', p.drawcolor || '255 255 255 255', v => save(lay, 'drawcolor', v, id), ['drawcolor'], null, `${lay.name}/${id}`));
   if (kind === 'editablepanel') {
-    rows.push(colorRow('Border', 'A 1-unit line round the box (clear: none)', edgeColour(p.border, resScheme(lay)) || '0 0 0 0', v => setEdge(lay, id, v), ['border'], null, `${lay.name}/${id}`));
-    if (inWindow) rows.push(checkRow('Rounded corners', p.paintbackgroundtype === '2', on => save(lay, 'PaintBackgroundType', on ? '2' : '0', id), `${lay.name}/${id}|rounded`));
+    rows.push(tagged(colorRow('Border', 'A 1-unit line round the box (clear: none)', edgeColour(p.border, resScheme(lay)) || '0 0 0 0', v => setEdge(lay, id, v), ['border'], null, `${lay.name}/${id}`), 'border', 'Box'));
+    if (inWindow) rows.push(tagged(checkRow('Rounded corners', p.paintbackgroundtype === '2', on => save(lay, 'PaintBackgroundType', on ? '2' : '0', id), `${lay.name}/${id}|rounded`), 'border', 'Box'));
   }
   // (own ↺ ids: a window that can't be clicked lists several added parts in one selection, see addedSections)
-  if (inWindow) rows.push(inputRow('Layer', p.zpos || '0', v => save(lay, 'zpos', v, id), { type: 'number', step: 1, title: 'Higher is in front', undoId: `${lay.name}/${id}|layer` }));
+  if (inWindow) rows.push(tagged(inputRow('Layer', p.zpos || '0', v => save(lay, 'zpos', v, id), { type: 'number', step: 1, title: 'Higher is in front', undoId: `${lay.name}/${id}|layer` }), 'layout', 'Layer'));
   if ((p.controlname || '').toLowerCase() === 'label') {
-    rows.push(inputRow('Text', p.labeltext || '', v => save(lay, 'labelText', v.replace(/["\\]/g, ''), id), { undoId: `${lay.name}/${id}|text` }));
+    rows.push(tagged(inputRow('Text', p.labeltext || '', v => save(lay, 'labelText', v.replace(/["\\]/g, ''), id), { undoId: `${lay.name}/${id}|text` }), 'layout', 'Text'));
   }
   if ((p.controlname || '').toLowerCase() === 'imagepanel') {
     const pick = el('input', { type: 'file', accept: 'image/png,image/jpeg,image/gif,image/webp', hidden: true });
@@ -2519,14 +2535,14 @@ function addRows(lay = F(L)) {
   if (lay !== F(L)) {
     r.dataset.q = 'add picture gif text box window';
     return [...addedList(lay), r, ...(lay.name === UI_RES.buy_ct ? [noteRow('What\'s added goes into both sides\' buy menu and every page, and shows straight away while the buy menu is open.')] : []),
-      ...(LOADING_TWIN[lay.name] && !loadingFree(lay) ? [noteRow('The game cuts what\'s outside the box: Layout > Parts anywhere on the screen lets pictures and texts go around it.')] : []),
+      ...(LOADING_TWIN[lay.name] && !loadingFree(lay) ? [noteRow('The game cuts what\'s outside the box: Extra > Layout > Parts anywhere on the screen lets pictures and texts go around it.')] : []),
       // (a Label whose text starts and ends with one of its window's dialog variables shows the values, every %name% in
       // it; one starting or ending with a word prints as typed, seen 2026-10-09)
       ...(lay.name === UI_RES.scores ? [noteRow('A text that starts and ends with one of the scoreboard\'s values shows them live: %mapname%, %ct_teamname%, %t_teamname%, %ct_totalteamscore%, %t_totalteamscore%, %ct_alivecount%, %t_alivecount%, %spectators%, %sourcetv% ("%ct_totalteamscore% - %t_totalteamscore%" works; "CT %ct_totalteamscore%" prints as typed: put the word in a text of its own).')] : []),
       ...(lay.name === UI_RES.specgui ? [noteRow('These show only while spectating, with the bars. The bars\' own grey is fixed by the game: hide them under Show or hide and put a colour box in their place.')] : [])];
   }
   r.dataset.q = 'add picture image gif logo text label box colour background';
-  return [...addedList(), r, noteRow('These go on the HUD you see while playing, in the middle of the screen, over the game (HudLayout). For a window (scoreboard, team select, class select, MOTD), open it, click it in the preview and use its Custom tab.'),
+  return [...addedList(), r, noteRow('For a window (scoreboard, team select, class select, MOTD), open it, click it in the preview and use its Add custom tab.'),
     noteRow('These show on every server, sv_pure ones too (pictures are kept where the game lets them past sv_pure: seen on a fully pure server).')];
 }
 
@@ -2792,19 +2808,19 @@ function rowHeightRow(f, team) {
   return row;
 }
 
-async function select(sel) {
+async function select(sel, into = null) { // (into: a pinned card it opens in, from that card's own links)
   also = []; // parts Ctrl+clicked with the last selection
   // loaded before it becomes the selection: the panel poll copies the selection, and a copy made while this waited
   // would never get the file
   if (sel) sel.res = await uiFile(resPath(sel));
   if (sel && sel.thing.key === 'loadingdialog') await Promise.all([uiFile(UI_RES.loadingdialog), uiFile(LOADING_VAC)]); // (both written together)
-  if (sel && STARTUP_RES.has(sel.thing.key)) await uiFile(UI_RES[sel.thing.key]); // (its Custom tab: the buy menu's own file, whatever page's control is clicked)
+  if (sel && STARTUP_RES.has(sel.thing.key)) await uiFile(UI_RES[sel.thing.key]); // (its Add custom tab: the buy menu's own file, whatever page's control is clicked)
   if (sel && (sel.thing.key === 'scores' || sel.info.id === 'HudRadar' || HUD[sel.info.id]?.cvars || HUD[sel.info.id]?.extraCvars)) await loadCvars();
   if (sel && CLASS_PAGES[sel.thing.key]) await Promise.all(CLASS_PAGES[sel.thing.key].map(async n => { // (Class picture)
     await uiFile(classPage(n));
     if (!classGame[n] && host) try { const t = await call('vanilla', `${n}.res`); classGame[n] = { text: t, parsed: parse(t), bases: [] }; } catch {}
   }));
-  const pin = sel && layoutMode === 'float' ? pins.find(p => samePart(p.sel, sel)) : null;
+  const pin = sel && layoutMode === 'float' ? (into && pins.includes(into) ? into : pins.find(p => samePart(p.sel, sel))) : null;
   if (pin) { pin.sel = selected = sel; holdShown(); render(); drawBoxes(); return; } // (picked again: its pinned card is the one in use)
   selected = cardSel = sel;
   holdShown();
@@ -3690,7 +3706,7 @@ function hudSettingRows(id, hud) {
 // alpha would lose to: both hidden off screen; seen 2026-10-05)
 const SELF_FADING = new Set(['HudHintDisplay', 'HudHintKeyDisplay', 'HudWeaponSelection', 'HudMenu', 'HudHistoryResource', 'HudChat', 'HudRadar', 'WinPanel_Round']);
 // (one moved off either way counts, and one an older editor hid with alpha 0: they're all put right by showing it)
-const isHidden = id => { const p = layoutProps(F(L), id), zero = p.alpha !== undefined && +p.alpha === 0; return SELF_FADING.has(id) ? 'xpos_hudeditor' in p || 'ypos_hudeditor' in p || zero : zero; };
+const isHidden = (id, f = F(L)) => { const p = layoutProps(f, id), zero = p.alpha !== undefined && +p.alpha === 0; return SELF_FADING.has(id) ? 'xpos_hudeditor' in p || 'ypos_hudeditor' in p || zero : zero; };
 // Only parts HudLayout sets up can be hidden this way (the centre print isn't one of them).
 const canHide = id => !!F(L) && Object.keys(layoutProps(F(L), id)).length > 0;
 
@@ -4157,15 +4173,15 @@ function globalFontSections() {
   apply.append(el('span'), go);
   apply.dataset.q = 'every font all fonts';
   // a new font file for all of them: into every scheme's CustomFontFiles, then picked here
-  const faceRow = pickRow('Font', globalFace, () => fontFaces, v => { globalFace = v; }, { faces: true, note: 'Left as it is, each font keeps its own face', empty: 'Keep their own' });
-  const every = [faceRow, inputRow('Weight', globalWeight, v => { globalWeight = v; }, { type: 'number', step: 100, min: 0, title: 'Left empty: weights stay' }),
+  const faceRow = pickRow('Font', globalFace, () => fontFaces, v => { globalFace = v; }, { faces: true, note: 'Left as it is, each font keeps its own face', empty: 'Keep their own', noUndo: true });
+  const every = [faceRow, inputRow('Weight', globalWeight, v => { globalWeight = v; }, { type: 'number', step: 100, min: 0, title: 'Left empty: weights stay', noUndo: true }),
     noteRow('Icon and symbol fonts (weapon icons, the logo, arrows) are left alone. Every screen size is changed.'), apply];
   every.action = el('button', { className: 'mini addfont', textContent: '+ Add font', title: 'Add a .ttf or .otf font file to the HUD, for every scheme', onclick: () => {
     addFontFile(FONT_FILES.map(([f]) => f).filter(F), fam => { faceRow.children[1].set(fam); globalFace = fam; });
   } });
   // the symbol font: one face for every scheme's Marlett (see useAsSymbolFont)
   globalSym ??= symbolFace();
-  const symRow = pickRow('Font', globalSym, () => fontFaces, v => { globalSym = v; }, { faces: true, note: 'Marlett is the game\'s own' });
+  const symRow = pickRow('Font', globalSym, () => fontFaces, v => { globalSym = v; }, { faces: true, note: 'Marlett is the game\'s own', noUndo: true });
   const symGo = el('div', { className: 'row check' });
   symGo.append(el('span'), el('button', { textContent: 'Use as symbol font', onclick: () => useAsSymbolFont(globalSym.trim()) }));
   symGo.dataset.q = 'symbol font marlett arrows ticks add font';
@@ -4401,10 +4417,10 @@ function separateFontRows(file, now, game, set, id, keys = []) {
 }
 
 // A row with a font drop-down and its ↺. names() lists the choices.
-function pickRow(label, value, names, onChange, { faces = false, id = null, note = '', keys = [], dflt = null, empty = '(none)' } = {}) {
+function pickRow(label, value, names, onChange, { faces = false, id = null, note = '', keys = [], dflt = null, empty = '(none)', noUndo = false } = {}) {
   const row = el('div', { className: 'row pick' }), meta = el('div', { className: 'meta' });
   const pick = fontPick(value, names, v => { undo.update(v); onChange(v); }, faces, empty);
-  const undo = undoArrow(id || `${rowScope}|${label}`, value, v => v || empty, v => { pick.set(v); onChange(v); });
+  const undo = noUndo ? Object.assign(el('span'), { update() {} }) : undoArrow(id || `${rowScope}|${label}`, value, v => v || empty, v => { pick.set(v); onChange(v); });
   const name = el('div');
   name.append(renameable(label));
   if (note) meta.append(renameable(note));
@@ -5392,6 +5408,8 @@ function addedSections(lay, schemeFile, add, which) {
 }
 // [title, rows, kind] in category order. Rows tagged with another category (dataset.cat: a part's position and size, its
 // box corners, a control's own font) go there, under their heading (dataset.head), before that category's own sections.
+// (a row for another tab, under its heading there: an added box's border under Borders, an added text's words under Extra)
+const tagged = (r, cat, head) => (Object.assign(r.dataset, { cat, head }), r);
 function byKind(groups) {
   const out = Object.entries(groups).flatMap(([kind, list]) => list.map(([t, r]) => [t, r, kind])), moved = new Map();
   for (const s of out) {
@@ -5399,7 +5417,7 @@ function byKind(groups) {
     if (!go.length) continue;
     s[1] = s[1].filter(r => !go.includes(r));
     for (const r of go) {
-      const k = `${r.dataset.cat}|${r.dataset.head}|${s[0]}`;
+      const k = `${r.dataset.cat}|${r.dataset.head}|${r.dataset.own ? 'own' : 'shared'}`; // (the part's own rows together, the rest together)
       if (!moved.has(k)) moved.set(k, [r.dataset.head, [], r.dataset.cat, s[0]]);
       moved.get(k)[1].push(r);
     }
@@ -5452,8 +5470,11 @@ function render() {
   if (pointerDown) { renderOnRelease = true; return; }
   // a row drawn now would show the value from before an edit still waiting to be written (a tick box would untick)
   if (waiting.size) { renderAfterSave = true; return; }
+  // (keyboard focus on a card's button: found again after the redraw, by its kind, tab and words)
+  const fe = document.activeElement, fbox = fe && fe.tagName === 'BUTTON' && fe.closest('#list, .nx-pin');
+  const fk = fbox && { pin: pins.find(p => p.el === fbox) || null, tab: fe.closest('.nx-cat')?.dataset.tab, cls: fe.className, text: fe.textContent.trim() };
   // emptying the list scrolls it to the top; keep the reader's place (select() scrolls up itself)
-  const top = scroller().scrollTop, act = selected;
+  const top = scroller().scrollTop, act = inUse = selected;
   if (layoutMode === 'float') selected = cardSel; // (the main card's part; the pinned cards' are drawn after it)
   try {
     renderList();
@@ -5463,6 +5484,12 @@ function render() {
   } finally { selected = act; }
   if (fpop && !document.contains(fpop.owner)) closeFontPop(); // its row has gone
   if (cpop && !document.contains(cpop.owner)) closePicker();
+  if (fk && !document.contains(fe)) {
+    const root = fk.pin ? (pins.includes(fk.pin) && fk.pin.sel === selected ? fk.pin.el : null) : layoutMode !== 'float' || cardSel === selected ? $('list') : null;
+    const same = b => b.className === fk.cls && (b.closest('.nx-cat')?.dataset.tab) === fk.tab;
+    const bs = root ? [...root.querySelectorAll('button')] : [];
+    (bs.find(b => same(b) && b.textContent.trim() === fk.text) || bs.find(same))?.focus({ preventScroll: true });
+  }
   updateResCaution();
   fillNxPop();
 }
@@ -5584,6 +5611,7 @@ const TAB_OF = { colour: 'colour', font: 'font', border: 'border', layout: 'extr
 const DEV_OUT = new Set(['FreezePanel', 'WinPanel_Round']);
 // cardSel: what the main card (Float) or the panel (Dock) shows; pins: Float's pinned cards, each on its own part. The
 // global `selected` is the one in use: what the preview marks and keys and handlers act on (a pinned card's while it's used)
+let inUse = null; // (the part in use while render() draws each card with its own: the Ctrl+click group's card)
 let layoutMode = 'dock', cardSel = null, pins = [], floatAll = false, floatMoved = false, floatPlaced = '', nxPop = null;
 try { if (localStorage.getItem('layout') === 'float') layoutMode = 'float'; } catch {}
 const mainTabs = { key: '', open: new Set(), more: new Set() };
@@ -5638,9 +5666,11 @@ function elementCards() {
 
 // The settings of the global `selected` into box (the panel's list, or a pinned card): its heading, then its tabs (Float:
 // its simple settings first). tabs: which tabs are open and showing more, kept while it's the same part.
+let curPin = null; // (the pinned card being drawn: its own links open in it)
 function buildSelection(box, tabs, pin = null) {
+  curPin = pin;
   const sel = selected, float = layoutMode === 'float', key = selKey(sel);
-  if (tabs.key !== key) { tabs.key = key; tabs.open.clear(); tabs.more.clear(); if (sel.info.id === 'global') tabs.open.add('font'); }
+  if (tabs.key !== key) { tabs.key = key; tabs.open.clear(); tabs.more.clear(); tabs.auto = true; }
   const head = el('div', { className: 'selected-head nx-head' }), titles = el('div', { className: 'titles' }), tools = el('div', { className: 'nx-tools' });
   // (from a part of a window or of a HUD part, as the chat's text box: back to the whole)
   // (a control: named as itself, as the preview's box is, with the whole it's in above it)
@@ -5649,20 +5679,20 @@ function buildSelection(box, tabs, pin = null) {
   const sub = (ctl ? `${sel.control.name ? `"${sel.control.name}" in ` : 'In '}${sel.info.name}` : subtitle(sel)) + (away ? ' · not on screen now' : '');
   const whole = name !== sel.info.name ? sel.info.name : sel.info.kind === 'hud' ? 'The whole part' : 'The whole window';
   if (sel.control || sel.node)
-    titles.append(el('button', { className: 'back nx-up', type: 'button', textContent: `‹ ${whole}`, title: `Back to ${sel.info.name}`, onclick: () => select({ ...sel, control: null, node: null }) }));
+    titles.append(el('button', { className: 'back nx-up', type: 'button', textContent: `‹ ${whole}`, title: `Back to ${sel.info.name}`, onclick: () => select({ ...sel, control: null, node: null }, pin) }));
   titles.append(el('h2', { textContent: name, title: name }), el('p', { textContent: sub, title: sub }));
   head.append(icon('grip-vertical', 'grip'), titles, tools);
   rowScope = [sel.thing.key, sel.control?.key, sel.node?.key].filter(Boolean).join('/');
   const sections = selectionSections(sel), quick = float && !floatAll ? quickRows(sections, sel) : [];
   rowScope = '';
   const eye = hideButton(sel) || el('button', { className: 'eye', type: 'button', disabled: true, innerHTML: EYE_SVG, title: 'This one can\'t be hidden from here' });
-  tools.append(eye, resetButton(sel, sections), defaultButton(sel));
-  if (float) tools.append(pinButton(pin));
-  tools.append(el('span', { className: 'tsep' }), iconButton('x', pin ? 'Close this pinned card' : 'Close (Esc): back to the list; changes stay unsaved until Save HUD', () => pin ? closePin(pin) : select(null), 'close'));
+  tools.append(eye, resetButton(sel, sections, quick), defaultButton(sel));
+  if (float && (pin || sel.thing.key !== 'loadingdialog')) tools.append(pinButton(pin)); // (not the loading screen: held open, it takes every click)
+  tools.append(el('span', { className: 'tsep' }), iconButton('x', pin ? 'Close this pinned card' : float ? 'Close (Esc); changes stay unsaved until Save HUD' : 'Close (Esc): back to the list; changes stay unsaved until Save HUD', () => pin ? closePin(pin) : select(null), 'close'));
   if (float) head.addEventListener('pointerdown', e => dragCard(e, pin ? pin.el : document.querySelector('aside'), pin));
   box.append(head);
   const body = el('div', { className: 'nx-body' });
-  if (also.length && !pin) body.append(card(`Line up ${also.length + 1} parts`, lineUpRows(), false));
+  if (also.length && sel === inUse) body.append(card(`Line up ${also.length + 1} parts`, lineUpRows(), false));
   if (sel.thing.key === 'loadingdialog') body.append(card('', loadingHoldRows(), false)); // (above the tabs: which box)
   if (quick.length) {
     const q = el('section', { className: 'nx-quick' }), all = el('button', { className: 'nx-all', type: 'button', onclick: () => { floatAll = true; render(); } });
@@ -5690,7 +5720,12 @@ function tabCards(sections, sel, tabs) {
     const playing = F(L) && live && live.panels.some(p => p.module === 'ClientDLL' && HUD[p.name]);
     custom.unshift(['', [nxNote('Adds to the HUD', ` you see while playing (HudLayout), not inside ${sel.info.name}: drag what you add wherever you want it.`),
       ...(playing ? addRows() : [noteRow('In a map (Test server), pictures, texts and colour boxes can be added to the HUD here.')])]]);
-  } else if (custom.length) { adds = `Adds to ${sel.info.name}`; custom[0][1].unshift(nxNote(adds, ': what you add shows in this window only, and moves with it.')); }
+  } else {
+    const pics = custom.find(([t]) => /^pictures, texts and boxes$/i.test(t || ''));
+    if (pics) { adds = `Adds to ${sel.info.name}`; pics[1].unshift(nxNote(adds, ': what you add shows in this window only, and moves with it.')); }
+  }
+  const built = TABS.filter(([k]) => by.get(k).length);
+  if (tabs.auto) { if (built.length === 1) tabs.open.add(built[0][0]); tabs.auto = false; } // (a card's only tab: open)
   const out = [];
   for (const [k, name] of TABS) {
     const list = by.get(k);
@@ -5699,9 +5734,13 @@ function tabCards(sections, sel, tabs) {
     sec.dataset.tab = k;
     const head = el('button', { className: 'nx-cath', type: 'button', onclick: () => { tabs.open[open ? 'delete' : 'add'](k); render(); } });
     head.setAttribute('aria-expanded', String(open));
-    const titles = list.map(([t]) => t).filter(t => t && t.toLowerCase() !== name.toLowerCase() && !/^the fonts? it uses$/i.test(t)), n = list.reduce((a, [, r]) => a + r.length, 0);
+    const titles = list.map(([t]) => t).filter(t => t && t.toLowerCase() !== name.toLowerCase() && !/^the fonts? it uses$/i.test(t));
+    const real = r => !r.classList.contains('note') && r.tagName !== 'DETAILS', n = list.reduce((a, [, rs]) => a + rs.filter(real).length, 0);
+    const fontNamesHere = list.flatMap(([, rs]) => rs.filter(r => r.tagName === 'DETAILS').map(d => (d.querySelector('summary')?.textContent || '').split(':')[0].trim())).filter(Boolean);
     head.append(icon('chevron-right'), el('span', { textContent: name }), el('small', { textContent: k === 'custom' && adds ? adds
-      : titles.length ? titles.slice(0, 2).join(' · ') + (titles.length > 2 ? ` +${titles.length - 2}` : '') : `${n} setting${n > 1 ? 's' : ''}` }));
+      : titles.length ? titles.slice(0, 2).join(' · ') + (titles.length > 2 ? ` +${titles.length - 2}` : '')
+      : fontNamesHere.length ? fontNamesHere.slice(0, 2).join(' · ') + (fontNamesHere.length > 2 ? ` +${fontNamesHere.length - 2}` : '')
+      : n ? `${n} setting${n > 1 ? 's' : ''}` : '' }));
     sec.append(head);
     if (open) {
       const b = el('div', { className: 'nx-catb' }), shown = more ? list : list.slice(0, 1);
@@ -5720,18 +5759,22 @@ function tabCards(sections, sel, tabs) {
 }
 // Float's simple settings: the part's own colours (and opacity), then its font and the font's size, named for what they change.
 function quickRows(sections, sel) {
-  const rows = [], first = sections.find(s => s[2] === 'colour');
+  const rows = [], key = r => ((r.dataset && r.dataset.q) || '').split(' ')[0], all = sections.flatMap(s => s[1]);
+  const first = sections.find(s => s[2] === 'colour' && s[1].some(r => r.classList.contains('colour')));
   if (first) {
     rows.push(...first[1].filter(r => r.classList.contains('colour')).slice(0, 3));
-    const op = first[1].find(r => rowLabel(r) === 'opacity');
+    const op = all.find(r => key(r) === 'opacity');
     if (op) rows.push(op);
   }
-  const own = sel.res && ownBlock(sel), [file, font] = own && /^hudeditor_(pic|box|loadingbox)/i.test(own.block) ? [] : fontsOf(sel)[0] || [];
+  const own = sel.res && ownBlock(sel), mineFont = all.find(r => r.dataset && r.dataset.head === 'Its font');
+  if (mineFont) { rows.push(mineFont); return rows; } // (an added text: which font it draws with)
+  const fonts = own && /^hudeditor_(pic|box|loadingbox)/i.test(own.block) ? [] : fontsOf(sel), [file, font, what] = fonts[0] || [];
   if (file && F(file)) {
-    const fr = fontRows(file, font), face = fr.find(r => rowLabel(r) === 'face'), size = fr.find(r => rowLabel(r) === 'size');
+    const fr = fontRows(file, font), face = fr.find(r => key(r) === 'face'), size = fr.find(r => key(r) === 'size');
+    const which = fonts.length > 1 && what ? ` (${what})` : ''; // (a window's: its title's, its list's...)
     const name = (r, t) => { const n = r.querySelector('.renamed-wrap'); if (n) n.replaceWith(renameable(t)); r.title = `Font ${font} in ${file}: every part that uses it changes`; return r; };
-    if (face) rows.push(name(face, 'Font'));
-    if (size) rows.push(name(size, 'Text size'));
+    if (face) rows.push(name(face, `Font${which}`));
+    if (size) rows.push(name(size, `Text size${which}`));
   }
   return rows;
 }
@@ -5748,20 +5791,28 @@ function allResRows(sel) {
 
 // ↺ (the heading): this selection back to how it was when the HUD was opened. A part of a window: its own settings only. A
 // window: every setting it shows, then its files as they were opened (every part in it, added and hidden ones too).
-function resetButton(sel, sections) {
-  const rows = sections.flatMap(s => s[1]), part = (sel.control || sel.node) && rows.some(r => r.dataset.own);
+function resetButton(sel, sections, quick = []) {
+  const rows = [...new Set([...sections.flatMap(s => s[1]), ...quick])], part = (sel.control || sel.node) && rows.some(r => r.dataset.own);
   const win = !part && sel.info.kind === 'window' && !sel.control && !sel.node && !['menubg', 'gamelogo'].includes(sel.info.id);
   const what = part || sel.info.kind === 'hud' && !sel.control ? 'part' : win ? 'window' : 'all';
   const b = iconButton('rotate-ccw', part ? 'Reset: this part\'s own settings back to how they were when the HUD was opened (the colours it shares with others stay)'
     : win ? `Reset: this window back to how it was when the HUD was opened, every setting here${UI_RES[sel.info.id] ? ' and every part in it' : ''}`
+    : sel.info.id === 'global' ? 'Reset: every font back to how it was when the HUD was opened'
     : 'Reset: every setting here back to how it was when the HUD was opened', () => {
-      const undos = rows.filter(r => !part || r.dataset.own).flatMap(r => [...r.querySelectorAll('.undo:not(.off)')]);
+      const undos = sel.info.id === 'global' ? [] : rows.filter(r => !part || r.dataset.own).flatMap(r => [...r.querySelectorAll('.undo:not(.off)')]);
+      // (Global settings: every scheme's fonts and font files as opened, whatever was built on screen; colours stay)
+      const asOpened = f => ({ ...f, text: f.opened, parsed: parse(f.opened) });
+      const fontBack = sel.info.id !== 'global' ? [] : FONT_FILES.map(([n]) => F(n)).filter(f => f && f.opened != null && f.text !== f.opened
+        && ['Fonts', 'CustomFontFiles'].some(b => { const o = topBlock(asOpened(f), b), c = topBlock(f, b); return !o !== !c || (o && c && gameBlock(asOpened(f), b) !== gameBlock(f, b)); }));
+      // (a HUD part hidden since then: shown again, as a window's part is below)
+      const lay = F(L), hudHid = what === 'part' && sel.info.kind === 'hud' && !sel.control && canHide(sel.info.id) && lay && lay.opened != null
+        && isHidden(sel.info.id) && !isHidden(sel.info.id, { parsed: parse(lay.opened), bases: [] });
       const back = win ? windowFiles(sel).filter(f => f.opened != null && f.text !== f.opened) : [];
       // a part hidden since the HUD was opened is shown again: hiding keeps its place aside (see moveOff), which no ↺
       // puts back; first, so a lit ↺ of its place below still puts the place as it was opened
       const own = part && ownBlock(sel), rf = own && sel.res;
       const unhide = !!rf && rf.opened != null && partHidden(rf, own.block) && !partHidden({ parsed: parse(rf.opened), bases: [] }, own.block);
-      if (!undos.length && !back.length && !unhide) return status('Nothing here has changed since the HUD was opened.');
+      if (!undos.length && !back.length && !unhide && !hudHid && !fontBack.length) return status('Nothing here has changed since the HUD was opened.');
       // one Ctrl+Z for all of it: every write until it's done (some ↺ write later, or in a group of their own)
       const group = resetGroup = burstGroup();
       resetGroups.add(group);
@@ -5770,7 +5821,17 @@ function resetButton(sel, sections) {
       setTimeout(() => { for (const t of ['pointerdown', 'keydown']) addEventListener(t, end, true); });
       setTimeout(end, 5000);
       if (unhide) setPartHidden(rf, own.block, false);
+      if (hudHid) setHidden(sel.info.id, false);
       for (const u of undos) u.onclick();
+      for (const f of fontBack) commit(f, `${f.name}/fonts as opened`, () => {
+        let cur = f;
+        for (const b of ['Fonts', 'CustomFontFiles']) {
+          const o = topBlock(asOpened(f), b), c = topBlock(cur, b);
+          const text = o && c ? withGameBlock(cur, b, gameBlock(asOpened(f), b)) : c ? dropBlock(cur, [], b) : cur.text;
+          cur = { ...cur, text, parsed: parse(text) };
+        }
+        return cur.text;
+      }, group);
       // (after the settings above are written, so the files end as they were opened)
       if (back.length) {
         waiting.add('window reset');
@@ -5816,9 +5877,13 @@ function defaultButton(sel) {
     : d.fs ? 'The game\'s default: the whole window as the game has it (what was added to it goes; Ctrl+Z brings yours back)'
     : 'The game\'s default: this part\'s own settings as the game has them (the colours and fonts it shares with others stay; Ctrl+Z brings yours back)', () => {
       if (d.fs) return toGameWindow(d.fs);
-      const game = gameBlock(d.g, d.block);
+      const game = gameBlock(d.g, d.block), group = burstGroup();
       let same = false;
-      commit(d.f, `${d.f.name}/${d.block}/gamedefault`, () => { const next = withGameBlock(d.f, d.block, game); same = next === d.f.text; return next; });
+      commit(d.f, `${d.f.name}/${d.block}/gamedefault`, () => { const next = withGameBlock(d.f, d.block, game); same = next === d.f.text; return next; }, group);
+      if (d.f.name === L && d.block.toLowerCase() === 'hudchat') { // (the chat's insides fit its size, see chatFit)
+        const w = parseInt(layoutProps(d.g, 'HudChat').wide, 10);
+        if (w) uiFile(UI_RES.hudchat).then(c => c && chatFit(c, w, undefined, group));
+      }
       writing.then(() => status(same ? `${shownName(sel)} is as the game has it already.` : `${shownName(sel)} is back as the game has it (Ctrl+Z brings yours back).`));
       refreshSoon();
     }, 'nx-default');
@@ -5843,14 +5908,14 @@ function pinCard() {
 }
 function unpin(p) {
   pins = pins.filter(x => x !== p);
-  p.el.remove();
-  if (!cardSel) { cardSel = p.sel; floatMoved = true; setFloatXY(p.x, p.y); floatPlaced = selKey(p.sel); }
+  p.el?.remove();
+  if (!cardSel) { cardSel = p.sel; Object.assign(mainTabs, p.tabs); setFloatXY(p.x, p.y); floatPlaced = selKey(p.sel); }
   selected = cardSel;
   holdShown(); render(); drawBoxes();
 }
 function closePin(p) {
   pins = pins.filter(x => x !== p);
-  p.el.remove();
+  p.el?.remove();
   if (selected === p.sel) selected = cardSel;
   holdShown(); render(); drawBoxes();
 }
@@ -5888,6 +5953,7 @@ function renderPins(act = selected) {
 function useSel(s) {
   if (!s || selected === s) return;
   selected = s;
+  if (also.length) { also = []; render(); }
   for (const p of pins) p.el && p.el.classList.toggle('active', p.sel === s);
   document.querySelector('aside').classList.toggle('active', !!pins.length && s === cardSel);
   drawBoxes();
@@ -5941,18 +6007,21 @@ function grip(e, card, pin) {
   }, { once: true });
 }
 function setLayout(mode) {
+  if (mode === layoutMode) return;
   layoutMode = mode;
   try { localStorage.setItem('layout', mode); } catch {}
   document.body.classList.toggle('float', mode === 'float');
   $('dockbtn').setAttribute('aria-pressed', String(mode === 'dock'));
   $('floatbtn').setAttribute('aria-pressed', String(mode === 'float'));
   if (mode === 'dock') {
-    // one panel: the part in use (a pinned card's, else the main card's); the pinned cards close
+    // one panel: the part in use (a pinned card's, else the main card's, with its open tabs); the pinned cards close
+    const cur = pins.find(p => p.sel === selected);
+    if (cur) Object.assign(mainTabs, cur.tabs);
     for (const p of pins) p.el && p.el.remove();
     pins = [];
     cardSel = selected = selected || cardSel;
     holdShown();
-  } else { cardSel = selected; floatPlaced = ''; }
+  } else { cardSel = selected; floatPlaced = ''; clampFloat(); }
   closeNxPop();
   render(); drawBoxes();
 }
@@ -5993,6 +6062,9 @@ function elementPop() {
   const things = onScreen(), rest = otherParts(things);
   const out = [el('h3', { textContent: live ? 'On screen now' : 'HUD parts' }), ...(things.length ? things.map(t => partRow(t, true)) : [el('p', { className: 'meta empty', textContent: 'Nothing editable on screen right now.' })])];
   if (menuUp()) out.push(partRow({ thing: BG_SEL().thing, info: BG_SEL().info }, true));
+  const added = F(L) && !inMap() ? addedList() : [];
+  for (const r of added) r.addEventListener('click', e => { const b = e.target.closest('button'); if (b && !/^Remove/.test(b.title || '')) closeNxPop(); });
+  if (added.length) out.push(el('h3', { textContent: 'Added to the HUD' }), ...added);
   if (rest.length) out.push(el('h3', { textContent: 'Not on screen now' }), ...rest.map(t => partRow(t, true)));
   return out;
 }
@@ -6025,11 +6097,11 @@ function boxList() {
         if (r.w * r.h <= 0.9 * live.W * live.H && r.x < live.W && r.y < live.H && r.x + r.w > 0 && r.y + r.h > 0) boxes.push({ thing: p, info, r, cls: 'thing' });
     }
     // (a part picked with Edit while the game isn't showing it has no place on screen: no box)
-    for (const s of [sel, ...also]) if (s && s.control && s.control.w + s.control.h === 0) continue;
+    for (const s of [sel, ...also]) if (!s || !live.panels.includes(s.thing) || (s.control && s.control.w + s.control.h === 0)) continue;
       else if (s && s.control) boxes.push({ thing: s.thing, info: s.info, r: s.control, cls: 'sel', label: controlIn(s.control, s.thing)[1] });
       else if (s && partName(s) && partPanel(s)) boxes.push({ thing: s.thing, info: s.info, r: partPanel(s), cls: 'sel', label: partName(s) }); // (a window's picture, box...)
     // (Float: a pinned card's control or window part, its name over it)
-    for (const { sel: s } of pins) if (s === sel || !live.panels.includes(s.thing)) continue;
+    for (const s of [...pins.map(p => p.sel), cardSel].filter(Boolean)) if (s === sel || !live.panels.includes(s.thing)) continue;
       else if (s.control && s.control.w + s.control.h) boxes.push({ thing: s.thing, info: s.info, r: s.control, cls: 'pin', label: controlIn(s.control, s.thing)[1] });
       else if (partName(s) && partPanel(s)) boxes.push({ thing: s.thing, info: s.info, r: partPanel(s), cls: 'pin', label: partName(s) });
     return { W: live.W, H: live.H, boxes };
@@ -6045,7 +6117,7 @@ function drawBoxes() {
   host.innerHTML = '';
   for (const b of boxes) {
     const isSel = selected && (b.cls === 'sel' || [selected, ...also].some(s => !s.control && !partName(s) && s.info.id === b.info.id && s.thing.key === b.thing.key));
-    const pinned = !isSel && b.cls === 'thing' && pins.some(({ sel: s }) => !s.control && !partName(s) && s.info.id === b.info.id && s.thing.key === b.thing.key);
+    const pinned = !isSel && b.cls === 'thing' && [...pins.map(p => p.sel), cardSel].some(s => s && s !== selected && !s.control && !partName(s) && s.info.id === b.info.id && s.thing.key === b.thing.key);
     const d = el('div', { className: `box ${b.cls}${isSel ? ' sel' : ''}${pinned ? ' pin' : ''}` });
     Object.assign(d.style, { left: `${b.r.x / W * 100}%`, top: `${b.r.y / H * 100}%`, width: `${b.r.w / W * 100}%`, height: `${b.r.h / H * 100}%` });
     d.append(el('span', { textContent: b.label || b.info.name }));
@@ -6371,11 +6443,11 @@ function lineUp(how) {
 function lineUpRows() {
   const r = (label, buttons) => {
     const row = el('div', { className: 'row lineup' });
-    row.append(el('div', { textContent: label }), ...buttons.map(([how, text]) => el('button', { textContent: text, onclick: () => lineUp(how) })));
+    row.append(el('div', { textContent: label }), ...buttons.map(([how, text, title]) => el('button', { textContent: text, title, onclick: () => lineUp(how) })));
     return row;
   };
-  return [r('Across', [['left', 'Left edges'], ['centre', 'Centres'], ['right', 'Right edges'], ['across', 'Spread']]),
-    r('Down', [['top', 'Tops'], ['middle', 'Middles'], ['bottom', 'Bottoms'], ['down', 'Spread']]),
+  return [r('Across', [['left', 'Left', 'Line up their left edges'], ['centre', 'Centre', 'Line up their centres'], ['right', 'Right', 'Line up their right edges'], ['across', 'Spread', 'Spread them evenly across']]),
+    r('Down', [['top', 'Top', 'Line up their tops'], ['middle', 'Middle', 'Line up their middles'], ['bottom', 'Bottom', 'Line up their bottoms'], ['down', 'Spread', 'Spread them evenly down']]),
     noteRow(`They line up with ${selected.info.name}. Ctrl+click a part in the preview to add it or take it out; arrow keys move them all.`)];
 }
 
@@ -6429,6 +6501,7 @@ async function poll() {
     };
     selected = again(selected); cardSel = again(cardSel);
     for (const p of pins) p.sel = again(p.sel);
+    also = also.map(again);
   }
   drawBoxes();
   if (typingInCard()) pendingRender = true; else renderOnScreenOnly();
@@ -6525,13 +6598,15 @@ function testTools() {
 }
 // In a map: the toggles under the game work (the scoreboard and the chat held open, see poll; the test game's sample
 // texts); out of one, they're greyed out and let go of what they held
-const inMap = () => !!live && live.panels.some(p => p.module === 'ClientDLL' && HUD[p.name]);
+// (not the net graph or the position text: they draw at the main menu too, while they're on)
+const MENU_TOO = new Set(['CNetGraphPanel', 'CFPSPanel']);
+const inMap = () => !!live && live.panels.some(p => p.module === 'ClientDLL' && HUD[p.name] && !MENU_TOO.has(p.name));
 const ingameEl = $('ingame'); // (in the bar under the game)
 let shownInMap = false;
 function inGameRow() {
   const on = inMap(), local = on && live.local;
   if (on !== shownInMap) { shownInMap = on; render(); }
-  for (const id of ['scores', 'keepchat', 'netgraphbtn', 'showposbtn']) $(id).disabled = !on;
+  for (const id of ['scores', 'keepchat', 'netgraphbtn', 'showposbtn']) { const b = $(id); b.dataset.t ??= b.title; b.disabled = !on; b.title = on ? b.dataset.t : 'Only in a map (Test server starts one)'; }
   // Speed & timer: the sample texts are the test game's (the plugin sends them on its own server only)
   $('textsbtn').disabled = !local;
   $('textsbtn').title = local ? 'The test game\'s sample timer and speed texts: each on or off' : 'Only in the test game (Test server): the sample timer and speed texts';
@@ -6542,7 +6617,10 @@ function inGameRow() {
     $('scores').setAttribute('aria-pressed', 'false');
     $('keepchat').setAttribute('aria-pressed', 'false');
   }
-  if (!on) for (const id of ['netgraphbtn', 'showposbtn']) $(id).setAttribute('aria-pressed', 'false');
+  if (!on) for (const [id, cvar] of [['netgraphbtn', 'net_graph'], ['showposbtn', 'cl_showpos']]) {
+    if (pressed(id) && live) call('cmd', '', `${cvar} 0`).catch(() => {});
+    $(id).setAttribute('aria-pressed', 'false');
+  }
 }
 // the sidebar's top strip only while it holds something (On screen now over a selection)
 const topBar = () => { $('top').hidden = !$('parts').childElementCount; };
@@ -6605,6 +6683,7 @@ let pickerCancel = false; // (the picker as it was last shown: Refresh shows it 
 // (ifChanged: coming back to the editor rebuilds the list only if it changed: a click into the window from another one
 // fires focus between the button's press and release, and a list rebuilt then lost the click, 2026-10-09)
 async function showPicker(canCancel, keepImport = false, ifChanged = false) {
+  closeNxPop();
   closeRestartPop(); // (it would sit over the list)
   pickerCancel = canCancel;
   if (!keepImport) $('importlist').replaceChildren(); // (an import's message from last time)
@@ -6684,12 +6763,13 @@ async function openHud(path) {
     undoSteps.length = 0;
     dropped.clear();
     for (const k in opened) delete opened[k]; // ↺ goes back to this HUD as opened
+    globalSym = null; globalFace = globalWeight = ''; // (Global settings' picks: this HUD's own)
     kindsPicked.clear();
     chatResOk = false;
     setDirty(false);
     await loadAll();
     // this HUD's menu background, logo, highlight, MVP star and box corners (or the game's), not the last one's (or the
-    // discarded ones: Discard changes opens it again)
+    // discarded ones: Undo all opens it again)
     call('cmd', '', 'mat_reloadmaterial background01; mat_reloadmaterial cs_logo; mat_reloadmaterial scoreboard-select; mat_reloadmaterial scoreboard_mvp; mat_reloadmaterial win_panel_mvpstar; mat_reloadmaterial 8x800corner').catch(() => {});
     // the game's name colours to this HUD's (or back to config.cfg's after discarding a HUD's new cfg)
     if (F(CVAR_CFG) || cvarStart) { cvarValues = null; await loadCvars(); applyCvars(F(CVAR_CFG) && F(CVAR_CFG).text); }
@@ -6849,10 +6929,10 @@ if (host) {
   // Discard changes: every unsaved change goes (the exe puts the saved files back as the HUD is opened again)
   $('discard').onclick = async () => {
     await settled();
-    if (!dirty || !hudPath || !confirm(`Discard every unsaved change to ${hudName}? It goes back to how it was last saved.`)) return;
+    if (!dirty || !hudPath || !confirm(`Undo every unsaved change to ${hudName}? It goes back to how it was last saved.`)) return;
     setDirty(false); // (asked here: not again as it opens)
     if (!(await openHud(hudPath))) return setDirty(true); // (it couldn't open: the changes are still there, unsaved)
-    status(`Discarded the unsaved changes: ${hudName} is as it was last saved. Values taken out of HudLayout can stay in the game until it restarts.`);
+    status(`Undid every unsaved change: ${hudName} is as it was last saved. Values taken out of HudLayout can stay in the game until it restarts.`);
   };
   $('grid').value = String(grid);
   $('grid').onchange = () => { grid = +$('grid').value; try { localStorage.setItem('grid', grid); } catch {} };
@@ -6916,13 +6996,24 @@ $('loadbtn').onclick = () => {
 $('elembtn').onclick = () => openNxPop($('elembtn'), elementPop);
 $('showhidebtn').onclick = () => openNxPop($('showhidebtn'), showHidePop);
 document.addEventListener('pointerdown', e => { if (nxPop && !nxPop.contains(e.target) && !nxPop.owner.contains(e.target)) closeNxPop(); }, true);
-addEventListener('resize', () => { if (nxPop) fillNxPop(); if (layoutMode === 'float') setFloatXY(parseFloat(document.querySelector('aside').style.getPropertyValue('--fx')) || innerWidth * .6, parseFloat(document.querySelector('aside').style.getPropertyValue('--fy')) || 90); });
+// (Float: the main card and the pinned ones kept on screen: a smaller window, a place saved on a bigger one)
+function clampFloat() {
+  if (layoutMode !== 'float') return;
+  const a = document.querySelector('aside');
+  setFloatXY(parseFloat(a.style.getPropertyValue('--fx')) || innerWidth * .6, parseFloat(a.style.getPropertyValue('--fy')) || 90);
+  for (const p of pins) if (p.el) {
+    p.x = clamp(p.x, 4, Math.max(4, innerWidth - p.el.offsetWidth - 4)); p.y = clamp(p.y, 4, Math.max(4, innerHeight - 64));
+    Object.assign(p.el.style, { left: `${p.x}px`, top: `${p.y}px` });
+  }
+}
+addEventListener('resize', () => { if (nxPop) fillNxPop(); clampFloat(); });
 // Esc (not over the game, where it's the game's): a pop-out closes, else the card or panel lets go
 addEventListener('keydown', e => {
   if (e.key !== 'Escape' || overPreview || cpop || fpop || restartPop || cautionPop || !$('picker').hidden) return;
   const a = document.activeElement;
   if (a && (/^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName) || a.isContentEditable)) return;
-  if (nxPop) closeNxPop(); else if (cardSel) select(null);
+  const pin = pins.find(p => p.sel === selected);
+  if (nxPop) closeNxPop(); else if (pin) closePin(pin); else if (cardSel) select(null);
 }, true); // (capture: before the colour picker's, the restart list's... which close theirs and would leave it to this)
 // The main card (Float): using it makes its part the one in use; its corner grip's size is kept
 document.querySelector('aside').addEventListener('pointerdown', e => { if (layoutMode !== 'float') return; useSel(cardSel); grip(e, document.querySelector('aside'), null); }, true);
@@ -6944,6 +7035,7 @@ document.querySelector('aside').addEventListener('focusin', () => { if (layoutMo
     addEventListener('pointerup', up);
   };
   d.ondblclick = () => { root.style.removeProperty('--side'); try { localStorage.removeItem('side'); } catch {} };
+  addEventListener('resize', () => { const w = parseFloat(root.style.getPropertyValue('--side')); if (w) set(w); });
   d.onkeydown = e => { const k = { ArrowLeft: 20, ArrowRight: -20 }[e.key]; if (k) { e.preventDefault(); e.stopPropagation(); keep(set((parseFloat(getComputedStyle(root).getPropertyValue('--side')) || 408) + k)); } };
   // Float, as left last time: the card's size and (once dragged) its place
   try {
@@ -6952,6 +7044,7 @@ document.querySelector('aside').addEventListener('focusin', () => { if (layoutMo
     if (at) { floatMoved = true; a.style.setProperty('--fx', `${at.x}px`); a.style.setProperty('--fy', `${at.y}px`); }
   } catch {}
   document.body.classList.toggle('float', layoutMode === 'float');
+  clampFloat();
   $('dockbtn').setAttribute('aria-pressed', String(layoutMode === 'dock'));
   $('floatbtn').setAttribute('aria-pressed', String(layoutMode === 'float'));
 })();
@@ -7300,6 +7393,27 @@ async function parserCheck() {
     const front2 = pickAt(1200 / 2560, 400 / 1440);
     live = kept;
     check(front1?.thing.key === 'info' && front1.control?.name === 'MessageTitle' && front2?.thing.key === 'class_ct' && front2.control?.name === 'urban', `two windows open: a click picks the front one's part (${front1 && pickKey(front1)}, ${front2 && pickKey(front2)})`);
+  }
+  {
+    // Button places: a button the game shows has its place; one it doesn't (Spectate before you're on a team) its size too
+    const res = { name: 'resource/UI/TeamMenu.res', text: '', bases: [], parsed: parse('"Resource/UI/TeamMenu.res" { "ctbutton" { "ControlName" "MouseOverPanelButton" "xpos" "10" "ypos" "20" "wide" "200" "tall" "30" } "specbutton" { "ControlName" "MouseOverPanelButton" "xpos" "10" "ypos" "60" "wide" "148" "tall" "20" } }') };
+    const kept = live;
+    live = parsePanels(['screen\t2560\t1440', '1\tBaseUI\tstaticPanel\t0\t0\t2560\t1440\tPanel', '2\tBaseUI\tstaticClientDLLPanel\t0\t0\t2560\t1440\tEditablePanel',
+      '3\tClientDLL\tCounterStrike Root Panel\t0\t0\t2560\t1440\tPanel', '4\tClientDLL\tCBaseViewport\t0\t0\t2560\t1440\tCounterStrikeViewport',
+      '5\tClientDLL\tteam\t0\t0\t2560\t1440\tCCSTeamMenu', '6\tClientDLL\tctbutton\t600\t400\t600\t90\tMouseOverPanelButton'].join('\n'));
+    const team = live.panels.find(p => p.key === 'team'), labels = buttonPlaceRows(res, team).map(r => r.querySelector('input').getAttribute('aria-label'));
+    live = kept;
+    check(labels.join() === 'ctbutton: X,ctbutton: Y,specbutton: X,specbutton: Y,specbutton: width,specbutton: height', `Button places: a button not shown now gets its size too (${labels})`);
+  }
+  {
+    // two sections' rows under one heading (the chat's Position and its text box's): two cards, each named for whose it is
+    const pos = own => { const r = el('div', { className: 'row' }); Object.assign(r.dataset, { cat: 'layout', head: 'Position' }, own ? { own: '1' } : {}); return r; };
+    const kept = selected;
+    selected = { info: { name: 'Chat' } };
+    const titles = byKind({ colour: [['Chat', [pos()]], ['Chat History: this text box only', [pos(true)]], ['Chat: settings', [pos()]]] }).map(([t]) => t);
+    selected = kept;
+    check(titles.includes('Position: Chat') && titles.includes('Position: Chat History') && titles.filter(t => /^Position/.test(t)).length === 2,
+      `the part's own position and the shared one are two cards, named for whose they are; shared ones together (${titles})`);
   }
   hit = at(1200, 1100);
   check(hit && hit.info.id === 'HudHintDisplay', 'click the timer text (a label inside the hint display)');
