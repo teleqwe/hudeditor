@@ -784,7 +784,7 @@ static bool HudCvar( const string &line, string *name = NULL )
 {
 	static const char *names[] = { "cl_radaralpha", "net_graph", "net_graphpos", "net_graphheight", "net_graphtext", "net_graphproportionalfont",
 		"net_graphsolid", "net_graphshowlatency", "net_graphshowinterp", "cl_showpos", "cl_showfps", "hud_deathnotice_time", "hud_saytext_time",
-		"cl_round_win_fade_time" }; // ponytail: the page's GAME_CVARS again, kept in step by hand
+		"cl_round_win_fade_time", "hud_fastswitch" }; // ponytail: the page's GAME_CVARS again (and More screens' hud_fastswitch), kept in step by hand
 	size_t a = line.find_first_not_of( " \t" ), b = line.find_first_of( " \t\r\n", a );
 	if ( a == string::npos )
 		return false;

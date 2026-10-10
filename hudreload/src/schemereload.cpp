@@ -2123,6 +2123,45 @@ CON_COMMAND( schemereload_showpanel, "schemereload_showpanel win|freeze|hide: sh
 	}
 }
 
+// The kill feed kept full on the test server (schemereload_hold killfeed 1|0), to edit it: made-up kills between the
+// player and the first bot (both ways, a few weapons, headshots), fired again just before the last ones run out
+// (hud_deathnotice_time). The test server has cheats on, so they count for no achievements.
+static bool g_bHoldKillFeed;
+static double g_flKillFeedNext;
+static void FireKillFeed()
+{
+	edict_t *me = g_pEngineServer ? g_pEngineServer->PEntityOfEntIndex( 1 ) : NULL;
+	if ( !g_pGameEvents || !me )
+		return;
+	int meId = g_pEngineServer->GetPlayerUserId( me ), botId = meId;
+	for ( int i = 2; i <= 64 && botId == meId; ++i )
+	{
+		edict_t *e = g_pEngineServer->PEntityOfEntIndex( i );
+		if ( e && !e->IsFree() && g_pEngineServer->GetPlayerUserId( e ) >= 0 && !Q_stricmp( g_pEngineServer->GetPlayerNetworkIDString( e ), "BOT" ) )
+			botId = g_pEngineServer->GetPlayerUserId( e );
+	}
+	static const char *s_Weapons[] = { "ak47", "awp", "deagle", "m4a1", "knife" };
+	for ( int i = 0; i < 5; ++i )
+	{
+		IGameEvent *e = g_pGameEvents->CreateEvent( "player_death", true );
+		if ( !e )
+			return;
+		bool mine = i % 2 == 0; // (the player's kills and the bot's, so both team colours show)
+		e->SetInt( "userid", mine ? botId : meId );
+		e->SetInt( "attacker", mine ? meId : botId );
+		e->SetString( "weapon", s_Weapons[i] );
+		e->SetBool( "headshot", i == 0 || i == 3 );
+		g_pGameEvents->FireEvent( e );
+	}
+}
+CON_COMMAND( schemereload_hold, "schemereload_hold killfeed 1|0: keeps the kill feed full of made-up kills on the test server, or lets it go" )
+{
+	if ( args.ArgC() < 3 || Q_stricmp( args.Arg( 1 ), "killfeed" ) )
+		return;
+	g_bHoldKillFeed = atoi( args.Arg( 2 ) ) != 0;
+	g_flKillFeedNext = 0; // (now)
+}
+
 //-----------------------------------------------------------------------------
 // Console commands
 //-----------------------------------------------------------------------------
@@ -2319,7 +2358,7 @@ public:
 	virtual void Pause() {}
 	virtual void UnPause() {}
 	virtual const char *GetPluginDescription() { return "schemereload - live SourceScheme/ClientScheme reloading"; }
-	virtual void LevelInit( char const *pMapName ) { g_bLevelActive = true; g_nTestMVPs = -1; } // (a test count is for this map)
+	virtual void LevelInit( char const *pMapName ) { g_bLevelActive = true; g_nTestMVPs = -1; g_bHoldKillFeed = false; } // (a test count and the kill feed's hold are for this map)
 	virtual void ServerActivate( edict_t *pEdictList, int edictCount, int clientMax ) {}
 	virtual void GameFrame( bool simulating );
 	virtual void LevelShutdown() { g_bLevelActive = false; }
@@ -2409,6 +2448,17 @@ void CSchemeReloadPlugin::GameFrame( bool simulating )
 	{
 		s_mvpBroken = true;
 		Warning( "[schemereload] crashed while holding the test MVP count - switched off until restart\n" );
+	}
+	static bool s_feedBroken;
+	if ( g_bHoldKillFeed && simulating && !s_feedBroken && now >= g_flKillFeedNext )
+	{
+		ConVar *t = g_pCVar->FindVar( "hud_deathnotice_time" );
+		g_flKillFeedNext = now + MAX( 1.0, ( t ? t->GetFloat() : 6.0 ) - 0.5 );
+		if ( !SR_SafeCall( FireKillFeed ) )
+		{
+			s_feedBroken = true;
+			Warning( "[schemereload] crashed while filling the kill feed - switched off until restart\n" );
+		}
 	}
 	if ( simulating && !s_textBroken && now >= s_nextText )
 	{

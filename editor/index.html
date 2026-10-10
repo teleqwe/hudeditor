@@ -591,6 +591,7 @@
         <button id="netgraphbtn" aria-pressed="false" title="Show the net graph in the editor's game (net_graph) to edit it. Not saved in the HUD: its own setting is in the Net graph's rows.">Net graph</button>
         <button id="showposbtn" aria-pressed="false" title="Show the position text in the editor's game (cl_showpos) to edit it. Not saved in the HUD.">Position</button>
         <button id="textsbtn" class="toolsbtn" aria-expanded="false">Speed &amp; timer</button>
+        <button id="morebtn" aria-haspopup="dialog" title="Parts that show now and then, kept on screen to edit, and screens almost never seen">More screens</button>
       </div>
       <!-- the test game's sample texts, each on or off (remembered): the bhop/surf timer and speed texts -->
       <div id="textchips" class="ingame chips" hidden>
@@ -681,7 +682,7 @@ const HUD = {
   HudDefuser: { name: 'Defuse kit icon', colours: [HIGHLIGHT], layoutColours: [['Icon', 'IconColor', 'HudIcon_Green']] },
   HudHostageRescueZone: { name: 'Rescue zone icon', colours: [HIGHLIGHT, WARN], layoutColours: [['Icon', 'IconColor', 'HudIcon_Green'], ['Flash', 'FlashColor', 'HudIcon_Red']] },
   HudScenarioIcon: { name: 'Objective icon', colours: [['Icon', 'Hostage_Yellow', 'Bomb site / hostage icon by the timer']], layoutColours: [['Icon', 'IconColor', 'Hostage_Yellow']] },
-  HudWeaponSelection: { name: 'Weapon selection', hit: ['r640', '16', '640', '100'], settings: [['Box size', 'SmallBoxSize', 'num', '60'],
+  HudWeaponSelection: { name: 'Weapon selection', hit: ['r640', '16', '640', '100'], shownBy: () => kept.has('weapons'), rectsAt: (p, W, H) => weaponSelectRect(p, W, H), settings: [['Box size', 'SmallBoxSize', 'num', '60'],
     ['Picked box width', 'LargeBoxWide', 'num', '108'], ['Picked box height', 'LargeBoxTall', 'num', '80'], ['Gap between boxes', 'BoxGap', 'num', '8'],
     ['Slot number X', 'SelectionNumberXPos', 'num', '4'], ['Slot number Y', 'SelectionNumberYPos', 'num', '4'], ['Icon X', 'IconXPos', 'num', '8'],
     ['Icon Y', 'IconYPos', 'num', '0'], ['Name Y', 'TextYPos', 'num', '68'], ['Grow time', 'SelectionGrowTime', 'time', '0.4', 'Seconds the picked box takes to grow'],
@@ -693,8 +694,8 @@ const HUD = {
     links: { NumberColor: 'SelectionNumberFg', TextColor: 'SelectionTextFg', BoxColor: 'SelectionBoxBg', EmptyBoxColor: 'SelectionEmptyBoxBg', SelectedBoxClor: 'SelectionSelectedBoxBg' }, rounded: true,
     // (the game centres it across the screen: its X and width changed nothing, 2026-10-05)
     lockX: true, noWide: true, fontKeys: [['Slot number font', 'NumberFont', 'HudSelectionNumbers'], ['Weapon name font', 'TextFont', 'HudSelectionText']] },
-  // (its names take the game's team colours: HudLayout's CTTextColor / TerroristTextColor changed nothing, 2026-10-05)
-  HudDeathNotice: { name: 'Kill feed', hit: ['r260', '12', '248', '100'], layoutColours: [['CT names', 'CTTextColor', 'CT_Blue'], ['T names', 'TerroristTextColor', 'T_Red']],
+  // (its names' colours in HudLayout show on kills after the change, seen 2026-10-08)
+  HudDeathNotice: { name: 'Kill feed', hit: ['r260', '12', '248', '100'], shownBy: () => kept.has('killfeed'), rectsAt: (p, W, H) => killFeedRect(p, W, H), layoutColours: [['CT names', 'CTTextColor', 'CT_Blue'], ['T names', 'TerroristTextColor', 'T_Red']],
     fixed: 'Name colours show on kills after the change; lines already in the feed keep theirs.',
     settings: [['Lines', 'MaxDeathNotices', 'num', '4', 'How many kills show at once'], ['Line height', 'LineHeight', 'num', '22'],
       ['Lines line up on the', 'RightJustify', [['1', 'Right'], ['0', 'Left']], '1', 'Side of the kill feed\'s area (move the area to move the feed)']], fontKeys: [['Names font', 'TextFont', 'Default']],
@@ -731,7 +732,7 @@ const HUD = {
     links: { MenuColor: 'MenuColor', MenuItemColor: 'ItemColor', MenuBoxColor: 'MenuBoxBg' },
     fontKeys: [['Title font', 'TextFont', 'Default'], ['Options font', 'ItemFont|ItemFontPulsing', 'Default']] },
   HudProgressBar: { name: 'Plant / defuse bar', colours: [['Bar', 'ProgressBarFg', '']], settings: [['Border thickness', 'BorderThickness', 'num', '1']] },
-  HudHistoryResource: { name: 'Pickup history', hit: ['r160', '250', '150', '130'], colours: [['Items', 'Yellowish', ''], ['Slot full', 'Caution', '']],
+  HudHistoryResource: { name: 'Pickup history', hit: ['r160', '250', '150', '130'], shownBy: () => kept.has('history'), rectsAt: (p, W, H) => historyRect(p, W, H), colours: [['Items', 'Normal', 'The game\'s own is 255 208 64 (Yellowish, which the editor had here, is Half-Life\'s: it changes nothing)'], ['Slot full', 'Caution', '']],
     settings: [['Gap between rows', 'history_gap', 'num', '50']] },
   HudVoiceStatus: { name: 'Voice chat list', quiet: true, settings: [['Avatars', 'show_avatar', 'onoff', '1'], ['Friend icon', 'show_friend', 'onoff', '1'],
     ['Speaker icon', 'show_voice_icon', 'onoff', '0'], ['Dead icon', 'show_dead_icon', 'onoff', '1'], ['Row height', 'item_tall', 'num', '16'],
@@ -744,11 +745,14 @@ const HUD = {
   // (cl_round_win_fade_time: how long it takes to fade once the next round starts: 8 faded over seconds, 0.1 at once;
   // the panel came in the same with either, 2026-10-08)
   WinPanel_Round: { name: 'Round end panel', extraCvars: [['Fades out over', 'cl_round_win_fade_time', 'time', 'Seconds, once the next round starts (cl_round_win_fade_time)']] },
-  FreezePanel: { name: 'Killer panel', quiet: true },
+  FreezePanel: { name: 'Killer panel', quiet: true, fit: true }, // (a full-screen panel: clicked where its box is)
   HudAchievementTracker: { name: 'Achievement tracker', quiet: true },
 };
 // Fullscreen overlays that draw little; never picked by clicking (still reachable from the list).
-const NO_CLICK = new Set(['hudweapon', 'hudcrosshair', 'hudzoom', 'hudclosecaption', 'targetid', 'hudflashbang', 'hudvoicestatus', 'hudachievementtracker', 'huddeathnotice', 'hudweaponselection', 'hudhistoryresource']);
+const NO_CLICK = new Set(['hudweapon', 'hudcrosshair', 'hudzoom', 'hudclosecaption', 'targetid', 'hudflashbang', 'hudvoicestatus', 'hudachievementtracker']);
+// More screens: the parts kept on screen (see keep), and whether it showed a round-end or killer panel (see showRare)
+const kept = new Set(), RARE = { WinPanel_Round: 'win', FreezePanel: 'freeze' };
+let rareUp = false, rareSent = 0;
 
 // Windows: panel name -> friendly name, plus window-wide colours per scheme.
 const WINDOWS = { info: 'Server message (MOTD)', team: 'Team select', class_ct: 'Class select', class_ter: 'Class select', buy: 'Buy menu',
@@ -1867,6 +1871,7 @@ function bombRows() {
 }
 async function plantBomb() {
   const cmd = async (c, ms) => { await call('cmd', '', c); await sleep(ms); };
+  if (kept.has('weapons')) await keep('weapons', false); // (held open, the attack would pick a weapon, not plant)
   status('Planting a bomb on site B...');
   await cmd('jointeam 2', 2000);
   await cmd('joinclass 1; hidepanel class_ter; hidepanel team', 2000);
@@ -1877,6 +1882,62 @@ async function plantBomb() {
   await cmd('-attack', 800);
   await cmd('setang 75 0 0', 300);
   status('Planted: its screen is at your feet. It goes off in 90 seconds.');
+}
+
+// Match the HUD: screens almost never seen take the look of parts that are styled anyway. The round-end and killer
+// panels: the scoreboard's box (the editor's colour box behind it, else the window background), its header colour (the
+// map name) for the killer panel's edge and lines, its text colour (spectators) for the rest, and its fonts' faces
+// (sizes stay); the round-end title's colour is the winning team's, set by the game. The bomb screen: the warning flash colour and the
+// numbers' colour. One Ctrl+Z.
+const MATCH = { WinPanel_Round: 'the scoreboard\'s box and text colours and its fonts (the title stays the winning team\'s colour: the game sets it)',
+  FreezePanel: 'the scoreboard\'s box, header and text colours and its fonts', C4Screen: 'the warning colour (Armed) and the numbers\' colour (Defused)' };
+function matchRows(sel) {
+  const r = el('div', { className: 'row action' });
+  r.append(el('button', { textContent: 'Match the HUD', title: `Takes ${MATCH[sel.info.id]}`, onclick: () => matchHud(sel) }));
+  return [r, noteRow(`Takes ${MATCH[sel.info.id]}. Ctrl+Z undoes it.`)];
+}
+const withAlpha = (rgba, a) => [...rgba.trim().split(/\s+/).slice(0, 3), String(a)].join(' ');
+// a font's face and weight from another font of the same scheme, at every screen height (sizes stay)
+function copyFace(f, from, to) {
+  const src = fontVariants(f, from);
+  if (!src || !src.size || !fontVariants(f, to)?.size) return;
+  const q = src.get(activeVariant(src, live ? live.H : 1080));
+  commit(f, `${f.name}/match/${to}`, () => {
+    let cur = f;
+    for (const [v, p] of fontVariants(cur, to)) for (const [k, val] of [['name', q.name], ['weight', q.weight]]) {
+      if (!val || p[k] === val) continue;
+      const text = setAt(cur, ['Fonts', to, v], k, val);
+      cur = { ...cur, text, parsed: parse(text) };
+    }
+    return cur.text;
+  }, burstGroup());
+}
+async function matchHud(sel) {
+  const id = sel.info.id, scheme = F(C) && tables(F(C)), colour = v => (v && scheme && resolve(scheme, v)) || null;
+  if (id === 'C4Screen') {
+    const f = F(C4) || await uiFile(C4), red = colour('HudIcon_Red'), numbers = colour('Panel.FgColor'); // (a HUD without it starts from the game's)
+    if (!f || !red || !numbers) return status('Couldn\'t read the HUD\'s colours.');
+    save(f, 'C4Panel_Armed', withAlpha(red, 200)); // (the game's Armed is a little see-through)
+    save(f, 'C4Panel_Defused', numbers);
+  } else {
+    const sb = await uiFile(UI_RES.scores), f = sel.res || await uiFile(UI_RES[sel.thing.key]);
+    const sbv = (block, key) => colour(layoutProps(sb, block)[key]) || colour(gameProps(UI_RES.scores, block)[key]);
+    const box = sbv(SB_BOX, 'bgcolor_override') || colour('Frame.BgColor'), head = sbv('MapName', 'fgcolor_override'), text = sbv('Spectators', 'fgcolor_override');
+    if (!f || !box || !text || (!head && id === 'FreezePanel')) return status('Couldn\'t read the scoreboard\'s colours.');
+    if (id === 'WinPanel_Round') {
+      for (const b of ['UpperPanel', 'MiddlePanel', 'LowerPanel']) save(f, 'bgcolor_override', box, b);
+      for (const b of ['WinDescription', 'TimerText', 'MVP_Text', 'FunFact']) save(f, 'fgcolor_override', text, b);
+      copyFace(F(C), 'ScoreboardTeamName', 'WinPanelLarge'); copyFace(F(C), 'ScoreboardBody_1', 'WinPanelTiny');
+    } else {
+      save(f, 'bgcolor_override', box, 'FreezePanelBG'); save(f, 'fgcolor_override', head, 'FreezePanelBG');
+      save(f, 'fgcolor_override', text, ['FreezePanelBG', 'KillerName']);
+      for (const b of ['InfoLabel1', 'InfoLabel2', 'ScreenshotLabel']) save(f, 'fgcolor_override', head, ['FreezePanelBG', b]);
+      copyFace(F(C), 'ScoreboardTeamName', 'FreezeLarge'); copyFace(F(C), 'ScoreboardTeamName', 'FreezeMedium'); copyFace(F(C), 'ScoreboardBody_1', 'FreezeSmall');
+    }
+  }
+  await writing;
+  refreshSoon(); render();
+  status(`${sel.info.name} matches the HUD now (Ctrl+Z undoes it).`);
 }
 
 // ---------- round-end and killer panels ----------
@@ -2878,6 +2939,7 @@ async function select(sel, into = null) { // (into: a pinned card it opens in, f
 // draws, or ("fit") the area its child panels cover: the hint box is a label sized to the text in a much larger panel.
 function clickRects(p, info, W, H) {
   if (p !== p.thing || !info.hud) return [p];
+  if (info.hud.rectsAt) return info.hud.rectsAt(p, W, H); // (drawn somewhere inside a full-screen panel: worked out from its settings)
   // a wide panel whose text is drawn in its middle: just that area (in 480-line units)
   if (info.hud.middle) { const [w, h] = info.hud.middle.map(n => n * H / 480); return [{ x: p.x + (p.w - w) / 2, y: p.y + (p.h - h) / 2, w, h }]; }
   const hit = info.hud.hitAt ? info.hud.hitAt() : info.hud.hit;
@@ -2890,6 +2952,25 @@ function clickRects(p, info, W, H) {
   if (!kids.length) return [p];
   const x = Math.min(...kids.map(q => q.x)), y = Math.min(...kids.map(q => q.y));
   return [{ x, y, w: Math.max(...kids.map(q => q.x + q.w)) - x, h: Math.max(...kids.map(q => q.y + q.h)) - y }];
+}
+
+// Parts the game draws somewhere inside a full-screen panel, where they really show (s: a 480-line unit), from the HUD's
+// settings (the game's code: hud_deathnotice.cpp, cs_hud_weaponselection.cpp, history_resource.cpp): the kill feed's
+// lines at its right edge (or left), first one 2 units down; the weapon selection's boxes centred across the screen (its
+// X and width do nothing); the pickup history's column at the right, rows growing upwards.
+function killFeedRect(p, W, H) {
+  const k = layoutProps(F(L), 'HudDeathNotice'), s = H / 480, n = +k.maxdeathnotices || 4, line = parseFloat(k.lineheight) || 15;
+  const w = Math.min(p.w, 160 * s), x = k.rightjustify === '0' ? p.x : p.x + p.w - w; // (a line's width depends on the names: about this)
+  return [{ x, y: p.y + 2 * s, w, h: n * line * s }];
+}
+function weaponSelectRect(p, W, H) {
+  const k = layoutProps(F(L), 'HudWeaponSelection'), s = H / 480, num = (key, d) => parseFloat(k[key.toLowerCase()]) || d;
+  const small = num('SmallBoxSize', 60), w = ((num('MaxSlots', 5) - 1) * (small + num('BoxGap', 8)) + num('LargeBoxWide', 108)) * s;
+  return [{ x: (W - w) / 2, y: p.y, w, h: Math.max(small, num('LargeBoxTall', 80)) * s }];
+}
+function historyRect(p, W, H) {
+  const w = Math.min(p.w, 170 * H / 480);
+  return [{ x: p.x + p.w - w, y: p.y, w, h: p.h }];
 }
 
 // Click in the preview: the smallest panel under the mouse, skipping containers and fullscreen overlays.
@@ -2915,7 +2996,7 @@ function pickAll(fx, fy) {
     if (!p.thing || p.w * p.h <= 0 || CONTAINERS.has(p.key) || p.key.startsWith('frame_') && p.key.endsWith('grip')) continue;
     if (front && p.thing !== front) continue; // (it's in front of everything: only its parts)
     const info = thingInfo(p.thing);
-    if (!info || DEV_OUT.has(info.id) || (p === p.thing && NO_CLICK.has(p.key)) || (cover && info.kind === 'hud')) continue;
+    if (!info || (p === p.thing && NO_CLICK.has(p.key)) || (cover && info.kind === 'hud')) continue;
     if (!seenInGame(info)) continue;
     const r = clickRects(p, info, live.W, live.H).find(inside);
     if (!r) continue;
@@ -3476,7 +3557,7 @@ const KINDS = [
     ['The HUD\'s green: money gained, buy zone, bomb and defuse kit icons', 'c:HudIcon_Green']]],
   ['numbers', 'HUD numbers and icons', 'Health, armour, ammo, money, the round timer, weapon icons, the objective icon, pickup history', [
     ['Numbers and icons (health, armour, ammo, money, round timer, weapon icons)', 'c:Panel.FgColor c:OrangeDim c:FgColor'],
-    ['Objective icon (bomb site, hostages)', 'c:Hostage_Yellow'], ['Pickup history', 'c:Yellowish']]],
+    ['Objective icon (bomb site, hostages)', 'c:Hostage_Yellow'], ['Pickup history', 'c:Normal']]],
   ['warn', 'Warnings', 'The HUD\'s red: getting hurt, spending money, low time, the bomb flashing', [
     ['Getting hurt, spending money, low time, the bomb', 'c:HudIcon_Red'], ['Pickup history: slot full', 'c:Caution']]],
 ];
@@ -5491,7 +5572,7 @@ function onScreen() {
     }
     // windows first (they are what you are looking at), then HUD parts in a fixed order; skip parts that are always "visible" but rarely draw
     const order = Object.keys(HUD);
-    return [...seen].map(([thing, info]) => ({ thing, info })).filter(t => !(t.info.hud && t.info.hud.quiet) && !DEV_OUT.has(t.info.id))
+    return [...seen].map(([thing, info]) => ({ thing, info })).filter(t => !(t.info.hud && t.info.hud.quiet))
       .sort((a, b) => (a.info.kind === 'hud') - (b.info.kind === 'hud') || order.indexOf(a.info.id) - order.indexOf(b.info.id));
   }
   return Object.entries(HUD).filter(([id]) => !DEV_OUT.has(id) && Object.keys(layoutProps(F(L), id)).length)
@@ -5667,7 +5748,7 @@ const tabOf = (kind, title = '') => kind === 'layout' ? (/size|items|space insid
 const isSizeRow = r => /\b(width|height|size)\b/i.test((r.querySelector && r.querySelector('input[aria-label]')?.getAttribute('aria-label')) || (r.dataset && r.dataset.q) || '');
 // Left out for now (the user's ask, 10-09): the killer panel and the round-end panel; the bomb screen and the
 // whole-HUD colours and fonts aren't in the list either
-const DEV_OUT = new Set(['FreezePanel', 'WinPanel_Round']);
+const DEV_OUT = new Set(['FreezePanel', 'WinPanel_Round']); // (out of the lists; More screens shows them, and then they're clicked like any part)
 // cardSel: what the main card (Float) or the panel (Dock) shows; pins: Float's pinned cards, each on its own part. The
 // global `selected` is the one in use: what the preview marks and keys and handlers act on (a pinned card's while it's used)
 let inUse = null; // (the part in use while render() draws each card with its own: the Ctrl+click group's card)
@@ -5756,6 +5837,7 @@ function buildSelection(box, tabs, pin = null) {
   const body = el('div', { className: 'nx-body' });
   if (also.length && sel === inUse) body.append(card(`Line up ${also.length + 1} parts`, lineUpRows(), false));
   if (sel.thing.key === 'loadingdialog') body.append(card('', loadingHoldRows(), false)); // (above the tabs: which box)
+  if (MATCH[sel.info.id] && !sel.control) body.append(card('', matchRows(sel), false)); // (the screens almost never seen: their look in one click)
   if (quick.length) {
     const q = el('section', { className: 'nx-quick' }), all = el('button', { className: 'nx-all', type: 'button', title: 'Every setting, in tabs', onclick: () => setAdvanced(true) });
     q.append(...quick);
@@ -6072,7 +6154,12 @@ function closePin(p) {
   holdShown(); render(); drawBoxes();
 }
 // The loading screen held open while a card (the main one or a pinned one) shows it
-function holdShown() { return holdLoading([cardSel, ...pins.map(p => p.sel)].some(s => s && s.thing.key === 'loadingdialog')); }
+function holdShown() {
+  const cards = [cardSel, ...pins.map(p => p.sel)].filter(Boolean);
+  // (a round-end or killer panel More screens showed goes once no card shows it)
+  if (rareUp && !cards.some(s => RARE[s.info.id])) { rareUp = false; if (live && live.local) call('cmd', '', 'schemereload_showpanel hide').catch(() => {}); }
+  return holdLoading(cards.some(s => s.thing.key === 'loadingdialog'));
+}
 // The part in use is gone (removed): next (its window) or nothing in its place, in the card it was in (a pinned one too)
 function replaceSel(next) {
   const pin = layoutMode === 'float' && pins.find(p => p.sel === selected);
@@ -6223,6 +6310,57 @@ function elementPop() {
   if (rest.length) out.push(el('h3', { textContent: 'Not on screen now' }), ...rest.map(t => partRow(t, true)));
   return out;
 }
+// More screens (the test game): parts that show only now and then, kept on screen to edit (each outlined and clicked
+// only while kept, as the chat only while kept open), and screens almost never seen, shown with their card (closing
+// the card hides them again, see holdShown)
+function moreScreensPop() {
+  const row = (label, title, onclick, on = null) => {
+    const b = el('button', { type: 'button', className: 'thing-btn morerow', title, onclick });
+    b.append(el('span', { className: 'name', textContent: label }), el('span', { className: 'meta', textContent: on === null ? 'show' : on ? 'kept' : '' }));
+    if (on !== null) b.setAttribute('aria-pressed', String(on));
+    return b;
+  };
+  const k = (label, what, title) => row(label, title, () => keep(what, !kept.has(what)), kept.has(what));
+  const s = (label, title, go) => row(label, title, () => { closeNxPop(); go(); });
+  return [el('h3', { textContent: 'Keep on screen' }),
+    k('Kill feed', 'killfeed', 'Made-up kills keep its lines up, to click and edit it'),
+    k('Pickup history', 'history', 'Picked-up items stay in it, to click and edit it'),
+    k('Weapon selection', 'weapons', 'Holds it open, to click and edit it (fast weapon switch is off meanwhile)'),
+    el('h3', { textContent: 'Show' }),
+    s('Round end panel', 'Shows it as for a CT win with you as MVP, and opens its card', () => showRare('WinPanel_Round')),
+    s('Killer panel', 'Shows it as if the bot had killed you, and opens its card', () => showRare('FreezePanel')),
+    s('Bomb screen', 'Joins the Terrorists, plants a bomb on site B looking down at it, and opens its card', () => { select(C4_SEL()); plantBomb(); })];
+}
+// Keep on screen: the kill feed full of made-up kills (the plugin, the test server only), the pickup history's rows held
+// (hud_drawhistory_time, given again now and then: a HUD reload drops them), the weapon selection held open
+// (hud_fastswitch 0, its slot pressed again now and then; the player's own setting back after).
+let keptAt = 0, fastSwitch = null;
+const HISTORY_GIVE = 'give weapon_hegrenade; give weapon_flashbang; give weapon_smokegrenade; schemereload_testvalue armor 0; give item_assaultsuit';
+async function keep(what, on) {
+  if (on) kept.add(what); else kept.delete(what);
+  keptAt = Date.now();
+  if (what === 'killfeed') call('cmd', '', `schemereload_hold killfeed ${on ? 1 : 0}`).catch(() => {});
+  if (what === 'history') call('cmd', '', on ? `hud_drawhistory_time 900; ${HISTORY_GIVE}` : 'hud_drawhistory_time 5').catch(() => {});
+  if (what === 'weapons') {
+    fastSwitch ||= call('config').then(t => (/^\s*hud_fastswitch\s+"?(\d)/mi.exec(t) || [])[1] || '0', () => '0');
+    const own = await fastSwitch, open = !!live && live.panels.some(q => q.key === 'hudweaponselection');
+    // (closed only while it's open: cancelselect with it closed, dead or spectating, opens the game's menu)
+    call('cmd', '', on ? 'hud_fastswitch 0; slot2' : `${open ? 'cancelselect; ' : ''}hud_fastswitch ${own}`).catch(() => {});
+  }
+  render(); drawBoxes(); fillNxPop();
+}
+function keepTick() { // (from poll)
+  if (!kept.size || Date.now() - keptAt < 8000) return;
+  keptAt = Date.now();
+  const c = [kept.has('history') && 'schemereload_testvalue armor 0; give item_assaultsuit', kept.has('weapons') && 'slot2'].filter(Boolean);
+  if (c.length) call('cmd', '', c.join('; ')).catch(() => {});
+}
+// Show: the round-end panel or the killer panel, as the test game can make them (the plugin's events), with its card
+function showRare(id) {
+  call('cmd', '', `schemereload_showpanel ${RARE[id]}`).catch(() => {});
+  rareUp = true; rareSent = Date.now();
+  select(hudThing([id, HUD[id]]));
+}
 function showHidePop() {
   if (!files.length) return [el('p', { className: 'meta empty', textContent: 'Open a HUD first.' })];
   const all = [...onScreen(), ...otherParts(onScreen())].filter(t => t.info.kind === 'hud' && canHide(t.info.id));
@@ -6247,7 +6385,7 @@ function boxList() {
     for (const p of live.panels) {
       if (!p.thing || p !== p.thing || (front && p !== front)) continue; // (the loading screen, a question box: only its box)
       const info = thingInfo(p);
-      if (!info || DEV_OUT.has(info.id) || NO_CLICK.has(p.key) || (cover && info.kind === 'hud') || !seenInGame(info)) continue;
+      if (!info || NO_CLICK.has(p.key) || (cover && info.kind === 'hud') || !seenInGame(info)) continue;
       for (const r of clickRects(p, info, live.W, live.H))
         if (r.w * r.h <= 0.9 * live.W * live.H && r.x < live.W && r.y < live.H && r.x + r.w > 0 && r.y + r.h > 0) boxes.push({ thing: p, info, r, cls: 'thing' });
     }
@@ -6611,6 +6749,7 @@ let pendingRender = false, captured = false, autoTried = false, shownSize = ''; 
 
 let keepScores = false, scoresSent = 0, keepChat = false, chatSent = 0, joinedGame = false;
 async function poll() {
+  if (live && live.local) keepTick();
   // capture once the plugin answers (a game started from Steam: once the editor has joined it, see start)
   if (live && !captured && !autoTried) { autoTried = true; capture(true); }
   // a game started some other way while the editor is open: joined by itself, once (see joinGame)
@@ -6645,6 +6784,9 @@ async function poll() {
   if (loadHud !== menuSeen) { menuSeen = loadHud; if (live) menuMark(); }
   // the scoreboard closes when the HUD reloads: open it again while it's being kept open
   if (keepScores && live && !live.panels.some(p => p.key === 'scores') && Date.now() - scoresSent > 1500) { scoresSent = Date.now(); call('cmd', '', '+showscores'); }
+  // (and a round-end or killer panel More screens showed, while its card is open: a change reloads the HUD, which closes it)
+  const rare = rareUp && live && live.local && Date.now() - rareSent > 1500 && [cardSel, ...pins.map(p => p.sel)].find(x => x && RARE[x.info.id]);
+  if (rare && !live.panels.some(p => p.key === rare.info.id.toLowerCase())) { rareSent = Date.now(); call('cmd', '', `schemereload_showpanel ${RARE[rare.info.id]}`).catch(() => {}); }
   // (the chat: the plugin holds it, see Chat in In-game Toggles)
   if (live) {
     // the same thing, found again in the new list (panels are re-read every time), for every open card. One that is gone
@@ -6769,6 +6911,10 @@ function inGameRow() {
   $('ingame').hidden = !on; // (out of a map: not there at all, not greyed out)
   // Speed & timer: the sample texts are the test game's (the plugin sends them on its own server only)
   $('textsbtn').hidden = !local;
+  $('morebtn').hidden = !local;
+  if (!local && nxPop && nxPop.owner === $('morebtn')) closeNxPop();
+  if (!on && kept.size) for (const w of [...kept]) keep(w, false); // (out of the map: let them go)
+  if (!local) rareUp = false;
   $('textsbtn').title = local ? 'The test game\'s sample timer and speed texts: each on or off' : 'Only in the test game (Test server): the sample timer and speed texts';
   if (!local) { $('textchips').hidden = true; $('textsbtn').setAttribute('aria-expanded', 'false'); }
   if (!on && (keepScores || keepChat)) {
@@ -6914,6 +7060,7 @@ async function openHud(path, again = false) { // (again: read again as the files
     $('hudbtn').textContent = hudName;
     selected = cardSel = null;
     for (const p of pins) dropPin(p);
+    rareUp = false; // (a round-end or killer panel shown for the last HUD's card: nothing to show again)
     also = []; // (parts Ctrl+clicked with the last one)
     holdLoading(false);
     undoSteps.length = 0;
@@ -7121,6 +7268,8 @@ async function onHostEvent(ev) {
   }
   await homeResolution();
   await holdLoading(false); // (the game stays: not left with the box open and its menu hidden)
+  for (const w of [...kept]) await keep(w, false); // (nor with fast weapon switch off, the pickup rows held, the feed filled)
+  if (rareUp && live && live.local) await call('cmd', '', 'schemereload_showpanel hide').catch(() => {});
   call('quit');
 }
 
@@ -7224,6 +7373,7 @@ $('loadbtn').onclick = () => {
 };
 $('elembtn').onclick = () => openNxPop($('elembtn'), elementPop);
 $('showhidebtn').onclick = () => openNxPop($('showhidebtn'), showHidePop);
+$('morebtn').onclick = () => openNxPop($('morebtn'), moreScreensPop);
 onPage('pointerdown', e => { if (nxPop && !nxPop.contains(e.target) && !nxPop.owner.contains(e.target)) closeNxPop(); }, true);
 // (Float: the main card and the pinned ones kept on screen: a smaller window, a place saved on a bigger one)
 function clampFloat() {
@@ -7805,6 +7955,12 @@ async function parserCheck() {
   const gv = [gridded('13'), gridded('c-29'), gridded('r3'), gridded('f0')].join();
   grid = g0;
   check(gv === '16,c-32,r0,f0', `grid: positions land on multiples, from their own anchor (${gv})`);
+  { // where the kill feed and weapon selection really draw in their full-screen panels (no HUD: the game's defaults;
+    // seen in game at 2560x1440: the feed's lines at the panel's right edge, the selection's boxes centred)
+    const [kf] = killFeedRect({ x: 640, y: 36, w: 1884, h: 1404 }, 2560, 1440), [ws] = weaponSelectRect({ x: 0, y: 48, w: 2560, h: 1392 }, 2560, 1440);
+    check([kf.x, kf.y, kf.w, kf.h, ws.x, ws.y, ws.w, ws.h].join() === '2044,42,480,180,710,48,1140,240' && withAlpha('255 0 0', 200) === '255 0 0 200' && withAlpha('1 2 3 4', 9) === '1 2 3 9',
+      `the kill feed's and weapon selection's drawing areas, and a colour's alpha (${JSON.stringify([kf, ws])})`);
+  }
   check(tabOf('layout', 'Box size') === 'size' && tabOf('layout', 'Position') === 'position' && tabOf('layout', 'Text') === 'misc' && tabOf('other', 'Buttons') === 'buttons'
     && tabOf('other', 'Settings') === 'misc' && tabOf('missing') === 'misc' && tabOf('custom') === 'custom' && tabOf('show') === 'show', 'sections go in their tabs (Size, Position, Buttons, Misc...)');
   check(isSizeRow({ dataset: { q: 'Width' } }) && isSizeRow({ dataset: { q: 'Text size' } }) && !isSizeRow({ dataset: { q: 'X position' } }), 'width, height and size rows go in Size');
@@ -7981,7 +8137,7 @@ if (host && location.hash === '#hosttest') (async () => {
       check(await call('importfolder', path) === `name\tmyhud\nincustom\t${path}`, 'a HUD folder dropped from the custom folder is opened, not copied');
     }
     for (const [id, hud] of Object.entries(HUD)) for (const [, keys] of hud.colours || [])
-      for (const k of keys.split('|')) if (!['Yellowish', 'Caution'].includes(k)) check(resolve(tables(F(hud.scheme || C)), k), `${hud.scheme || C} has ${k}`);
+      for (const k of keys.split('|')) if (!['Normal', 'Caution'].includes(k)) check(resolve(tables(F(hud.scheme || C)), k), `${hud.scheme || C} has ${k}`);
     save(F(C), 'Panel.FgColor', '1 2 3 255');
     save(F(L), 'xpos', '20', 'HudHealth');
     await sleep(400);
