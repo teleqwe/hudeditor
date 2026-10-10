@@ -1165,6 +1165,11 @@ static void OnMessage( const wstring &msg )
 		else if ( !PluginLoaded() && ( out = Attach() ).size() )
 			ok = false;
 	}
+	else if ( op == L"gamestate" ) // "none", "plugin" (running with it), or "foreign <pid>" (running without it: the page joins it)
+	{
+		DWORD pid = g_selftestOut.empty() ? GamePid() : 0; // (--selftest: never a real game)
+		out = !pid ? L"none" : PluginLoaded() ? L"plugin" : L"foreign " + std::to_wstring( pid );
+	}
 	else if ( op == L"huds" ) // "label\tpath\tcustom" per line: the HUD folders in custom, the ones opened last first; then
 	{                         // "\tcurrent\t<the HUD open now>"
 		std::vector< wstring > seen;

@@ -6610,6 +6610,11 @@ let keepScores = false, scoresSent = 0, keepChat = false, chatSent = 0, joinedGa
 async function poll() {
   // capture once the plugin answers (a game started from Steam: once the editor has joined it, see start)
   if (live && !captured && !autoTried) { autoTried = true; capture(true); }
+  // a game started some other way while the editor is open: joined by itself, once (see joinGame)
+  if (!live && !launching && !restarting && !joining && Date.now() - stateAsked > 3000) {
+    stateAsked = Date.now();
+    call('gamestate').then(g => { if (g.startsWith('foreign ') && g !== joinTried && !live) { joinTried = g; joinGame(); } }).catch(() => {});
+  }
   const raw = await call('panels').catch(() => '');
   if (raw === liveRaw) return;
   liveRaw = raw;
@@ -7330,36 +7335,45 @@ async function launchForHud(byHand = false) {
     status(hudName ? `Starting the game with ${hudName}...` : 'Starting the game...');
   } catch (err) {
     launching = false;
+    if (/already running/i.test(err.message)) return joinGame(); // (started some other way since the editor looked)
     emptyText('The game didn\'t start.', err.message);
     status(err.message);
     $('launch').hidden = false;
   }
 }
+// A game running without the editor's plugin, started some other way (Steam, a shortcut), before the editor or while
+// it's open: with -insecure, the exe loads the plugin into it (plugin_load); without, or if it doesn't answer, the old
+// way: quit it and Launch game. ("starting...": the game's window isn't up yet, or it's the editor's own game loading
+// its plugin: ask again.)
+let joining = false, joinTried = '', stateAsked = 0;
+async function joinGame() {
+  if (joining || live) return;
+  joining = true;
+  emptyText('Joining the game that\'s running...', 'The editor loads its plugin into it: the game shows up here in a few seconds.');
+  for (let i = 0; i < 60 && !live; i++) {
+    try {
+      await call('attach');
+      status('The game is already running: joining it (loading the editor\'s plugin into it)...');
+      // the main menu was made before the plugin could put the HUD first: its buttons show after a restart (marked
+      // once the plugin answers: poll clears the list while there's no game)
+      joinedGame = true;
+      setTimeout(() => {
+        joining = false;
+        if (!live) { emptyText('The game didn\'t take the editor\'s plugin.', 'Quit it, then click Launch game.'); status('The game didn\'t take the editor\'s plugin. Quit it, then click Launch game.'); $('launch').hidden = false; }
+      }, 30000);
+      return;
+    } catch (err) {
+      if (!/^starting/.test(err.message)) { joining = false; emptyText('The editor can\'t join this game.', err.message); status(err.message); $('launch').hidden = false; return; }
+      await sleep(2000);
+    }
+  }
+  joining = false;
+}
 async function start() {
   try {
     const state = startState = await call('start');
-    if (state === 'foreign') {
-      // started some other way (from Steam): with -insecure, the exe loads the plugin into it (plugin_load); without, or
-      // if it doesn't answer, the old way: quit it and Launch game
-      // ("starting...": the game's window isn't up yet, or it's the editor's own game loading its plugin: ask again)
-      (async () => {
-        for (let i = 0; i < 60; i++) {
-          try {
-            await call('attach');
-            status('The game is already running: joining it (loading the editor\'s plugin into it)...');
-            // the main menu was made before the plugin could put the HUD first: its buttons show after a restart (marked
-            // once the plugin answers: poll clears the list while there's no game)
-            joinedGame = true;
-            setTimeout(() => { if (!live) { status('The game didn\'t take the editor\'s plugin. Quit it, then click Launch game.'); $('launch').hidden = false; } }, 30000);
-            return;
-          } catch (err) {
-            if (!/^starting/.test(err.message)) { status(err.message); $('launch').hidden = false; return; }
-            if (live) return;
-            await sleep(2000);
-          }
-        }
-      })();
-    } else if (state === 'running') {
+    if (state === 'foreign') joinGame();
+    else if (state === 'running') {
       status('Game already running.');
     } else {
       emptyText('Pick a HUD to edit.', 'The game starts with it, and shows up here once it has loaded.');
@@ -8302,6 +8316,7 @@ if (host && location.hash === '#hosttest') (async () => {
     check(await call('read', '../outside.txt').then(() => false, () => true), 'paths outside the HUD refused');
     check(await call('new', 'myhud').then(() => false, () => true), 'existing HUD not overwritten');
     check(await call('gamemem').then(() => false, () => true), 'the game\'s memory: none without the game');
+    check(await call('gamestate') === 'none', 'no game to join in --selftest');
     { // a part's Save keeps its own files only; Back to how it was imported puts the HUD back as it was made, unsaved
       check(/^\d{4}-\d\d-\d\d$/.test(await call('original')), 'a new HUD keeps a copy of itself as it was made');
       save(F(L), 'xpos', '24', 'HudHealth');
