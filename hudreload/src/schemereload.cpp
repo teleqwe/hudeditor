@@ -2134,15 +2134,17 @@ CON_COMMAND( schemereload_showpanel, "schemereload_showpanel win|freeze|hide: sh
 	}
 }
 
-// The kill feed kept full on the test server (schemereload_hold killfeed 1|0), to edit it: made-up kills between the
-// player and the first bot (both ways, a few weapons, headshots), fired again just before the last ones run out
+// The kill feed kept full on the test server (schemereload_hold killfeed 1|0), to edit it: made-up kills of the first bot
+// by the player (a few weapons, headshots), fired again just before the last ones run out
 // (hud_deathnotice_time). The test server has cheats on, so they count for no achievements.
 static bool g_bHoldKillFeed;
 static double g_flKillFeedNext;
 static void FireKillFeed()
 {
 	edict_t *me = g_pEngineServer ? g_pEngineServer->PEntityOfEntIndex( 1 ) : NULL;
-	if ( !g_pGameEvents || !me )
+	// (the test server only: with cheats off the kills could count for achievements, on another game it hosts too)
+	ConVar *cheats = g_pCVar ? g_pCVar->FindVar( "sv_cheats" ) : NULL;
+	if ( !g_pGameEvents || !me || !cheats || !cheats->GetBool() )
 		return;
 	int meId = g_pEngineServer->GetPlayerUserId( me ), botId = meId;
 	for ( int i = 2; i <= 64 && botId == meId; ++i )
@@ -2151,15 +2153,19 @@ static void FireKillFeed()
 		if ( e && !e->IsFree() && g_pEngineServer->GetPlayerUserId( e ) >= 0 && !Q_stricmp( g_pEngineServer->GetPlayerNetworkIDString( e ), "BOT" ) )
 			botId = g_pEngineServer->GetPlayerUserId( e );
 	}
+	if ( meId < 0 || botId == meId ) // (no bot, as just after Reset: nothing, rather than the player killing themselves)
+		return;
 	static const char *s_Weapons[] = { "ak47", "awp", "deagle", "m4a1", "knife" };
 	for ( int i = 0; i < 5; ++i )
 	{
 		IGameEvent *e = g_pGameEvents->CreateEvent( "player_death", true );
 		if ( !e )
 			return;
-		bool mine = i % 2 == 0; // (the player's kills and the bot's, so both team colours show)
-		e->SetInt( "userid", mine ? botId : meId );
-		e->SetInt( "attacker", mine ? meId : botId );
+		// the player always the killer: a made-up death of the player's own made the game treat them as dead (the buy menu
+		// wouldn't open while the kill feed was kept, seen 2026-10-11). Each line has the player's team colour and the
+		// bot's (one colour when they're on the same team).
+		e->SetInt( "userid", botId );
+		e->SetInt( "attacker", meId );
 		e->SetString( "weapon", s_Weapons[i] );
 		e->SetBool( "headshot", i == 0 || i == 3 );
 		g_pGameEvents->FireEvent( e );
