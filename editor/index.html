@@ -330,7 +330,10 @@
   #picker > div { width: min(520px, 92vw); max-height: 80vh; overflow: auto; padding: 20px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 12px 40px #0008; }
   #picker h2 { margin: 0 0 4px; font-size: 16px; font-weight: 550; }
   #picker .pickhead { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-  #picker .pickhead button { flex: none; padding: 3px 10px; font-size: 12px; }
+  #picker .pickhead button { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; font-size: 13px; }
+  #picker .pickhead button .i { width: 14px; height: 14px; }
+  #picker .hudrow > .renamehud { flex: none; align-self: stretch; padding: 0 14px; color: var(--muted); }
+  #picker .hudrow > .renamehud:hover { color: var(--text); }
   #picker .hud { display: block; width: 100%; margin: 6px 0; padding: 9px 12px; text-align: left; }
   #picker .hud.primary { color: var(--text); background: var(--soft); border-color: var(--accent); font-weight: 400; }
   #picker .hud .meta { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -465,7 +468,7 @@
 </style>
 </head>
 <body>
-<svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" /> <circle cx="12" cy="12" r="3" /></symbol><symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49" /> <path d="M14.084 14.158a3 3 0 0 1-4.242-4.242" /> <path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143" /> <path d="m2 2 20 20" /></symbol><symbol id="i-rotate-ccw" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /> <path d="M3 3v5h5" /></symbol><symbol id="i-factory" viewBox="0 0 24 24"><path d="M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8l-7 5V8l-7 5V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z" /> <path d="M17 18h1" /> <path d="M12 18h1" /> <path d="M7 18h1" /></symbol><symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18" /> <path d="m6 6 12 12" /></symbol><symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 17v5" /> <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" /></symbol><symbol id="i-pin-off" viewBox="0 0 24 24"><path d="M12 17v5" /> <path d="M15 9.34V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H7.89" /> <path d="m2 2 20 20" /> <path d="M9 9v1.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h11" /></symbol><symbol id="i-grip-vertical" viewBox="0 0 24 24"><circle cx="9" cy="12" r="1" /> <circle cx="9" cy="5" r="1" /> <circle cx="9" cy="19" r="1" /> <circle cx="15" cy="12" r="1" /> <circle cx="15" cy="5" r="1" /> <circle cx="15" cy="19" r="1" /></symbol><symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" /></symbol><symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6" /></symbol><symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6" /></symbol><symbol id="i-undo-2" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5" /> <path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11" /></symbol><symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /> <path d="M3 3v5h5" /> <path d="M12 7v5l4 2" /></symbol><symbol id="i-panel-right" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" /> <path d="M15 3v18" /></symbol><symbol id="i-picture-in-picture-2" viewBox="0 0 24 24"><path d="M21 9V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v10c0 1.1.9 2 2 2h4" /> <rect width="10" height="7" x="12" y="13" rx="2" /></symbol><symbol id="i-list" viewBox="0 0 24 24"><path d="M3 12h.01" /> <path d="M3 18h.01" /> <path d="M3 6h.01" /> <path d="M8 12h13" /> <path d="M8 18h13" /> <path d="M8 6h13" /></symbol><symbol id="i-image" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" ry="2" /> <circle cx="9" cy="9" r="2" /> <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" /></symbol><symbol id="i-type" viewBox="0 0 24 24"><polyline points="4 7 4 4 20 4 20 7" /> <line x1="9" x2="15" y1="20" y2="20" /> <line x1="12" x2="12" y1="4" y2="20" /></symbol><symbol id="i-square" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" /></symbol><symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14" /> <path d="M12 5v14" /></symbol><symbol id="i-save" viewBox="0 0 24 24"><path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" /> <path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7" /> <path d="M7 3v4a1 1 0 0 0 1 1h7" /></symbol><symbol id="i-folder-open" viewBox="0 0 24 24"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2" /></symbol><symbol id="i-play" viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3" /></symbol><symbol id="i-triangle-alert" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" /> <path d="M12 9v4" /> <path d="M12 17h.01" /></symbol><symbol id="i-toggle-right" viewBox="0 0 24 24"><rect width="20" height="12" x="2" y="6" rx="6" ry="6" /> <circle cx="16" cy="12" r="2" /></symbol><symbol id="i-message-square" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></symbol><symbol id="i-table-2" viewBox="0 0 24 24"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18" /></symbol><symbol id="i-loader" viewBox="0 0 24 24"><path d="M12 2v4" /> <path d="m16.2 7.8 2.9-2.9" /> <path d="M18 12h4" /> <path d="m16.2 16.2 2.9 2.9" /> <path d="M12 18v4" /> <path d="m4.9 19.1 2.9-2.9" /> <path d="M2 12h4" /> <path d="m4.9 4.9 2.9 2.9" /></symbol></svg>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" /> <circle cx="12" cy="12" r="3" /></symbol><symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49" /> <path d="M14.084 14.158a3 3 0 0 1-4.242-4.242" /> <path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143" /> <path d="m2 2 20 20" /></symbol><symbol id="i-rotate-ccw" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /> <path d="M3 3v5h5" /></symbol><symbol id="i-factory" viewBox="0 0 24 24"><path d="M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8l-7 5V8l-7 5V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z" /> <path d="M17 18h1" /> <path d="M12 18h1" /> <path d="M7 18h1" /></symbol><symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18" /> <path d="m6 6 12 12" /></symbol><symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 17v5" /> <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" /></symbol><symbol id="i-pin-off" viewBox="0 0 24 24"><path d="M12 17v5" /> <path d="M15 9.34V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H7.89" /> <path d="m2 2 20 20" /> <path d="M9 9v1.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h11" /></symbol><symbol id="i-grip-vertical" viewBox="0 0 24 24"><circle cx="9" cy="12" r="1" /> <circle cx="9" cy="5" r="1" /> <circle cx="9" cy="19" r="1" /> <circle cx="15" cy="12" r="1" /> <circle cx="15" cy="5" r="1" /> <circle cx="15" cy="19" r="1" /></symbol><symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" /></symbol><symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6" /></symbol><symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6" /></symbol><symbol id="i-undo-2" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5" /> <path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11" /></symbol><symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /> <path d="M3 3v5h5" /> <path d="M12 7v5l4 2" /></symbol><symbol id="i-panel-right" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" /> <path d="M15 3v18" /></symbol><symbol id="i-picture-in-picture-2" viewBox="0 0 24 24"><path d="M21 9V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v10c0 1.1.9 2 2 2h4" /> <rect width="10" height="7" x="12" y="13" rx="2" /></symbol><symbol id="i-list" viewBox="0 0 24 24"><path d="M3 12h.01" /> <path d="M3 18h.01" /> <path d="M3 6h.01" /> <path d="M8 12h13" /> <path d="M8 18h13" /> <path d="M8 6h13" /></symbol><symbol id="i-image" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" ry="2" /> <circle cx="9" cy="9" r="2" /> <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" /></symbol><symbol id="i-type" viewBox="0 0 24 24"><polyline points="4 7 4 4 20 4 20 7" /> <line x1="9" x2="15" y1="20" y2="20" /> <line x1="12" x2="12" y1="4" y2="20" /></symbol><symbol id="i-square" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" /></symbol><symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14" /> <path d="M12 5v14" /></symbol><symbol id="i-save" viewBox="0 0 24 24"><path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" /> <path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7" /> <path d="M7 3v4a1 1 0 0 0 1 1h7" /></symbol><symbol id="i-folder-open" viewBox="0 0 24 24"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2" /></symbol><symbol id="i-play" viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3" /></symbol><symbol id="i-triangle-alert" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" /> <path d="M12 9v4" /> <path d="M12 17h.01" /></symbol><symbol id="i-toggle-right" viewBox="0 0 24 24"><rect width="20" height="12" x="2" y="6" rx="6" ry="6" /> <circle cx="16" cy="12" r="2" /></symbol><symbol id="i-message-square" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></symbol><symbol id="i-table-2" viewBox="0 0 24 24"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18" /></symbol><symbol id="i-refresh-cw" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /> <path d="M21 3v5h-5" /> <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /> <path d="M8 16H3v5" /></symbol><symbol id="i-loader" viewBox="0 0 24 24"><path d="M12 2v4" /> <path d="m16.2 7.8 2.9-2.9" /> <path d="M18 12h4" /> <path d="m16.2 16.2 2.9 2.9" /> <path d="M12 18v4" /> <path d="m4.9 19.1 2.9-2.9" /> <path d="M2 12h4" /> <path d="m4.9 4.9 2.9 2.9" /></symbol></svg>
 <header class="app-header">
   <button id="hudbtn" title="The HUD you're editing: click to pick another, rename one, or add one">No HUD open</button>
   <button id="explore" class="ib" title="Open the HUD's folder" aria-label="Open the HUD's folder"><svg class="i" aria-hidden="true"><use href="#i-folder-open"/></svg></button>
@@ -567,7 +570,7 @@
 </aside>
 <input type="file" id="fontfile" accept=".ttf,.otf" hidden>
 <div id="picker" hidden><div>
-  <div class="pickhead"><h2>Which HUD do you want to edit?</h2><button id="pickrefresh" class="ghost" title="Look in the custom folder again (a HUD moved, deleted or copied in since)">↻ Refresh</button></div>
+  <div class="pickhead"><h2>Which HUD do you want to edit?</h2><button id="pickrefresh" title="Look in the custom folder again (a HUD moved, deleted or copied in since)"><svg class="i" aria-hidden="true"><use href="#i-refresh-cw"/></svg><span>Refresh</span></button></div>
   <p class="meta">The HUDs in your custom folder (cstrike/custom). Changes show in game straight away. They are kept when you click Save HUD.</p>
   <div id="hudlist"></div>
   <div id="importhud" class="drop">Add a HUD: drop it here<span class="meta">Its folder, or the .zip, .rar or .7z as downloaded. A copy goes in your custom folder.</span>
@@ -709,12 +712,16 @@ const WINDOW_COLOURS = {
   [C]: [['Window background', 'Frame.BgColor', ''], ['Backdrop', 'BgColor', 'Small frames on the scoreboard; the box of team and class select, the MOTD and the buy menu (there only its opacity counts)'], ['Title', 'FrameTitleBar.TextColor', ''],
     ['Text', 'Label.TextColor', 'Shared by in-game windows and the buy menu'], ['Borders', 'Border.Bright|Border.Dark', '']],
   [S]: [['Window background', 'Frame.BgColor', ''], ['Window background, not focused', 'Frame.OutOfFocusBgColor', ''],
-    ['Title', 'FrameTitleBar.TextColor', ''], ['Title bar', 'FrameTitleBar.BgColor', ''], ['Text', 'Label.TextColor', ''], ['Borders', 'Border.Bright|Border.Dark', ''],
+    ['Title', 'FrameTitleBar.TextColor', ''], ['Title bar', 'FrameTitleBar.BgColor', ''], ['Title, window behind', 'FrameTitleBar.DisabledTextColor', 'A window behind another one'],
+    ['Title bar, window behind', 'FrameTitleBar.DisabledBgColor', ''], ['Text', 'Label.TextColor', ''], ['Borders', 'Border.Bright|Border.Dark', ''],
     // (checked 2026-10-02: a plain start shows tooltips in these; a reload gave the box the text fields' colours until a
     // restart, which the plugin puts right since 2026-10-08: seen live, red then blue, on the server browser's lock)
     ['Tooltip text', 'Tooltip.TextColor', 'The server browser\'s column headers have them'],
     ['Tooltip background', 'Tooltip.BgColor', 'The server browser\'s column headers have them']],
 };
+// The menus' right-click menus and drop-down lists (the server list's, the options' boxes): only there while one is open
+const MENU_COLOURS = [['Menu text', 'Menu.TextColor', 'Right-click menus and drop-down lists, in every menu window'], ['Menu background', 'Menu.BgColor', ''],
+  ['Menu text (mouse over)', 'Menu.ArmedTextColor', ''], ['Menu row (mouse over)', 'Menu.ArmedBgColor', '']];
 const EXTRA = {
   gamemenu: [['Menu text', 'MainMenu.TextColor', 'Resume Game, Find Servers, Options...'], ['Menu text (mouse over)', 'MainMenu.ArmedTextColor', ''],
     ['Menu text (clicked)', 'MainMenu.DepressedTextColor', ''], ['Background dim', 'MainMenu.Backdrop', 'Darkens the game behind the menu']],
@@ -740,11 +747,14 @@ const CONTROLS = [
     ['Background (mouse over)', 'Button.ArmedBgColor'], ['Text (clicked)', 'Button.DepressedTextColor'], ['Background (clicked)', 'Button.DepressedBgColor'],
     ['Text (greyed out)', 'Label.DisabledFgColor2'], ['Text edge (greyed out)', 'Label.DisabledFgColor1']]],
   ['SectionedListPanel', 'Grouped list', [['Text', 'SectionedListPanel.TextColor'], ['Bright text', 'SectionedListPanel.BrightTextColor'], ['Headers', 'SectionedListPanel.HeaderTextColor'],
-    ['Background', 'SectionedListPanel.BgColor'], ['Selected text', 'SectionedListPanel.SelectedTextColor'], ['Selected row', 'SectionedListPanel.SelectedBgColor']]],
-  ['ListPanel', 'List', [['Text', 'ListPanel.TextColor'], ['Background', 'ListPanel.BgColor'], ['Selected text', 'ListPanel.SelectedTextColor'], ['Selected row', 'ListPanel.SelectedBgColor']]],
+    ['Background', 'SectionedListPanel.BgColor'], ['Selected text', 'SectionedListPanel.SelectedTextColor'], ['Selected row', 'SectionedListPanel.SelectedBgColor'],
+    ['Selected text, window behind', 'SectionedListPanel.OutOfFocusSelectedTextColor'], ['Selected row, window behind', 'SectionedListPanel.OutOfFocusSelectedBgColor']]],
+  ['ListPanel', 'List', [['Text', 'ListPanel.TextColor'], ['Background', 'ListPanel.BgColor'], ['Selected text', 'ListPanel.SelectedTextColor'], ['Selected row', 'ListPanel.SelectedBgColor'],
+    ['Selected row, window behind', 'ListPanel.SelectedOutOfFocusBgColor']]],
   ['RichText', 'Text box', [['Text', 'RichText.TextColor'], ['Background', 'RichText.BgColor'], ['Selected text', 'RichText.SelectedTextColor'], ['Selection', 'RichText.SelectedBgColor']]],
   ['TextEntry', 'Text field', [['Text', 'TextEntry.TextColor'], ['Background', 'TextEntry.BgColor'], ['Cursor', 'TextEntry.CursorColor'],
-    ['Selected text', 'TextEntry.SelectedTextColor'], ['Selection', 'TextEntry.SelectedBgColor'], ['Read-only text', 'TextEntry.DisabledTextColor']]],
+    ['Selected text', 'TextEntry.SelectedTextColor'], ['Selection', 'TextEntry.SelectedBgColor'], ['Selection, window behind', 'TextEntry.OutOfFocusSelectedBgColor'],
+    ['Read-only text', 'TextEntry.DisabledTextColor']]],
   ['PropertySheet', 'Tabs', [['Tab text', 'PropertySheet.TextColor'], ['Selected tab text', 'PropertySheet.SelectedTextColor']]],
   ['ProgressBar', 'Progress bar', [['Bar', 'ProgressBar.FgColor'], ['Background', 'ProgressBar.BgColor']]],
   ['Slider', 'Slider', [['Knob', 'Slider.NobColor'], ['Text', 'Slider.TextColor'], ['Track', 'Slider.TrackColor']]],
@@ -1250,7 +1260,7 @@ function burstGroup() { if (!burst) { burst = Symbol(); setTimeout(() => { burst
 const pendingGroup = {}; // a setting written later (a drag, quick typing): the group its first change started
 let mirroring = false; // (a loading screen file's save copied into the other one: not copied back)
 function save(f, key, value, section = null, inGroup = null) { // (inGroup: an action's own, kept across an await)
-  const id = `${f.name}/${section}/${key}`, group = pendingGroup[id] ??= inGroup || burstGroup();
+  const id = `${f.name}/${section}/${key}`, group = pendingGroup[id] ??= inGroup || resetGroup || burstGroup();
   if (f.name === L && section === 'HudChat' && /^(xpos|ypos|wide|tall)$/i.test(key)) chatResFirst(/^wide$/i.test(key) ? value : null);
   clearTimeout(timers[id]);
   waiting.add(id);
@@ -1326,10 +1336,11 @@ function keepChatOpen() {
 // Writes a file's new text (made by edit() from its current text) as one undo step, once earlier writes are done.
 // group: the action it's part of (one Ctrl+Z for all of it); force: written even when it doesn't change (a copy put in).
 const groupInRun = new Map(); // an action that continues the last one's run: the run's group (see below)
-let resetGroup = null; // (while a ↺ Reset writes: everything it writes, whatever group each ↺ has, is its one step)
+let resetGroup = null; // (from a ↺ Reset until the user's next click or key: everything written, whatever group, is its one step)
+const resetGroups = new Set(); // (a reset's group: a step of its own, even straight after a change)
 function commit(f, id, edit, group = null, force = false) {
-  const reset = resetGroup;
-  group = reset || group;
+  group = resetGroup || group;
+  const reset = resetGroups.has(group);
   keepChatOpen();
   writing = writing.then(async () => {
     try {
@@ -1346,7 +1357,7 @@ function commit(f, id, edit, group = null, force = false) {
       // a setting changed again within 1.5 s continues the step it started (the last group's steps): the rest of this
       // action then joins that group too, earlier steps of it included, so one Ctrl+Z undoes the run
       let sameRun = false; // (a reset is a step of its own, even straight after a change)
-      if (!reset && last && now - last.at <= 1500) for (let i = undoSteps.length - 1; i >= 0 && (undoSteps[i] === last || (last.group && undoSteps[i].group === last.group)); i--) if (undoSteps[i].ids.has(id)) { sameRun = true; break; }
+      if (!reset && last && !resetGroups.has(last.group) && now - last.at <= 1500) for (let i = undoSteps.length - 1; i >= 0 && (undoSteps[i] === last || (last.group && undoSteps[i].group === last.group)); i--) if (undoSteps[i].ids.has(id)) { sameRun = true; break; }
       if (sameRun && group && last.group && g !== last.group) {
         groupInRun.set(group, last.group);
         for (const s of undoSteps) if (s.group === g) s.group = last.group;
@@ -1697,9 +1708,13 @@ const CMD_PRESETS = [['say !r', 'Restart'], ['say !rtv', 'Rock the vote'], ['say
   ['say !stop', 'Stop timer'], ['say !top', 'Top times'], ['say !wr', 'World record'], ['say !pr', 'Personal record'], ['say !cp', 'Checkpoints'],
   ['say !hide', 'Hide players'], ['say !style', 'Styles'], ['say !settings', 'Settings'], ['say !rank', 'Rank'], ['timeleft', 'Time left']];
 // Every button's place, the ones the game shows only now and then too (Spectate, VIP), which can't be clicked in the preview.
-function buttonPlaceRows(f) {
+function buttonPlaceRows(f, thing = null) {
+  const shown = b => !!live && !!thing && live.panels.some(q => q.thing === thing && q !== thing && q.w > 0 && q.x < live.W && q.x + q.w > 0 && (q.name || '').toLowerCase() === b.toLowerCase());
   return f.parsed.sections.filter(s => s.path.length === 2 && /button$/i.test(layoutProps(f, s.path[1]).controlname || ''))
-    .flatMap(s => { const b = s.path[1], p = layoutProps(f, b); return [numRow(f, b, 'xpos', `${prettify(b)}: X`, p.xpos), numRow(f, b, 'ypos', `${prettify(b)}: Y`, p.ypos)]; });
+    .flatMap(s => {
+      const b = s.path[1], p = layoutProps(f, b), place = [numRow(f, b, 'xpos', `${prettify(b)}: X`, p.xpos), numRow(f, b, 'ypos', `${prettify(b)}: Y`, p.ypos)];
+      return shown(b) ? place : [...place, numRow(f, b, 'wide', `${prettify(b)}: width`, p.wide), numRow(f, b, 'tall', `${prettify(b)}: height`, p.tall)];
+    });
 }
 const cmdBlocks = f => f.parsed.sections.filter(s => s.path.length === 2 && /^hudeditor_cmd/i.test(s.path[1])).map(s => s.path[1]);
 // Takes the block `name` under sub out of f's own file (whole lines).
@@ -2831,6 +2846,9 @@ function pickAll(fx, fy) {
   const tol = 3 * live.W / Math.max(1, $('boxes').getBoundingClientRect().width);
   const inside = r => { const ex = r.w < 2 * tol ? tol : 0, ey = r.h < 2 * tol ? tol : 0; return x >= r.x - ex && y >= r.y - ey && x <= r.x + r.w + ex && y <= r.y + r.h + ey; };
   const found = [], cover = covered(), front = frontOnly();
+  // (two in-game windows open, as class select under the MOTD: the one in front is later in the panel list)
+  const winRank = new Map();
+  for (const p of live.panels) if (p === p.thing && p.module === 'ClientDLL' && thingInfo(p)?.kind === 'window') winRank.set(p, Math.min(winRank.size, 14));
   for (const p of live.panels) {
     if (!p.thing || p.w * p.h <= 0 || CONTAINERS.has(p.key) || p.key.startsWith('frame_') && p.key.endsWith('grip')) continue;
     if (front && p.thing !== front) continue; // (it's in front of everything: only its parts)
@@ -2846,6 +2864,9 @@ function pickAll(fx, fy) {
     if (area > 0.9 * live.W * live.H && p !== p.thing) continue;
     found.push({ p, info, area, layer, r });
   }
+  // (a window's parts under another window here, as class select's under the MOTD: after everything of the front one's)
+  const top = Math.max(-1, ...found.filter(f => winRank.has(f.p.thing)).map(f => winRank.get(f.p.thing)));
+  for (const f of found) if (winRank.has(f.p.thing) && winRank.get(f.p.thing) < top) f.layer -= 2;
   const hits = [], seen = new Set();
   for (const best of found.sort((a, b) => b.layer - a.layer || a.area - b.area)) {
     // the control is the nearest panel (clicked one or a parent) that is a known control type; not inside HUD parts (but
@@ -3477,7 +3498,7 @@ function kindWrites(kind, target, every = false, all = colourValues()) {
 }
 // Written once the picker rests (a drag is one Ctrl+Z, see commit), the window files it reaches read in first; each file
 // once, all of them one Ctrl+Z.
-function setKind(kind, target, every = false, then = null) {
+function setKind(kind, target, every = false, then = null, inGroup = null) { // (inGroup: a ↺'s, a step of its own)
   if (!every) kindsPicked.add(kind); // (a colour picked, not ↺)
   clearTimeout(kindTimers[kind]);
   waiting.add(`kind ${kind}`); // (the list isn't redrawn from the old colours meanwhile)
@@ -3485,7 +3506,7 @@ function setKind(kind, target, every = false, then = null) {
     try {
       await Promise.all([...new Set(kindWrites(kind, target, every).map(w => w.p.path))].map(uiFile));
       await writing;
-      const byFile = new Map(), group = burstGroup();
+      const byFile = new Map(), group = inGroup || burstGroup();
       for (const w of kindWrites(kind, target, every)) byFile.set(w.p.path, [...(byFile.get(w.p.path) || []), w]);
       for (const [path, list] of byFile) {
         const f = F(path);
@@ -3542,8 +3563,8 @@ function kindRows() {
     const now = el('div', { className: 'shares' }), say = l => { l = l.filter(kindOn); const n = topColour(l.map(p => p.value)).length; now.textContent = `${l.length} colours here, ${n > 1 ? `now ${n} different` : 'all one colour'}`; };
     row.querySelector('.meta').append(now);
     // ↺: a step of its own, like ↺ Reset (see renderList)
-    const arrow = undoArrow(`kinds|${kind}`, sig(mine), word, () => { closePicker(); const g = resetGroup = burstGroup();
-      setTimeout(() => writing.then(() => { if (resetGroup === g) resetGroup = null; }), 1500); setKind(kind, p => opened[`kind|${p.id}`] ?? p.value, true, render); });
+    const arrow = undoArrow(`kinds|${kind}`, sig(mine), word, () => { closePicker(); const g = burstGroup();
+      resetGroups.add(g); setKind(kind, p => opened[`kind|${p.id}`] ?? p.value, true, render, g); });
     row.querySelector('.arrows').replaceWith(arrow);
     const after = () => { const v = colourValues(), l = v.filter(p => p.kind === kind && shows(p)); arrow.update(sig(l)); say(l); showHard(v); };
     say(mine);
@@ -3778,8 +3799,9 @@ function boxRows(lay, id, p, t, hud) {
   const opts = [['round', 'Rounded'], ['square', 'Square', hud.roundOnly]];
   if (value === 'other') opts.push(['other', 'As the HUD has it']);
   const gameType = hud.rounded ? '2' : gameProps(L, id).paintbackgroundtype || '0';
-  rows.push(selectRow('Corners', opts, value, v => { if (v !== 'other') setCorners(lay, id, v === 'square', hud.rounded); }, ['PaintBackgroundType', 'Texture1-4'], null, gameType === '0' ? 'square' : 'round'));
-  if (hud.roundOnly) rows.push(noteRow('The game always draws this box rounded.'));
+  if (!hud.roundOnly || value !== 'round')
+    rows.push(selectRow('Corners', opts, value, v => { if (v !== 'other' && !(hud.roundOnly && v === 'square')) setCorners(lay, id, v === 'square', hud.rounded); }, ['PaintBackgroundType', 'Texture1-4'], null, gameType === '0' ? 'square' : 'round'));
+  if (hud.roundOnly) rows.push(noteRow('Corners: the game always draws this box rounded.'));
   if (squareAll) {
     const b = el('button', { textContent: 'Remove it' });
     b.onclick = removeSquareAll;
@@ -5302,6 +5324,7 @@ function selectionSections(sel) {
       add('colour', 'Colours: the window', schemeRows(info.file, WINDOW_COLOURS[info.file]
         .filter(([label, k]) => (!k.startsWith('Border.') || bordersUse(info.file, k.split('|'))) && (!shows || shows.includes(label)))
         .map(r => r[0] === 'Backdrop' && LOGO_WINDOWS.has(info.id) ? BACKDROP_OPACITY : r)).concat(LOGO_WINDOWS.has(info.id) ? [backdropRow()] : []));
+      if (frame && !(control && /^Menu/.test(controlIn(control, sel.thing)?.[0] || ''))) add('colour', 'Colours: menus and drop-down lists', schemeRows(S, MENU_COLOURS));
       if (frame) { const [colour, ...rest] = borderRows(S, 'FrameBorder'); add('border', 'Border: window edge (every window)', [colour, windowCornerRow(S), ...rest]); }
       add('other', `Fading (every ${frame ? 'menu' : 'in-game'} window)`, fadeRows(info.file));
     }
@@ -5311,7 +5334,7 @@ function selectionSections(sel) {
     if (info.id === 'specmenu') add('custom', 'Drop-down menus', specMenuRows());
     if (!control && !sel.node && UI_RES[info.id]) add('other', 'Start over', gameWindowRows(sel));
     if (CMD_WINDOWS.has(info.id)) add('custom', 'Command buttons', commandRows(sel));
-    if (CMD_WINDOWS.has(info.id) && sel.res) add('layout', 'Button places', buttonPlaceRows(sel.res));
+    if (CMD_WINDOWS.has(info.id) && sel.res) add('layout', 'Button places', buttonPlaceRows(sel.res, sel.thing));
     // the MOTD's parts: its message boxes are empty (so not there to click) until a server sends one
     if (info.id === 'info' && sel.res) add('layout', 'Part places', ['MessageTitle', 'HTMLMessage', 'TextMessage', 'ok'].flatMap(b => {
       const p = layoutProps(sel.res, b), what = { MessageTitle: 'Title', HTMLMessage: 'Web page message', TextMessage: 'Text message', ok: 'OK' }[b];
@@ -5342,7 +5365,7 @@ function selectionSections(sel) {
     if (STARTUP_RES.has(info.id) && addLay && !control && !sel.node)
       addedSections(addLay, C, add, b => !(live && live.panels.some(q => q.thing && q.thing.key === sel.thing.key && q.key === b.toLowerCase())));
   }
-  if (fonts.length) add('font', fonts.length > 1 ? 'Fonts' : 'Font',
+  if (fonts.length && !(own && /^hudeditor_(pic|box|loadingbox)/i.test(own.block))) add('font', fonts.length > 1 ? 'The fonts it uses' : 'The font it uses',
     fonts.map(([file, font, what]) => fontFold(file, font, what, fonts.length <= 2 && (control || info.kind === 'hud'))));
   // a font the game asks for by name that its own scheme never defines (the right-side text's HudHintTextSmall): it
   // falls back to something else until the HUD has one of that name
@@ -5621,7 +5644,8 @@ function buildSelection(box, tabs, pin = null) {
   // (from a part of a window or of a HUD part, as the chat's text box: back to the whole)
   // (a control: named as itself, as the preview's box is, with the whole it's in above it)
   const ctl = sel.control && !partName(sel), name = ctl ? controlIn(sel.control, sel.thing)[1] : shownName(sel);
-  const sub = ctl ? `${sel.control.name ? `"${sel.control.name}" in ` : 'In '}${sel.info.name}` : subtitle(sel);
+  const away = !!live && sel.info.kind === 'window' && !!sel.thing.module && !live.panels.includes(sel.thing);
+  const sub = (ctl ? `${sel.control.name ? `"${sel.control.name}" in ` : 'In '}${sel.info.name}` : subtitle(sel)) + (away ? ' · not on screen now' : '');
   const whole = name !== sel.info.name ? sel.info.name : sel.info.kind === 'hud' ? 'The whole part' : 'The whole window';
   if (sel.control || sel.node)
     titles.append(el('button', { className: 'back nx-up', type: 'button', textContent: `‹ ${whole}`, title: `Back to ${sel.info.name}`, onclick: () => select({ ...sel, control: null, node: null }) }));
@@ -5674,7 +5698,7 @@ function tabCards(sections, sel, tabs) {
     sec.dataset.tab = k;
     const head = el('button', { className: 'nx-cath', type: 'button', onclick: () => { tabs.open[open ? 'delete' : 'add'](k); render(); } });
     head.setAttribute('aria-expanded', String(open));
-    const titles = list.map(([t]) => t).filter(t => t && t.toLowerCase() !== name.toLowerCase()), n = list.reduce((a, [, r]) => a + r.length, 0);
+    const titles = list.map(([t]) => t).filter(t => t && t.toLowerCase() !== name.toLowerCase() && !/^the fonts? it uses$/i.test(t)), n = list.reduce((a, [, r]) => a + r.length, 0);
     head.append(icon('chevron-right'), el('span', { textContent: name }), el('small', { textContent: k === 'custom' && adds ? adds
       : titles.length ? titles.slice(0, 2).join(' · ') + (titles.length > 2 ? ` +${titles.length - 2}` : '') : `${n} setting${n > 1 ? 's' : ''}` }));
     sec.append(head);
@@ -5701,7 +5725,7 @@ function quickRows(sections, sel) {
     const op = first[1].find(r => rowLabel(r) === 'opacity');
     if (op) rows.push(op);
   }
-  const [file, font] = fontsOf(sel)[0] || [];
+  const own = sel.res && ownBlock(sel), [file, font] = own && /^hudeditor_(pic|box|loadingbox)/i.test(own.block) ? [] : fontsOf(sel)[0] || [];
   if (file && F(file)) {
     const fr = fontRows(file, font), face = fr.find(r => rowLabel(r) === 'face'), size = fr.find(r => rowLabel(r) === 'size');
     const name = (r, t) => { const n = r.querySelector('.renamed-wrap'); if (n) n.replaceWith(renameable(t)); r.title = `Font ${font} in ${file}: every part that uses it changes`; return r; };
@@ -5739,7 +5763,11 @@ function resetButton(sel, sections) {
       if (!undos.length && !back.length && !unhide) return status('Nothing here has changed since the HUD was opened.');
       // one Ctrl+Z for all of it: every write until it's done (some ↺ write later, or in a group of their own)
       const group = resetGroup = burstGroup();
-      setTimeout(() => writing.then(() => { if (resetGroup === group) resetGroup = null; }), 1500);
+      resetGroups.add(group);
+      // (its step: everything written until the user clicks or types again, as some ↺ write a moment later; at most 5 s)
+      const end = () => { if (resetGroup === group) resetGroup = null; for (const t of ['pointerdown', 'keydown']) removeEventListener(t, end, true); };
+      setTimeout(() => { for (const t of ['pointerdown', 'keydown']) addEventListener(t, end, true); });
+      setTimeout(end, 5000);
       if (unhide) setPartHidden(rf, own.block, false);
       for (const u of undos) u.onclick();
       // (after the settings above are written, so the files end as they were opened)
@@ -6590,7 +6618,7 @@ async function showPicker(canCancel, keepImport = false, ifChanged = false) {
     const b = el('button', { className: 'hud' + (mine ? ' primary' : ''), textContent: name });
     if (mine) b.append(el('span', { className: 'meta', textContent: 'Open now' }));
     b.onclick = () => openHud(path);
-    row.append(b, el('button', { className: 'ghost', textContent: 'Rename', title: `Give ${name} another name (its folder's, where it is)`, onclick: () => renameRow(row, name, path, mine, canCancel) }));
+    row.append(b, el('button', { className: 'renamehud', textContent: 'Rename', title: `Give ${name} another name (its folder's, where it is)`, onclick: () => renameRow(row, name, path, mine, canCancel) }));
     box.append(row);
   }
   if (!huds.length) box.append(el('p', { className: 'meta', textContent: 'No HUDs in your custom folder yet. Drop one you downloaded here, or start a new one.' }));
@@ -6791,8 +6819,8 @@ if (host) {
   $('pickrefresh').onclick = async () => {
     const b = $('pickrefresh');
     await showPicker(pickerCancel, true);
-    b.textContent = '✓ Up to date'; // (says it looked, for a second)
-    setTimeout(() => { b.textContent = '↻ Refresh'; }, 1200);
+    b.querySelector('span').textContent = 'Up to date'; // (says it looked, for a second)
+    setTimeout(() => { b.querySelector('span').textContent = 'Refresh'; }, 1200);
   };
   window.addEventListener('focus', repick);
   $('pickarchive').onclick = () => { $('importfile').value = ''; $('importfile').click(); };
@@ -7252,6 +7280,20 @@ async function parserCheck() {
     && ownBlock({ thing: scores, node: { name: '_CT_playername0', cls: 'Label', parent: scores }, res: sb }).block === 'CTPlayerName0', 'scoreboard rows find their template block');
   check(controlIn({ cls: 'MouseOverButton' }, { key: 'buy_ct' })[1] === 'Buy menu button' && controlIn({ cls: 'MouseOverButton' }, { key: 'class_ct' })[1] === 'Button', 'buy menu buttons read other colours');
   check(hit && hit.control && hit.control.key === 'urban' && controlOf(hit.control.cls)[1] === 'Button', 'click a MouseOverButton (a plain Panel inside it walks up to the button)');
+  {
+    // two in-game windows open (class select under the MOTD): a click picks the front one's part, the later in the list
+    const two = order => parsePanels(['screen\t2560\t1440', '1\tBaseUI\tstaticPanel\t0\t0\t2560\t1440\tPanel', '2\tBaseUI\tstaticClientDLLPanel\t0\t0\t2560\t1440\tEditablePanel',
+      '3\tClientDLL\tCounterStrike Root Panel\t0\t0\t2560\t1440\tPanel', '4\tClientDLL\tCBaseViewport\t0\t0\t2560\t1440\tCounterStrikeViewport',
+      ...order.flatMap(([w, cls, label, button]) => [`5\tClientDLL\t${w}\t0\t0\t2560\t1440\t${cls}`, `6\tClientDLL\t${label}\t890\t366\t660\t78\tLabel`,
+        ...(button ? [`6\tClientDLL\t${button}\t1100\t380\t300\t40\tMouseOverButton`] : [])])].join('\n'));
+    const kept = live;
+    live = two([['class_ct', 'CClassMenu', 'joinClass', 'urban'], ['info', 'CCSTextWindow', 'MessageTitle']]); // (behind: a button too)
+    const front1 = pickAt(1200 / 2560, 400 / 1440);
+    live = two([['info', 'CCSTextWindow', 'MessageTitle'], ['class_ct', 'CClassMenu', 'joinClass', 'urban']]);
+    const front2 = pickAt(1200 / 2560, 400 / 1440);
+    live = kept;
+    check(front1?.thing.key === 'info' && front1.control?.name === 'MessageTitle' && front2?.thing.key === 'class_ct' && front2.control?.name === 'urban', `two windows open: a click picks the front one's part (${front1 && pickKey(front1)}, ${front2 && pickKey(front2)})`);
+  }
   hit = at(1200, 1100);
   check(hit && hit.info.id === 'HudHintDisplay', 'click the timer text (a label inside the hint display)');
   const hb = clickRects(hit.thing, hit.info, live.W, live.H)[0];
@@ -7705,10 +7747,15 @@ if (host && location.hash === '#hosttest') (async () => {
       const changed = [ld.text, vac.text], rb = [...document.querySelectorAll('#list .nx-reset')].find(b => b.dataset.what === 'window');
       rb?.click();
       commit(vac, 'selftest own group', () => `${vac.text}// own group\n`, Symbol());
+      // (a change of the user's half a second later, a click first, is a step of its own, not the reset's)
+      await sleep(600);
+      dispatchEvent(new Event('pointerdown'));
+      save(ld, 'ypos', '9', 'InfoLabel');
       await sleep(1900); await writing;
+      await undo();
       const back = ld.text === l0 && vac.text === v0;
       await undo();
-      check(rb && back && ld.text === changed[0] && vac.text === changed[1], 'Reset window puts the window\'s files back as they were opened, and one Ctrl+Z brings the changes back');
+      check(rb && back && ld.text === changed[0] && vac.text === changed[1], 'Reset window puts the window\'s files back as they were opened, and one Ctrl+Z brings the changes back; a change straight after is its own step');
       for (let i = 0; i < 3 && ld.text !== l0; i++) await undo();
       await select(null);
     }
