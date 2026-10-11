@@ -256,7 +256,9 @@
   .cpop footer .primary { margin-left: auto; }
   .cpop footer button:not(.primary) { background: transparent; }
   /* tick boxes in two columns: a border's sides, a font's effects */
-  .greyed { opacity: .45; } .greyed input, .greyed button { cursor: not-allowed; }
+  .row.onlythis > .name::after { content: 'only this'; white-space: nowrap; margin-left: 6px; padding: 0 5px; border-radius: 4px; font-size: 10px; font-weight: 600; background: var(--soft); color: var(--accent); }
+  .box.top span { bottom: auto; top: 0; }
+  .row select.anchor { height: 24px; padding: 0 6px; font-size: 11.5px; color: var(--muted); background: var(--field); border: 1px solid var(--line); border-radius: 6px; }
   .infoi { display: inline-flex; vertical-align: -2px; margin-left: 5px; color: var(--muted); cursor: help; } .infoi .i { width: 13px; height: 13px; }
   :is(.row.sides, .row.flags) { display: grid; grid-template-columns: minmax(0, 1fr) auto; row-gap: 10px; align-items: center; }
   .opts { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -1239,6 +1241,7 @@ async function undo() {
       const first = fallbackText(f, text);
       if (first) { setDirty(true); await call('write', f.path, first); await sleep(1200); } // let the game take it
       await call('write', f.path, text);
+      restartCheck(f, f.text, text);
       Object.assign(f, { text, parsed: before });
       if (f.name === CVAR_CFG) applyCvars(text); // a cfg only runs at startup: give the game the values now
       const mat = { [CS_LOGO]: 'cs_logo', [SB_SELECT]: 'scoreboard-select', ...Object.fromEntries(BD_PIECES.map(([n]) => [BD_PATH(n), n])) }[f.name]; // (materials: the game takes them on a reload)
@@ -1271,6 +1274,19 @@ const RESTART_FILES = [[/^resource\/GameMenu\.res$/i, 'main menu buttons'], [/^s
   [/^classes\/base_(weapon|weapon_small|equipment)\.res$/i, 'buy menu'],
   [/^resource\/spectator(menu|modes)\.res$/i, 'spectator drop-down menus']];
 const restartFor = new Set();
+// What a write leaves for the game's next start (a change, or its undo): the ⚠ by Save HUD. id: the setting written
+// (an undo has none: the files compared instead)
+const classInfo = t => parse(t).entries.filter(e => /^classinfo$/i.test(e.path[1] || '')).map(e => `${e.key}=${e.value}`).join('|');
+function restartCheck(f, before, after, id = '') {
+  const later = RESTART_FILES.find(([re]) => re.test(f.path));
+  // (the buy menu's own file: what the editor adds to it is made and placed live by the plugin; only the game's
+  // own controls in it wait for a restart)
+  if (later && !(/BuyMenu\.res$/i.test(f.path) && gameBlocks(before) === gameBlocks(after))) needRestart(later[1]);
+  // (class select's ClassInfo: copied to each class's page as the menu is made, see classPictureRows)
+  if (/ClassMenu_(CT|TER)\.res$/i.test(f.path) && (id ? /\bclassinfo\b/i.test(id) : classInfo(before) !== classInfo(after))) needRestart('class pictures');
+  // (a class's own page, as The game's window puts back: copied as the menu is made)
+  if (!id && /^classes\//i.test(f.name) && !/^classes\/base_/i.test(f.name) && before !== after) needRestart('class pictures');
+}
 // (kept for the HUD while the game runs, so the editor opened again over a running game still shows it)
 function needRestart(what) {
   if (what) restartFor.add(what);
@@ -1321,8 +1337,11 @@ let burst = null;
 function burstGroup() { if (!burst) { burst = Symbol(); setTimeout(() => { burst = null; }, 0); } return burst; }
 const pendingGroup = {}; // a setting written later (a drag, quick typing): the group its first change started
 let mirroring = false; // (a loading screen file's save copied into the other one: not copied back)
+const hasBlock = (f, sub) => f.parsed.sections.some(x => samePath(x.path.slice(1), sub));
 function save(f, key, value, section = null, inGroup = null) { // (inGroup: an action's own, kept across an await)
   const id = `${f.name}/${section}/${key}`, group = pendingGroup[id] ??= inGroup || resetGroup || burstGroup();
+  // (its block there now: one taken out before this is written, an added part removed straight after a change, stays out)
+  const inBlock = Array.isArray(section) ? section : section ? [section] : null, had = !!inBlock && inBlock.length > 0 && hasBlock(f, inBlock);
   if (f.name === L && section === 'HudChat' && /^(xpos|ypos|wide|tall)$/i.test(key)) chatResFirst(/^wide$/i.test(key) ? value : null);
   clearTimeout(timers[id]);
   waiting.add(id);
@@ -1332,6 +1351,7 @@ function save(f, key, value, section = null, inGroup = null) { // (inGroup: an a
     const sub = Array.isArray(section) ? section : section ? [section] : null;
     // a function value is worked out when it's written, from the file as it is then (blocks built from what's there)
     commit(f, id, () => {
+      if (had && !hasBlock(f, sub)) return f.text;
       const v = typeof value === 'function' ? value() : value;
       return Array.isArray(v) ? setBlock(f, sub, key, v) : v === null ? dropKey(f, sub, key) : sub ? setAt(f, sub, key, v) : withValue(f, key, v);
     }, group);
@@ -1439,12 +1459,7 @@ function commit(f, id, edit, group = null, force = false) {
       await call('write', f.path, next);
       Object.assign(f, { text: next, parsed: parse(next) });
       setDirty(true);
-      const later = RESTART_FILES.find(([re]) => re.test(f.path));
-      // (the buy menu's own file: what the editor adds to it is made and placed live by the plugin; only the game's
-      // own controls in it wait for a restart)
-      if (later && !(/BuyMenu\.res$/i.test(f.path) && gameBlocks(step.text) === gameBlocks(next))) needRestart(later[1]);
-      // (class select's ClassInfo: copied to each class's page as the menu is made, see classPictureRows)
-      if (/ClassMenu_(CT|TER)\.res$/i.test(f.path) && /\bclassinfo\b/i.test(id)) needRestart('class pictures');
+      restartCheck(f, step.text, next, id);
       status('Changed in game. Click Save HUD to keep it.');
       drawBoxes();
     } catch (err) {
@@ -1548,7 +1563,7 @@ function buyPageFile(p, start = p) {
 }
 // A window's files that are open in the editor (↺ Reset window): its .res (the buy menu's is both sides'), the loading
 // screen's VAC one, the buy menu's main page, the class pages.
-const windowPaths = sel => [UI_RES[sel.info.id], sel.info.id === 'loadingdialog' && LOADING_VAC, BUY_PAGES[`buysubmenu_${sel.info.id.replace(/^buy_/, '')}`],
+const windowPaths = sel => [UI_RES[sel.info.id], sel.info.id === 'loadingdialog' && LOADING_VAC, sel.info.id === 'specgui' && UI_RES.specmenu, BUY_PAGES[`buysubmenu_${sel.info.id.replace(/^buy_/, '')}`],
   ...(BUY_SIDES[sel.info.id] ? [...BUY_FILES(BUY_SIDES[sel.info.id]), BUY_LOADOUT, ...BUY_INFO.map(classPage)] : []),
   ...(CLASS_PAGES[sel.info.id] || []).map(classPage)].filter(Boolean);
 const windowFiles = sel => windowPaths(sel).map(p => F(p)).filter(Boolean);
@@ -1800,6 +1815,19 @@ const CMD_PRESETS = [['say !r', 'Restart'], ['say !rtv', 'Rock the vote'], ['say
   ['say !stop', 'Stop timer'], ['say !top', 'Top times'], ['say !wr', 'World record'], ['say !pr', 'Personal record'], ['say !cp', 'Checkpoints'],
   ['say !hide', 'Hide players'], ['say !style', 'Styles'], ['say !settings', 'Settings'], ['say !rank', 'Rank'], ['timeleft', 'Time left']];
 // Every button's place, the ones the game shows only now and then too (Spectate, VIP), which can't be clicked in the preview.
+// A window's buttons drawn over each other, as on screen now: a click where two overlap goes to only one of them (a class
+// button that showed its model on hover but didn't join, 2026-10-11). A button picked on its own: the ones over it.
+function overlapRows(sel) {
+  if (!live || !live.panels.includes(sel.thing)) return [];
+  const on = q => q.w > 0 && q.h > 0 && q.x < live.W && q.x + q.w > 0 && q.y < live.H && q.y + q.h > 0;
+  const bs = live.panels.filter(q => q.thing === sel.thing && q !== sel.thing && /button/i.test(q.cls) && on(q)), pairs = [];
+  const word = q => prettify(q.name || q.key || q.cls);
+  for (let i = 0; i < bs.length; i++) for (let j = i + 1; j < bs.length; j++) {
+    const a = bs[i], b = bs[j], w = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x), h = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+    if (w > 2 && h > 2 && (!sel.control || sel.control === a || sel.control === b)) pairs.push(`${word(a)} and ${word(b)}`);
+  }
+  return pairs.length ? [noteRow(`⚠ Buttons over each other: ${pairs.slice(0, 4).join(', ')}${pairs.length > 4 ? ` and ${pairs.length - 4} more` : ''}. A click where they overlap goes to only one of them: move them apart or make them smaller.`)] : [];
+}
 function buttonPlaceRows(f, thing = null) {
   const shown = b => !!live && !!thing && live.panels.some(q => q.thing === thing && q !== thing && q.w > 0 && q.x < live.W && q.x + q.w > 0 && (q.name || '').toLowerCase() === b.toLowerCase());
   return f.parsed.sections.filter(s => s.path.length === 2 && /button$/i.test(layoutProps(f, s.path[1]).controlname || '') && !partHidden(f, s.path[1]))
@@ -1838,6 +1866,13 @@ function commandBlock(f, text, command) {
 function addCommandButton(f, text, command) {
   const b = commandBlock(f, text, command);
   if (!b) return status('This window has no button to copy the look of.');
+  // (under the lowest button would be past the window's bottom: in the middle instead, as other added parts go)
+  const pr = Object.fromEntries(b[1].map(([k, v]) => [k.toLowerCase(), v])), span = k => windowShows(f, 'hudeditor_new', k), sy = span('ypos'), tall = parseInt(pr.tall, 10) || 20;
+  if (sy !== null && /^\s*-?\d+\s*$/.test(pr.ypos || '') && +pr.ypos + tall > sy) {
+    const [x, y] = addSpot(f, parseInt(pr.wide, 10) || 100, tall, addAxis(f, 'xpos', false, [0, 0], span), addAxis(f, 'ypos', false, [0, 0], span));
+    b[1] = b[1].map(([k, v]) => [k, /^xpos$/i.test(k) ? x : /^ypos$/i.test(k) ? y : v]);
+    autoPlaced.push({ file: f.name, block: b[0], x, y, w: parseInt(pr.wide, 10) || 100, h: tall, when: Date.now() });
+  }
   save(f, b[0], b[1], []);
   refreshSoon();
 }
@@ -1917,6 +1952,14 @@ async function plantBomb() {
 // weapon's button shows its info box as the mouse over it would (the plugin's schemereload_hover), which the mouse over
 // the preview never does. Then click what shows to edit it.
 const BUY_TABS = [['Pistols', 'pistols'], ['Shotguns', 'shotguns'], ['SMGs', 'submachineguns'], ['Rifles', 'rifles'], ['Machine guns', 'machineguns'], ['Equipment', 'equipment']];
+// What the game's buy menu buttons say (cstrike_english.txt with every & left out, as the game draws them: K&M is KM); a few keys differ by side
+const BUY_NAMES = { glock18: '1 9X19MM SIDEARM', usp45: '2 KM .45 TACTICAL', p228: '3 228 COMPACT', deserteagle: '4 NIGHT HAWK .50C', elites: '5 .40 DUAL ELITES',
+  fiveseven: '5 ES FIVE-SEVEN', m3: '1 LEONE 12 GAUGE SUPER', xm1014: '2 LEONE YG1265 AUTO SHOTGUN', tmp: '1 SCHMIDT MACHINE PISTOL', mac10: '1 INGRAM MAC-10',
+  mp5: '2 KM SUB-MACHINE GUN', ump45: '3 KM UMP45', p90: '4 ES C90', famas: '1 CLARION 5.56', galil: '1 IDF DEFENDER', ak47: '2 CV-47',
+  m4a1: '3 MAVERICK M4A1 CARBINE', aug: '4 BULLPUP', sg552: '4 KRIEG 552', sg550: '5 KRIEG 550 COMMANDO', g3sg1: '6 D3/AU-1', m249: '1 M249',
+  scout: ['2 SCHMIDT SCOUT', '3 SCHMIDT SCOUT'], awp: ['6 MAGNUM SNIPER RIFLE', '5 MAGNUM SNIPER RIFLE'], kevlar: '1 KEVLAR', kevlar_helmet: '2 KEVLAR+HELMET',
+  flashbang: '3 FLASHBANG', hegrenade: '4 HE GRENADE', smokegrenade: '5 SMOKE GRENADE', defuser: '6 DEFUSAL KIT', nightvision: ['7 NIGHTVISION', '6 NIGHTVISION'] };
+const buyName = (w, ct) => { const n = BUY_NAMES[(w.name || '').toLowerCase()]; return Array.isArray(n) ? n[ct ? 0 : 1] : n || w.name; };
 function buyPageRows(sel) {
   const page = live.panels.find(q => q.key === 'buysubmenu' && q.thing === sel.thing), r = el('div', { className: 'row action wrap' }), cmd = c => () => call('cmd', '', c).then(() => refreshSoon()).catch(() => {});
   // (this side's menu closed, or the other side's open: its pages can't be opened from here)
@@ -1926,7 +1969,7 @@ function buyPageRows(sel) {
     return [r, noteRow('Opens that page of the buy menu in the game, to click and edit it. Its file is read when the game makes the buy menu: changes show after a game restart (the ⚠ by Save HUD).')];
   }
   const weapons = live.panels.filter(q => q.parent === page && /button/i.test(q.cls) && !/cancel/i.test(q.key));
-  r.append(...weapons.map(w => el('button', { textContent: w.name, title: `Shows ${w.name}'s info box, as the mouse over its button would`, onclick: cmd(`schemereload_hover ${w.name}`) })));
+  r.append(...weapons.map(w => el('button', { textContent: buyName(w, sel.thing.key === 'buy_ct'), title: `Shows its info box (${w.name}), as the mouse over its button would`, onclick: cmd(`schemereload_hover ${w.name}`) })));
   return [r, noteRow('Shows that weapon\'s info box, as the mouse over its button would: then click it to edit it. Its look is shared by every weapon (or every piece of equipment) and shows after a game restart. 0 in the game goes back to the main page.')];
 }
 
@@ -2544,18 +2587,57 @@ function mvpRows() {
 // file, written once (Sakura Hop's banner was five 4 MB copies, one per window)
 const pictureName = async file => `hudeditor_${[...new Uint8Array(await crypto.subtle.digest('SHA-256', await file.arrayBuffer()))]
   .slice(0, 5).map(b => b.toString(16).padStart(2, '0')).join('')}`;
+// Where a new part goes: the middle (the loading box: its top left). Added one after another (clicked again and again),
+// each goes under the last one still where it was put; past the bottom, back to the middle's height a column further
+// right. One moved away frees its spot, so the next goes in the middle again.
+const autoPlaced = [];
+function addSpot(lay, w, h, X, Y) {
+  const num = v => parseInt(String(v).replace(/^[rc]/i, ''), 10);
+  // (one placed a moment ago and not written yet counts as there)
+  const still = autoPlaced.filter(a => a.file === lay.name && a.x !== undefined).map(a => [a, layoutProps(lay, a.block)])
+    .filter(([a, p]) => Object.keys(p).length ? p.xpos === a.x && p.ypos === a.y : Date.now() - a.when < 5000)
+    .map(([a, p]) => ({ x: num(a.x), y: num(a.y), w: parseInt(p.wide, 10) || a.w || 0, h: parseInt(p.tall, 10) || a.h || 0 }));
+  const x0 = X.mid(w), y0 = Y.mid(h);
+  let x = x0, y = y0, col = w;
+  for (let i = 0; i < 200; i++) {
+    const on = still.find(q => q.x < x + w && x < q.x + q.w && q.y < y + h && y < q.y + q.h);
+    if (!on) return [`${X.pre}${x}`, `${Y.pre}${y}`];
+    col = Math.max(col, on.w);
+    y = on.y + on.h + 4;
+    if (y + h > Y.end) { y = y0; x += col + 4; col = w; if (x + w > X.end) break; }
+  }
+  return [`${X.pre}${x0}`, `${Y.pre}${y0}`];
+}
+// An axis new parts go on: its middle for a part n long, and its end. The loading box's parts count from its top left
+// corner (the game places the box), a window's in plain numbers across what shows of it (see windowShows), the HUD's
+// and a window as wide or tall as the screen's from the screen's middle ("c").
+function addAxis(lay, k, box, boxAt, span) {
+  if (box) {
+    const bp = layoutProps(lay, loadingFree(lay) ? LOADING_BOX : 'LoadingDialog'), o = k === 'xpos' ? boxAt[0] : boxAt[1];
+    return { pre: '', mid: () => o + 8, end: o + (parseInt(bp[k === 'xpos' ? 'wide' : 'tall'], 10) || 400) };
+  }
+  const sp = span(k);
+  if (sp !== null) return { pre: '', mid: n => Math.round((sp - n) / 2), end: sp };
+  return { pre: 'c', mid: n => -Math.round(n / 2), end: k === 'xpos' ? Math.round(240 * (live ? live.W / live.H : 16 / 9)) : 240 };
+}
 async function addToHud(kind, file, lay = F(L)) {
   if (!lay) return;
   const inWindow = lay !== F(L), win = inWindow && selected;
-  let n = 1; // (a number free in both loading screen files: the one added goes into both)
-  while ([lay, loadingTwin(lay)].some(f => f && Object.keys(layoutProps(f, `hudeditor_${kind}${n}`)).length)) n++;
+  let n = 1; // (a number free in both loading screen files: the one added goes into both; nor one just taken, not written yet)
+  const taken = b => autoPlaced.some(a => a.file === lay.name && a.block === b && Date.now() - a.when < 5000);
+  while ([lay, loadingTwin(lay)].some(f => f && Object.keys(layoutProps(f, `hudeditor_${kind}${n}`)).length) || taken(`hudeditor_${kind}${n}`)) n++;
+  const spot = { file: lay.name, block: `hudeditor_${kind}${n}`, when: Date.now() };
+  autoPlaced.push(spot);
   // (the loading screen's box is placed by the game, so its parts count from its corner: "c" would be the screen's middle)
   // a window narrower than the screen (team select, the MOTD) takes "c" as half the screen from its own left edge, so
   // on a wide screen a part there goes in the middle of what shows of it in plain numbers (see windowShows)
   // (with parts anywhere on the screen, the box's corner is its colour box's)
   const box = !!LOADING_TWIN[lay.name], span = k => inWindow && !box ? windowShows(lay, 'hudeditor_new', k) : null, boxAt = box ? loadingOff(lay) : [0, 0];
-  const place = (k, n) => box ? `${(k === 'xpos' ? boxAt[0] : boxAt[1]) + 8}` : span(k) !== null ? `${Math.round((span(k) - n) / 2)}` : `c${-Math.round(n / 2)}`;
-  const name = `hudeditor_${kind}${n}`, at = (w, h) => [['xpos', place('xpos', w)], ['ypos', place('ypos', h)], ['wide', `${w}`], ['tall', `${h}`]];
+  const name = spot.block, at = (w, h) => {
+    const [x, y] = addSpot(lay, w, h, addAxis(lay, 'xpos', box, boxAt, span), addAxis(lay, 'ypos', box, boxAt, span));
+    Object.assign(spot, { x, y, w, h, when: Date.now() });
+    return [['xpos', x], ['ypos', y], ['wide', `${w}`], ['tall', `${h}`]];
+  };
   let body;
   try {
     if (kind === 'pic') {
@@ -2990,6 +3072,7 @@ async function select(sel, into = null) { // (into: a pinned card it opens in, f
   render();
   drawBoxes();
   scroller().scrollTop = 0;
+  keptScroll = { key: selKey(cardSelOrSel()), top: 0, set: 0 };
 }
 
 // Where a HUD part can be clicked: its panel, or its "hit" areas (one, or a list) when the panel is bigger than what it
@@ -3326,6 +3409,13 @@ function colorRow(label, note, value, onChange, keys = [], dflt = null, where = 
   return row;
 }
 
+// A position counted from another place, landing where it is: plain numbers count from the left or top of what it's in,
+// "c" from half the screen's length on, "r" back from the whole length (len), in the same units
+function reAnchor(raw, to, len) {
+  const m = /^\s*([rc]?)\s*([+-]?[\d.]+)\s*$/i.exec(raw || '0') || [0, '', '0'], from = m[1].toLowerCase(), v = parseFloat(m[2]) || 0;
+  const at = from === 'c' ? len / 2 + v : from === 'r' ? len - v : v;
+  return `${to}${Math.round(to === 'c' ? at - len / 2 : to === 'r' ? len - at : at)}`;
+}
 const ANCHOR = { xpos: { '': 'from the left', r: 'from the right', c: 'from the centre' }, ypos: { '': 'from the top', r: 'from the bottom', c: 'from the centre' },
   wide: { '': '', f: 'less than full width' }, tall: { '': '', f: 'less than full height' } };
 
@@ -3333,8 +3423,22 @@ function numRow(lay, id, key, label, raw) {
   const split = r => { const m = /^\s*([rcf]?)\s*([+-]?[\d.]+)\s*$/i.exec(r || '0') || [0, '', '0']; return [m[1].toLowerCase(), m[2].replace(/^\+/, '')]; }; // "c+166" too
   let [prefix, num] = split(raw), undo = null;
   const row = inputRow(label, num, v => { num = v; save(lay, key, prefix + v, id); undo.update(prefix + num); }, { type: 'number', step: 1, noUndo: true });
-  const input = row.querySelector('input'), meta = row.lastElementChild;
-  const show = r => { [prefix, num] = split(r); input.value = num; meta.textContent = ANCHOR[key][prefix] || ''; };
+  const input = row.querySelector('input'), meta = row.lastElementChild, pos = (key === 'xpos' || key === 'ypos') && !LOADING_TWIN[lay.name];
+  // (a position: where it counts from, a drop-down; changed, the number changes so the part stays where it is)
+  const anchor = pos ? el('select', { className: 'anchor', title: 'Where the number counts from: changing it keeps the part where it is' }) : null;
+  if (anchor) {
+    for (const [k, w] of Object.entries(ANCHOR[key])) anchor.append(el('option', { value: k, textContent: w }));
+    anchor.setAttribute('aria-label', `${label}: counted from`);
+    meta.replaceChildren(anchor);
+    anchor.onchange = () => {
+      const to = anchor.value, len = live && (key === 'xpos' ? live.W : live.H) / (live.H / 480);
+      if (!len) { anchor.value = prefix; return status('Start the game first: the editor needs its screen size to keep the part where it is.'); }
+      // (plain numbers count from the left or top of what it's in, "c" from half the screen's length on, "r" back from the
+      // whole length, in the same units, even inside a window: the game works them out that way)
+      set(reAnchor(prefix + num, to, len));
+    };
+  }
+  const show = r => { [prefix, num] = split(r); input.value = num; if (anchor) anchor.value = prefix; else meta.textContent = ANCHOR[key][prefix] || ''; };
   show(raw);
   row.dataset.q = `${label} position size`.toLowerCase();
   Object.assign(row.dataset, { cat: 'layout', head: key.endsWith('pos') ? 'Position' : 'Box size' }); // (see selectionSections)
@@ -3681,8 +3785,9 @@ const kindOn = p => !kindOff.has(`${p.kind}|${p.item}`) && !kindOff.has(`${p.kin
 // The writes giving a kind's places (the ticked ones; every: all) the colour target(p): [{ p, value }]. One whose colour comes by
 // name from another of them getting the same colour keeps its name; anything else a changed name would reach gets its colour now
 // written in. Weapon selection's and the radio menu's own colours get named in HudLayout too (read at startup only, see hudRows).
-function kindWrites(kind, target, every = false, all = colourValues()) {
-  const mine = all.filter(p => p.kind === kind && shows(p) && (every || kindOn(p))), want = new Map(mine.map(p => [p.id, target(p)]));
+function kindWrites(kind, target, every = false, all = colourValues()) { // (kind: one, or a list: their colours worked out together)
+  const ks = Array.isArray(kind) ? kind : [kind];
+  const mine = all.filter(p => ks.includes(p.kind) && shows(p) && (every || kindOn(p))), want = new Map(mine.map(p => [p.id, target(p)]));
   const named = new Map(mine.filter(p => !p.sub).map(p => [`${p.scheme}:${p.key}`.toLowerCase(), p])), out = [], t = {};
   for (const s of [C, S, CH]) if (F(s)) t[s] = tables(F(s));
   for (const p of all) {
@@ -3723,6 +3828,30 @@ function setKind(kind, target, every = false, then = null, inGroup = null) { // 
     waiting.delete(`kind ${kind}`);
     (then ? sleep(400).then(() => writing).then(then) : writing).then(() => { if (!waiting.size && renderAfterSave) { renderAfterSave = false; render(); } });
   }, 300);
+}
+// Every kind back as the HUD was opened, worked out together and written once a file (Global settings' Undo: each kind's ↺
+// wrote its files one kind after another, and the game reloaded each time)
+async function kindsAsOpened(group) {
+  waiting.add('kinds back');
+  try {
+    const now = k => colourValues().filter(p => p.kind === k && shows(p)).map(p => p.value).join();
+    const kinds = KINDS.map(([k]) => k).filter(k => opened[`kinds|${k}`] !== undefined && opened[`kinds|${k}`] !== now(k));
+    if (!kinds.length) return;
+    const writes = () => kindWrites(kinds, q => opened[`kind|${q.id}`] ?? q.value, true);
+    await Promise.all([...new Set(writes().map(w => w.p.path))].map(uiFile));
+    await writing;
+    const byFile = new Map();
+    for (const w of writes()) byFile.set(w.p.path, [...(byFile.get(w.p.path) || []), w]);
+    for (const [path, list] of byFile) {
+      const f = F(path);
+      commit(f, `${f.name}/kinds back`, () => list.reduce((text, { p, value }) => {
+        const x = { ...f, text, parsed: parse(text) };
+        return p.sub ? setAt(x, p.sub, p.key, value) : withValue(x, p.key, value);
+      }, f.text), group);
+    }
+  } catch (err) { status(`Couldn't put the colours back: ${err.message}`); }
+  finally { waiting.delete('kinds back'); }
+  writing.then(() => { if (!waiting.size) { renderAfterSave = false; render(); } }); // (its rows and ↺ from the colours as written)
 }
 const topColour = vals => [...vals.reduce((m, v) => { const k = toRgba(v).slice(0, 3).join(' '); return m.set(k, (m.get(k) || 0) + 1); }, new Map())].sort((a, b) => b[1] - a[1]);
 // How readable one colour is on another: the WCAG contrast ratio (1 to 21) of the colours as picked, see-through ignored
@@ -4290,6 +4419,14 @@ function resRows(f, block, defaults, schemeFile, ctl) {
   // again 2026-10-05; its X and width are each column's)
   const rowY = PLAYER_ROW.test(block);
   for (const [k, label] of POS) if ((k in p || k.endsWith('pos')) && !(fixed && !k.endsWith('pos')) && !(rowY && k === 'ypos')) rows.push(numRow(f, block, k, label, p[k]));
+  // (the loading box and what's in it scale with the screen together, by its height / 1080: 380 wide drew 506 px at 1440p)
+  if (LOADING_TWIN[f.name] && /^hudeditor_(pic|text|box)\d+$/i.test(block)) {
+    const free = loadingFree(f), bp = layoutProps(f, free ? LOADING_BOX : 'LoadingDialog'), [ox, oy] = loadingOff(f);
+    const n = noteRow(free ? `Counted from the top left of the big window the box sits in: the box starts at ${ox}, ${oy} and is ${bp.wide || '?'} × ${bp.tall || '?'}, in the same units as these.`
+      : `Counted from the box's top left, in the same units as its size (${bp.wide || '?'} × ${bp.tall || '?'}): past those it's outside the box, and cut off.`);
+    Object.assign(n.dataset, { cat: 'layout', head: 'Position' });
+    rows.push(n);
+  }
   if (fixed) { const n = noteRow('Its size stays the game\'s: with any other the game crashed as the spectator bars showed (checked 2026-10-05).'); Object.assign(n.dataset, { cat: 'layout', head: 'Box size' }); rows.push(n); }
   return rows;
 }
@@ -4503,14 +4640,24 @@ async function useAsSymbolFont(face) {
     : `${face} is the symbol font now (${n} Marlett fonts, every screen size, Symbol font ${symbol ? 'on: it\'s made as one' : 'off: it\'s drawn on plain letters'}). Ctrl+Z undoes it.`);
 }
 
-// A font's settings in a fold, filled when first opened. Open ones stay open across re-renders.
-const openFonts = new Set();
+// A font's settings in a fold, filled when first opened. One opened closes the others in its card (several open made the
+// list jump under the mouse); the one open stays open across re-renders, and one closed stays closed (open: opened
+// unless the user closed it, for a part with one or two fonts).
+const openFonts = new Set(), shutFonts = new Set();
 function fontFold(file, font, what, open) {
   const d = el('details', { className: 'fold' }), key = `${file}:${font.toLowerCase()}`;
-  d.append(el('summary', { textContent: what ? `${font}: ${what}` : font }));
+  d.append(el('summary', { textContent: what ? `${font}: ${what}` : font, onclick: () => { d.byUser = true; } })); // (a click or Enter on it: the toggle after it is the user's)
   const fill = () => { if (d.childElementCount === 1) d.append(...fontRows(file, font)); };
-  d.ontoggle = () => { if (d.open) { openFonts.add(key); fill(); } else openFonts.delete(key); };
-  if (open || openFonts.has(key)) { d.open = true; fill(); }
+  d.ontoggle = () => {
+    if (!d.byUser) { if (d.open) fill(); return; } // (opened or closed by the editor as it drew or for another fold)
+    d.byUser = false;
+    if (d.open) {
+      openFonts.add(key); shutFonts.delete(key); fill();
+      for (const o of d.closest('.nx-body, #list, .nx-pin')?.querySelectorAll('details.fold[open]') || []) if (o !== d && o.dataset.font) { o.open = false; openFonts.delete(o.dataset.font); shutFonts.add(o.dataset.font); }
+    } else { openFonts.delete(key); shutFonts.add(key); }
+  };
+  d.dataset.font = key;
+  if ((open && !shutFonts.has(key)) || openFonts.has(key)) { d.open = true; fill(); }
   d.dataset.q = `${font} ${what} font`.toLowerCase();
   d.dataset.file = file; // for the Fonts card's Add font
   return d;
@@ -4688,12 +4835,12 @@ function toggleRow(label, on, onChange, note = '', id = null, dflt = null, info 
 // 10-04: SWEEP.md): underline and strike-through draw only without anti-aliasing (with it, only a mark in the spaces),
 // "rotary" is a line through the middle; Characters and Custom change nothing to see, so + doesn't offer them ('hide':
 // shown only when a font has them already, to be taken out).
-const FONT_FLAGS = [['outline', 'Outline', 'flag', '1', 'Turns Additive off'], ['dropshadow', 'Drop shadow', 'flag', '1', 'Turns Additive and Anti-aliasing off: it only fills fully clear pixels by a letter, which smooth edges leave few of'],
+const FONT_FLAGS = [['outline', 'Outline', 'flag', '1', 'Turns Additive off'], ['dropshadow', 'Drop shadow', 'flag', '1', 'Turns Additive off'],
   ['additive', 'Additive', 'flag', '1', 'Adds its light to what\'s behind (not a glow: Blur is)', '', 'Makes the text slightly see-through: its light is added to what\'s behind it instead of covering it, so it melts into a bright background (seen on the jhud text, CenterPrintText; the same on every text using this font)'],
   ['antialias', 'Anti-aliasing', 'flag', '1', 'Smooth edges']];
 const FONT_EXTRA = [['italic', 'Italic', 'flag', '1'], ['underline', 'Underline', 'flag', '1', 'Turns Anti-aliasing off: it only draws without'],
   ['strikeout', 'Strike-through', 'flag', '1', 'Turns Anti-aliasing off: it only draws without'],
-  ['scanlines', 'Scan lines', 'num', '2', 'Dark lines every this many pixels: only on fonts with Additive on'], ['range', 'Characters', 'text', '0x0000 0x017F', 'Unicode range it covers (nothing changes to see)', 'hide'],
+  ['scanlines', 'Scan lines', 'num', '2', 'Dark lines every this many pixels'], ['range', 'Characters', 'text', '0x0000 0x017F', 'Unicode range it covers (nothing changes to see)', 'hide'],
   ['symbol', 'Symbol font', 'flag', '1', 'For icon fonts: letters become symbols'], ['rotary', 'Line through', 'flag', '1', 'Across the middle, smooth edges kept'],
   ['custom', 'Custom', 'flag', '1', 'Does nothing in CS:S', 'hide']];
 
@@ -4857,25 +5004,14 @@ function fontRows(file, font) {
   // underline and strike-through only draw without anti-aliasing (checked in game): turn that off for them
   const needs = key => {
     if ((key === 'outline' || key === 'dropshadow') && +(p.additive ?? 0) > 0) { flags.additive.set(false); put('additive', '0'); p.additive = '0'; }
-    if ((key === 'underline' || key === 'strikeout' || key === 'dropshadow') && +(p.antialias ?? 0) > 0) { flags.antialias.set(false); put('antialias', '0'); p.antialias = '0'; }
+    if ((key === 'underline' || key === 'strikeout') && +(p.antialias ?? 0) > 0) { flags.antialias.set(false); put('antialias', '0'); p.antialias = '0'; }
   };
-  // what does nothing on this font as it is, greyed (with why): Scan lines without Additive
-  const greyed = () => {
-    const noAdd = !(+(p.additive ?? 0) > 0), why = 'Scan lines show only on fonts with Additive on (seen in game): tick Additive first';
-    for (const r of [scanRow, ...menu.querySelectorAll('[data-k="scanlines"]')].filter(Boolean)) {
-      r.classList.toggle('greyed', noAdd);
-      for (const i of r.matches('button') ? [r] : r.querySelectorAll('input, button:not(.undo):not(.unrename)')) i.disabled = noAdd;
-      r.title = noAdd ? why : (r.dataset.tip || '');
-    }
-  };
-  let scanRow = null;
   const rowFor = ([key, label, kind = 'flag', , note = '', , info = '']) => kind !== 'flag'
     ? inputRow(label, p[key] ?? '', val => put(key, val), { ...(kind === 'num' ? { type: 'number', step: 1, min: 0 } : {}), title: note, undoId: id(key), dflt: dv(key) })
     : flags[key] = toggleRow(label, +p[key] > 0, on => {
       put(key, on ? '1' : '0');
       if (on) needs(key);
       p[key] = on ? '1' : '0';
-      greyed();
     }, note, id(key), gp ? +(gp[key] ?? 0) > 0 : null, info);
   // on/off settings as tick boxes in two columns (Effects); + lists what the font can also have and adds it (switched
   // on, or a starting value): ticks join Effects, numbers and text go under it
@@ -4884,23 +5020,20 @@ function fontRows(file, font) {
   effects.append(el('div', { textContent: 'Effects' }), opts);
   effects.dataset.q = FONT_FLAGS.map(x => x[1]).join(' ').toLowerCase();
   const extras = FONT_EXTRA.filter(x => !isFlag(x) && x[0] in p).map(rowFor);
-  scanRow = extras.find((r, i) => FONT_EXTRA.filter(x => !isFlag(x) && x[0] in p)[i][0] === 'scanlines') || null;
-  if (scanRow) scanRow.dataset.tip = scanRow.title || '';
   let last = extras[extras.length - 1] || effects;
   const add = el('div', { className: 'row addkey' }), plus = el('button', { className: 'plus', textContent: '+', title: 'Add a font option' });
   plus.setAttribute('aria-label', 'Add a font option');
   plus.setAttribute('aria-expanded', 'false');
   const menu = el('div', { className: 'chips', hidden: true });
-  const fill = () => { menu.replaceChildren(...FONT_EXTRA.filter(x => !(x[0] in p) && x[5] !== 'hide').map(x => { const b = el('button', { textContent: x[1], title: x[4] || '', onclick: () => {
+  const fill = () => menu.replaceChildren(...FONT_EXTRA.filter(x => !(x[0] in p) && x[5] !== 'hide').map(x => el('button', { textContent: x[1], title: x[4] || '', onclick: () => {
     p[x[0]] = x[3];
     put(x[0], x[3]);
     if (isFlag(x)) needs(x[0]);
     const r = rowFor(x);
     if (isFlag(x)) opts.append(r); else { last.after(r); last = r; }
-    if (x[0] === 'scanlines') { scanRow = r; r.dataset.tip = r.title || ''; }
     fill();
     if (!menu.childElementCount) { menu.hidden = true; plus.disabled = true; }
-  } }); b.dataset.k = x[0]; b.dataset.tip = x[4] || ''; return b; })); greyed(); };
+  } })));
   plus.onclick = () => { menu.hidden = !menu.hidden; plus.setAttribute('aria-expanded', String(!menu.hidden)); };
   fill();
   plus.disabled = !menu.childElementCount;
@@ -5512,6 +5645,8 @@ async function addStartupBackground(name, tex) {
 // (rows tagged own: the clicked part's own settings, what ↺ Reset part puts back on a window's part; the rest there is
 // shared with the window or other parts)
 const mine = rows => { for (const r of rows) r.dataset.own = '1'; return rows; };
+// (a control's own colours have the same names as the shared ones under them: tagged, so the two sets aren't mixed up)
+const onlyThis = (rows, on) => { if (on) for (const r of rows) if (r.classList.contains('colour')) r.classList.add('onlythis'); return rows; };
 function selectionSections(sel) {
   const groups = { show: [], colour: [], font: [], border: [], layout: [], custom: [], missing: [], other: [] }, add = (kind, title, rows) => groups[kind].push([title, rows]);
   if (sel.info.id === 'global') return [...(F(C) ? [['Colours by kind', [...kindRows(),
@@ -5531,7 +5666,7 @@ function selectionSections(sel) {
     add('colour', `${name}: this ${own.what} only`, [
       noteRow(`Only ${name}${name !== own.block ? ` (${own.block})` : ''} in ${sel.res.name.split('/').pop()} changes here. Further down: the colours ${own.what === 'part' ? 'it shares with others like it' : `every ${own.what} shares`}.`),
       ...(STARTUP_RES.has(info.id) && !/^hudeditor/i.test(own.block) ? [noteRow('The buy menu reads its own settings when the game makes it: these show after a game restart. The shared colours and fonts below change straight away.')] : []),
-      ...mine(deadOwn(sel.res, own.block, resRows(sel.res, own.block, own.defaults, schemeOf(sel.thing), own.ctl)))]);
+      ...onlyThis(mine(deadOwn(sel.res, own.block, resRows(sel.res, own.block, own.defaults, schemeOf(sel.thing), own.ctl))), !!control)]);
   }
   if (own && /^hudeditor_(pic|text|box|loadingbox)/i.test(own.block)) add('colour', own.block.toLowerCase() === LOADING_BOX ? 'The box' : `What this ${own.block.replace(/^hudeditor_|\d+$/gi, '').replace('pic', 'picture')} shows`, mine(customRows(own.block, sel.res)));
   if (control) {
@@ -5542,6 +5677,7 @@ function selectionSections(sel) {
       ...(file === CH && ctl.startsWith('ScrollBar') ? [noteRow('The chat shows this scroll bar even while it is closed. Keep it see-through (low opacity) or it stays on screen.')] : []),
       ...schemeRows(file, keys), ...(ctl.startsWith('ScrollBar') ? [scrollWideRow(file)].filter(Boolean) : [])]);
     for (const [label, name] of BORDER_USE[ctl] || []) add('border', `Border: ${label.toLowerCase()} in ${where}`, borderRows(file, name));
+    if (/button/i.test(control.cls || '')) add('layout', 'Buttons over each other', overlapRows(sel));
   }
   if (info.kind === 'hud') {
     if (info.hud.custom) add('colour', `${info.name}: what it shows`, customRows(info.id));
@@ -5586,6 +5722,7 @@ function selectionSections(sel) {
     if (!control && !sel.node && UI_RES[info.id]) add('other', 'Start over', gameWindowRows(sel));
     if (CMD_WINDOWS.has(info.id)) add('custom', 'Command buttons', commandRows(sel));
     if (CMD_WINDOWS.has(info.id) && sel.res) add('layout', 'Button places', buttonPlaceRows(sel.res, sel.thing));
+    if (!control && !sel.node) add('layout', 'Buttons over each other', overlapRows(sel));
     // the MOTD's parts: its message boxes are empty (so not there to click) until a server sends one
     if (info.id === 'info' && sel.res) add('layout', 'Part places', ['MessageTitle', 'HTMLMessage', 'TextMessage', 'ok'].flatMap(b => {
       const p = layoutProps(sel.res, b), what = { MessageTitle: 'Title', HTMLMessage: 'Web page message', TextMessage: 'Text message', ok: 'OK' }[b];
@@ -5699,12 +5836,24 @@ const el = (tag, props) => Object.assign(document.createElement(tag), props);
 // Rebuilding the list between mouse-down and mouse-up moves the click onto a new row (a Hide button click would
 // select the row instead), so a render asked for while a button is held waits for its release.
 let pointerDown = false, renderOnRelease = false, openOther = false, openColours = false;
-onPage('pointerdown', () => { pointerDown = true; }, true);
+// (a click that closes a pop-out over the preview only closes it: it doesn't also pick the part under it, or drag it)
+let eatClick = false;
+onPage('pointerdown', e => { pointerDown = true; eatClick = !!(cpop || fpop || nxPop) && !!e.target.closest?.('#boxes'); }, true);
 onPage('pointerup', () => {
   pointerDown = false;
   if (renderOnRelease) { renderOnRelease = false; setTimeout(render); } // after the click this release makes
 }, true);
 
+// The reader's place in the card, as they left it: a redraw while the card is shorter (its window closed for a moment, as
+// the scoreboard does on a reload) can't keep it, so the next one puts it back. (set: where a redraw put it, not a scroll)
+let keptScroll = { key: '', top: 0, set: -1 };
+const cardSelOrSel = () => layoutMode === 'float' ? cardSel : selected;
+onPage('scroll', e => { const sc = scroller(); if (e.target === sc && Math.abs(sc.scrollTop - keptScroll.set) > 1) keptScroll = { key: selKey(cardSelOrSel()), top: sc.scrollTop, set: -1 }; }, true);
+// (a click in the card: its place as it is now is the one to keep, a tab closed before it shortened the card)
+onPage('pointerdown', e => { const sc = scroller(); if (sc.contains(e.target)) keptScroll = { key: selKey(cardSelOrSel()), top: sc.scrollTop, set: -1 }; }, true);
+// a + list open in a card (a font's options): open again after the redraw, or a click on + just before one was lost
+const addKey = r => `${r.closest('details')?.querySelector('summary')?.textContent || ''}|${r.closest('.nx-cat')?.dataset.tab || ''}|${r.dataset.q}`;
+const openAddRows = () => [...document.querySelectorAll('#list .row.addkey')].filter(r => r.querySelector('.chips:not([hidden])'));
 function render() {
   try { shownKey = screenKey(); } catch {}
   if (pointerDown) { renderOnRelease = true; return; }
@@ -5714,12 +5863,15 @@ function render() {
   const fe = activeEl(), fbox = fe && fe.tagName === 'BUTTON' && fe.closest('#list, .nx-pin');
   const fk = fbox && { pin: pins.find(p => p.el === fbox) || null, tab: fe.closest('.nx-cat')?.dataset.tab, cls: fe.className, text: fe.textContent.trim() };
   // emptying the list scrolls it to the top; keep the reader's place (select() scrolls up itself)
-  const top = scroller().scrollTop, act = inUse = selected;
+  const sk = selKey(cardSelOrSel()), top = keptScroll.key === sk ? keptScroll.top : scroller().scrollTop, act = inUse = selected;
+  const adds = openAddRows().map(addKey);
   if (layoutMode === 'float') selected = cardSel; // (the main card's part; the pinned cards' are drawn after it)
   try {
     renderList();
     topBar();
+    for (const r of document.querySelectorAll('#list .row.addkey')) if (adds.includes(addKey(r))) r.querySelector('.plus:not(:disabled)')?.click();
     scroller().scrollTop = top;
+    keptScroll = { key: sk, top: keptScroll.key === sk ? top : scroller().scrollTop, set: scroller().scrollTop };
     if (layoutMode === 'float') renderPins(act);
   } finally { selected = act; }
   if (fpop && !fpop.owner.isConnected) closeFontPop(); // its row has gone
@@ -5787,8 +5939,9 @@ function sectionTitle(t) {
 }
 // A selection's font sections, each a panel of its own like the other categories' (they were one card, each under a
 // line: it wasn't clear where one ended).
-function fontsCards(sections) {
-  const cards = sections.map(([title, rows]) => card(title, rows, false));
+function fontsCards(sections, schemesFold = false) {
+  // (Global settings: each scheme's whole list folds, so the three lists of Default, DefaultSmall... aren't one column)
+  const cards = sections.map(([title, rows]) => card(title, rows, schemesFold && /fonts$/i.test(title) && rows.some(r => r.dataset && r.dataset.font)));
   // (a section's own button there, as Global settings' + Add font for every scheme)
   sections.forEach(([, rows], i) => rows.action && cards[i].querySelector('.sub')?.append(rows.action));
   // + Add font, at the right of the first one's title: into the schemes these fonts are in
@@ -5862,6 +6015,8 @@ let popped = 0; // (popped-out cards' windows: each its own name)
 let layoutMode = 'dock', cardSel = null, pins = [], floatAll = false, floatMoved = false, floatPlaced = '', nxPop = null;
 try { if (localStorage.getItem('layout') === 'float') layoutMode = 'float'; } catch {}
 const mainTabs = { key: '', open: new Set(), more: new Set() };
+// (each part's open tabs, as left: picked again, or a redraw that re-finds the part another way, it opens on them)
+const tabMemory = new Map();
 unfolded.add('On screen now'); unfolded.add('HUD parts'); // (the element list starts open)
 const icon = (name, cls = '') => {
   const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'), u = document.createElementNS('http://www.w3.org/2000/svg', 'use');
@@ -5920,7 +6075,14 @@ function setAdvanced(on) { floatAll = on; try { localStorage.setItem('advanced',
 function buildSelection(box, tabs, pin = null) {
   curPin = pin;
   const sel = selected, float = layoutMode === 'float', key = selKey(sel);
-  if (tabs.key !== key) { tabs.key = key; tabs.open.clear(); tabs.more.clear(); tabs.auto = true; }
+  // another part: its tabs as last left, else the ones open now stay open (a drag that picks the part, the part found
+  // again after a reload: the tab being worked in stays); none open, its only tab opens
+  if (tabs.key !== key) {
+    if (tabs.key) tabMemory.set(tabs.key, new Set(tabs.open));
+    const kept = tabMemory.get(key);
+    if (kept) { tabs.open.clear(); for (const t of kept) tabs.open.add(t); }
+    tabs.key = key; tabs.more.clear(); tabs.auto = !kept;
+  }
   const head = el('div', { className: 'selected-head nx-head' }), titles = el('div', { className: 'titles' }), tools = el('div', { className: 'nx-tools' });
   // (from a part of a window or of a HUD part, as the chat's text box: back to the whole)
   // (a control: named as itself, as the preview's box is, with the whole it's in above it)
@@ -6033,7 +6195,7 @@ function tabCards(sections, sel, tabs) {
     if (!list.length) continue;
     const open = tabs.open.has(k), sec = el('section', { className: `nx-cat${open ? ' open' : ''}` });
     sec.dataset.tab = k;
-    const head = el('button', { className: 'nx-cath', type: 'button', onclick: () => { tabs.open[open ? 'delete' : 'add'](k); render(); } });
+    const head = el('button', { className: 'nx-cath', type: 'button', onclick: () => { tabs.open[open ? 'delete' : 'add'](k); tabMemory.set(tabs.key, new Set(tabs.open)); render(); } });
     head.setAttribute('aria-expanded', String(open));
     const titles = list.map(([t]) => t).filter(t => t && t.toLowerCase() !== name.toLowerCase() && !/^the fonts? it uses$/i.test(t));
     const real = r => !r.classList.contains('note') && r.tagName !== 'DETAILS', n = list.reduce((a, [, rs]) => a + rs.filter(real).length, 0);
@@ -6045,7 +6207,7 @@ function tabCards(sections, sel, tabs) {
     sec.append(head);
     if (open) {
       const b = el('div', { className: 'nx-catb' }); // (every section of the tab: no Show more, the user asked)
-      b.append(...(k === 'font' ? fontsCards(list) : list.map(([t, r]) => card(t, r, false))));
+      b.append(...(k === 'font' ? fontsCards(list, sel.info.id === 'global') : list.map(([t, r]) => card(t, r, false))));
       if (k === 'font') b.append(...allResRows(sel));
       sec.append(b);
     }
@@ -6119,7 +6281,8 @@ function resetButton(sel, sections, quick = []) {
       setTimeout(end, 5000);
       if (unhide) setPartHidden(rf, own.block, false);
       if (hudHid) setHidden(sel.info.id, false);
-      for (const u of undos) u.onclick();
+      if (sel.info.id === 'global') { if (undos.length) kindsAsOpened(group); } // (its colours: every kind in one write a file)
+      else for (const u of undos) u.onclick();
       for (const f of fontBack) commit(f, `${f.name}/fonts as opened`, () => {
         let cur = f;
         for (const b of ['Fonts', 'CustomFontFiles']) {
@@ -6551,6 +6714,7 @@ function drawBoxes() {
     const pinned = !isSel && b.cls === 'thing' && [...pins.map(p => p.sel), cardSel].some(s => s && s !== selected && !s.control && !partName(s) && s.info.id === b.info.id && s.thing.key === b.thing.key);
     const d = el('div', { className: `box ${b.cls}${isSel ? ' sel' : ''}${pinned ? ' pin' : ''}` });
     Object.assign(d.style, { left: `${b.r.x / W * 100}%`, top: `${b.r.y / H * 100}%`, width: `${b.r.w / W * 100}%`, height: `${b.r.h / H * 100}%` });
+    d.classList.toggle('top', atTop(b.r.y / H)); // (no room above it: its name inside)
     d.append(el('span', { textContent: b.label || b.info.name }));
     host.append(d);
   }
@@ -6560,6 +6724,7 @@ function drawBoxes() {
   placeFloat(); // (Float: a part just picked gets its card beside it)
 }
 
+const atTop = fy => fy * $('boxes').offsetHeight * zoom.z < 16;
 const stagePoint = e => { const r = $('boxes').getBoundingClientRect(); return [(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height]; };
 // ---------- dragging: moves what is under the mouse ----------
 // What places a selection: a HudLayout block (HUD parts) or its own block in the window's .res (window controls), and
@@ -6657,7 +6822,7 @@ const sameSel = (a, b) => a && b && a.thing === b.thing && (a.control || null) =
 let drag = null, dragEnded = 0;
 const place = (el, r) => { const { W, H } = live; Object.assign(el.style, { left: `${r.x / W * 100}%`, top: `${r.y / H * 100}%`, width: `${r.w / W * 100}%`, height: `${r.h / H * 100}%` }); };
 $('boxes').onmousedown = e => {
-  if (e.button !== 0 || !live) return;
+  if (e.button !== 0 || !live || eatClick) return;
   // (no text selection: dragging selected text starts the browser's own drag, which keeps the mouse-up from us)
   e.preventDefault();
   document.activeElement?.blur(); // (what focus would have done: arrow keys nudge, not type)
@@ -6722,6 +6887,7 @@ $('boxes').onmousemove = e => {
   const { W, H } = boxList();
   const r = live ? (hit.control || (hit.node ? clickRects(hit.thing, hit.info, W, H)[0] : hit.r)) : rectOf(layoutProps(F(L), hit.info.id), W, H, hit.info.hud.hit);
   Object.assign(hb.style, { left: `${r.x / W * 100}%`, top: `${r.y / H * 100}%`, width: `${r.w / W * 100}%`, height: `${r.h / H * 100}%` });
+  hb.classList.toggle('top', atTop(r.y / H));
   // (an added part in a window is named as in the list: "Colour box 4")
   const own = hit.node && /^hudeditor_(pic|text|box)\d+$/i.test(hit.node.name) && UI_RES[hit.thing.key] && F(UI_RES[hit.thing.key]);
   const name = own ? `${hit.info.name} › ${addedName(own, hit.node.name)}` : hit.control ? `${hit.info.name} › ${controlIn(hit.control, hit.thing)[1]}` : hit.info.name;
@@ -6733,6 +6899,7 @@ $('boxes').ondragstart = e => e.preventDefault();
 // it out), to line them up or move them together.
 let lastClick = null; // where the last click in the preview was (screen pixels)
 $('boxes').onclick = async e => {
+  if (eatClick) { eatClick = false; return; } // (it closed a pop-out)
   if (Date.now() - dragEnded < 300) return;
   const hits = pickAll(...stagePoint(e)), again = lastClick && Math.hypot(e.clientX - lastClick[0], e.clientY - lastClick[1]) < 6;
   lastClick = [e.clientX, e.clientY];
@@ -6833,6 +7000,9 @@ window.addEventListener('mousemove', e => {
 window.addEventListener('mouseup', () => { if (pan && pan.moved) dragEnded = Date.now(); pan = null; }); // (a pan ends with a click: not a pick)
 window.addEventListener('resize', () => setZoom(zoom.z, zoom.x, zoom.y));
 $('zoom').onclick = () => setZoom(1, 0, 0);
+// (the corner bar wraps onto more rows when the preview is narrow: at 4:3, where the game fills the height, it covered
+// the HUD's bottom row; the game's room shrinks by the bar's height instead)
+new ResizeObserver(() => { $('preview').style.paddingBottom = `${Math.max(54, $('viewbar').offsetHeight + 22)}px`; }).observe($('viewbar'));
 
 // ---------- nudging and lining up ----------
 // Parts Ctrl+clicked with the selection. Arrow keys move them all 1 unit (Shift: 10); the Line up buttons move the
@@ -6877,8 +7047,19 @@ function lineUpRows() {
     row.append(el('div', { textContent: label }), ...buttons.map(([how, text, title]) => el('button', { textContent: text, title, onclick: () => lineUp(how) })));
     return row;
   };
+  // one width or height for all of them (each sized in plain numbers: one sized to the screen keeps its own, as does one
+  // whose size the game can't take, FIXED_SIZE)
+  const size = (key, label) => {
+    const t0 = moveTarget(selected), v = t0 && !t0.plain ? layoutProps(t0.f, t0.block)[key] || '' : '';
+    return inputRow(label, /^\s*\d+\s*$/.test(v) ? v.trim() : '', val => {
+      if (!/^\d+$/.test(val)) return;
+      const g = Symbol();
+      for (const t of [selected, ...also].map(moveTarget)) if (t && !t.plain && /^\s*\d+\s*$/.test(t.p[key] || '') && !FIXED_SIZE.has(`${t.f.name}|${t.block}`.toLowerCase())) save(t.f, key, val, t.block, g);
+    }, { type: 'number', step: 1, min: 0, noUndo: true, title: `Every one of them this ${label.toLowerCase()} (one Ctrl+Z)` });
+  };
   return [r('Across', [['left', 'Left', 'Line up their left edges'], ['centre', 'Centre', 'Line up their centres'], ['right', 'Right', 'Line up their right edges'], ['across', 'Spread', 'Spread them evenly across']]),
     r('Down', [['top', 'Top', 'Line up their tops'], ['middle', 'Middle', 'Line up their middles'], ['bottom', 'Bottom', 'Line up their bottoms'], ['down', 'Spread', 'Spread them evenly down']]),
+    size('wide', 'Width'), size('tall', 'Height'),
     noteRow(`They line up with ${selected.info.name}. Ctrl+click a part in the preview to add it or take it out; arrow keys move them all.`)];
 }
 
@@ -7496,6 +7677,7 @@ if (host) {
     // its letter, so Ctrl+Z on AZERTY and other layouts is the Z the user sees)
     const typing = isTyping(activeEl());
     if (e.ctrlKey && !e.shiftKey && !e.altKey && (e.key.toLowerCase() === 'z' || (!/^[a-z]$/i.test(e.key) && e.code === 'KeyZ')) && !typing) { e.preventDefault(); undo(); } // (a layout without Latin letters: the key where Z is)
+    if (e.ctrlKey && !e.altKey && e.key.toLowerCase() === 'a' && !typing) e.preventDefault(); // (not every word on the page selected)
   });
   $('explore').onclick = () => call('explore');
   for (const b of $('values').querySelectorAll('button')) b.onclick = () => {
@@ -7752,6 +7934,21 @@ async function parserCheck() {
     // an animation's merged frames (one shown 120 ms among 40 ms ones) are repeated, so the game's one rate keeps time
     const a = evenTiming([{ ms: 40 }, { ms: 40 }, { ms: 120 }, { ms: 40 }], 100), b = evenTiming([{ ms: 40 }, { ms: 400 }], 4);
     check(a.times.join() === '1,1,3,1' && a.ms === 40 && b.times.reduce((x, y) => x + y) <= 4 && b.ms > 40, `animation frames evened out (${a.times}, ${b.times} at ${Math.round(b.ms)} ms)`);
+  }
+  check(reAnchor('r123', '', 853) === '730' && reAnchor('730', 'r', 853) === 'r123' && reAnchor('c-50', '', 640) === '270' && reAnchor('270', 'c', 640) === 'c-50' && reAnchor('r40', 'c', 480) === 'c200',
+    'a position counted from elsewhere stays where it is');
+  { // new parts: the middle, then each under the last one still where it was put, past the bottom a column right; moved, its spot is free
+    const lay = { name: 'spot.res', text: '', parsed: parse(''), bases: [] }, X = { pre: 'c', mid: n => -n / 2, end: 300 }, Y = { pre: 'c', mid: n => -n / 2, end: 240 };
+    let body = '';
+    const reparse = () => { lay.text = `"r"\n{\n${body}}\n`; lay.parsed = parse(lay.text); };
+    const put = (b, [x, y]) => { body += `"${b}"\n{\n"xpos" "${x}"\n"ypos" "${y}"\n"wide" "100"\n"tall" "200"\n}\n`; reparse(); autoPlaced.push({ file: lay.name, block: b, x, y, w: 100, h: 200, when: Date.now() }); };
+    const a = addSpot(lay, 100, 200, X, Y); put('hudeditor_box1', a);
+    const b = addSpot(lay, 100, 200, X, Y); put('hudeditor_box2', b);
+    const c = addSpot(lay, 100, 200, X, Y);
+    check(a.join() === 'c-50,c-100' && b.join() === 'c54,c-100' && c.join() === 'c158,c-100', `added parts stack, then go a column right (${a} ${b} ${c})`);
+    body = body.replace('"xpos" "c-50"', '"xpos" "c-200"'); reparse();
+    check(addSpot(lay, 100, 200, X, Y).join() === 'c-50,c-100', 'a moved part frees the middle');
+    autoPlaced.length = 0;
   }
   const edited = withValue(f, 'x', '10 20 30 40');
   check(edited.includes('X\t"10 20 30 40"') && !edited.includes('X\t"A"'), 'edit in place');
@@ -8693,8 +8890,12 @@ if (host && location.hash === '#hosttest') (async () => {
       'the game\'s buy menu pages, favourites box and weapon info looks are in the exe');
     // the player's own settings back in config.cfg after the editor's game: each kept line as it was, one it didn't have
     // taken out, the rest untouched
-    const merged = await call('mergecvars', '', 'name "x"\r\ncl_radaralpha "0"\r\nnet_graph "1"\r\nsensitivity "2"\r\n\x01// kept\ncl_radaralpha "150"\n');
-    check(merged === 'name "x"\r\ncl_radaralpha "150"\r\nsensitivity "2"\r\n', `the player's game settings put back (${JSON.stringify(merged)})`);
+    // (only where it is still what the editor set: one the player changed since, cl_showpos here, stays theirs)
+    const merged = await call('mergecvars', '', 'name "x"\r\ncl_radaralpha "0"\r\nnet_graph "1"\r\ncl_showpos "1"\r\nsensitivity "2"\r\n\x01// kept\ncl_radaralpha "150"\ncl_showpos "0"\n\x01cl_radaralpha 0\nnet_graph 1\ncl_showpos 0\n');
+    check(merged === 'name "x"\r\ncl_radaralpha "150"\r\ncl_showpos "1"\r\nsensitivity "2"\r\n', `the player's game settings put back (${JSON.stringify(merged)})`);
+    // (lines kept by an older editor, which noted nothing it set: every one put back, as it did)
+    const old = await call('mergecvars', '', 'cl_radaralpha "0"\r\ncl_showpos "1"\r\n\x01cl_radaralpha "150"\n');
+    check(old === 'cl_radaralpha "150"\r\n', `an older editor's kept lines all put back (${JSON.stringify(old)})`);
     { // a part's Save keeps its own files only; Back to how it was imported puts the HUD back as it was made, unsaved
       check(/^\d{4}-\d\d-\d\d$/.test(await call('original')), 'a new HUD keeps a copy of itself as it was made');
       save(F(L), 'xpos', '24', 'HudHealth');
@@ -8706,6 +8907,15 @@ if (host && location.hash === '#hosttest') (async () => {
       const [n, , lost] = (await call('restoreoriginal')).split('\t').map(Number), lay = await readHud('scripts/HudLayout.res') || '';
       check(n >= 2 && lost === 0 && !/"xpos"\t\t"2[04]"/.test(lay) && !(await readHud('resource/ClientScheme.res')).includes('"4 5 6 255"'), `Back to how it was imported puts the HUD back as it was made (${n} files, ${lost} lost)`);
       check(+await call('save') >= 2, 'it stays unsaved until Save HUD');
+    }
+    { // a change still waiting when its block is taken out (an added part removed straight after) doesn't make it again
+      const lay = F(L);
+      save(lay, 'hudeditor_box9', [['ControlName', 'EditablePanel'], ['fieldName', 'hudeditor_box9'], ['xpos', '0']], []);
+      await sleep(400); await writing;
+      save(lay, 'xpos', '5', 'hudeditor_box9');
+      commit(lay, `${lay.name}/hudeditor_box9/remove`, () => dropBlock(lay, [], 'hudeditor_box9'));
+      await sleep(400); await writing;
+      check(!Object.keys(layoutProps(lay, 'hudeditor_box9')).length, 'a part removed straight after a change stays removed');
     }
     await call('done', '', 'ok');
   } catch (err) {

@@ -185,7 +185,12 @@ static bool IsHud( const wstring &dir )
 	return IsDir( dir + L"\\resource" ) || IsDir( dir + L"\\scripts" );
 }
 
-// Calls fn( relative path ) for every file under dir. Doesn't follow junctions inside it.
+// A symbolic link or a junction (OneDrive's placeholders and deduplicated files are reparse points too: real files)
+static bool IsLink( const WIN32_FIND_DATAW &fd )
+{
+	return ( fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT ) && ( fd.dwReserved0 == IO_REPARSE_TAG_SYMLINK || fd.dwReserved0 == IO_REPARSE_TAG_MOUNT_POINT );
+}
+// Calls fn( relative path ) for every file under dir. Doesn't follow links (symbolic ones, junctions) inside it.
 template < typename Fn >
 static void EachFile( const wstring &dir, const wstring &rel, Fn fn, int depth = 0 )
 {
@@ -198,9 +203,11 @@ static void EachFile( const wstring &dir, const wstring &rel, Fn fn, int depth =
 		wstring name = fd.cFileName;
 		if ( name == L"." || name == L".." )
 			continue;
+		if ( IsLink( fd ) )
+			continue; // (a link: not followed, nor its file copied)
 		if ( !( fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY ) )
 			fn( rel + name );
-		else if ( !( fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT ) && depth < 16 )
+		else if ( depth < 16 )
 			EachFile( dir, rel + name + L"\\", fn, depth + 1 );
 	} while ( FindNextFileW( h, &fd ) );
 	FindClose( h );
@@ -795,8 +802,75 @@ static bool HudCvar( const string &line, string *name = NULL )
 		*name = k;
 	return hud;
 }
-// config.cfg with the lines kept put back: each of those settings as it was, the ones it didn't have taken out
-static string MergeCvars( const string &config, const string &kept )
+// The value in a cfg line or console command ("name value", "name \"value\""): what follows the name, quotes off.
+static string CvarValue( const string &line )
+{
+	size_t a = line.find_first_not_of( " \t" ), b = a == string::npos ? a : line.find_first_of( " \t", a );
+	if ( b == string::npos )
+		return "";
+	string v = line.substr( b );
+	v.erase( 0, v.find_first_not_of( " \t\"" ) == string::npos ? v.size() : v.find_first_not_of( " \t\"" ) );
+	while ( !v.empty() && strchr( " \t\r\n\"", v.back() ) )
+		v.pop_back();
+	return v;
+}
+static bool SameCvar( const string &a, const string &b )
+{
+	char *ea, *eb;
+	double x = strtod( a.c_str(), &ea ), y = strtod( b.c_str(), &eb );
+	return a == b || ( !a.empty() && !b.empty() && !*ea && !*eb && x == y ); // ("6" and "6.000000")
+}
+// What the editor set them to while its game ran (console commands sent, the HUD's cfg at a start), "name value" a line,
+// beside the lines kept: a setting the player changed since (to anything else) is theirs, and stays.
+static wstring CvarSetPath()
+{
+	return g_cvarKeep.empty() ? L"" : g_cvarKeep.substr( 0, g_cvarKeep.size() - 4 ) + L"-set.txt";
+}
+static std::map< string, string > ReadCvarSet( const string &text )
+{
+	std::map< string, string > set;
+	string name;
+	for ( size_t a = 0, b; a < text.size(); a = b + 1 )
+	{
+		b = text.find( '\n', a );
+		string line = text.substr( a, b == string::npos ? string::npos : b - a );
+		if ( HudCvar( line, &name ) )
+			set[name] = CvarValue( line );
+		if ( b == string::npos )
+			break;
+	}
+	return set;
+}
+// cmds: console commands (";" or lines apart); the ones setting a HUD's game settings are noted (see CvarSetPath)
+static void NoteCvars( const string &cmds )
+{
+	wstring path = CvarSetPath();
+	string text, name;
+	if ( path.empty() )
+		return;
+	ReadAll( path, text );
+	auto set = ReadCvarSet( text );
+	bool any = false;
+	for ( size_t a = 0, b; a < cmds.size(); a = b + 1 )
+	{
+		b = cmds.find_first_of( ";\n", a );
+		string c = cmds.substr( a, b == string::npos ? string::npos : b - a );
+		if ( HudCvar( c, &name ) && !CvarValue( c ).empty() )
+			set[name] = CvarValue( c ), any = true;
+		if ( b == string::npos )
+			break;
+	}
+	if ( !any )
+		return;
+	string out;
+	for ( auto &[k, v] : set )
+		out += k + " " + v + "\n";
+	WriteAll( path, out );
+}
+// config.cfg with the lines kept put back: each of those settings as it was, the ones it didn't have taken out. Only
+// where it is still what the editor set (set): one the player changed since stays as they left it. (set null: lines
+// kept by an editor from before 2026-10-11, which noted nothing: every one put back, as it did)
+static string MergeCvars( const string &config, const string &kept, const std::map< string, string > *set )
 {
 	std::map< string, string > was;
 	std::set< string > done;
@@ -816,8 +890,12 @@ static string MergeCvars( const string &config, const string &kept )
 	{
 		b = config.find( '\n', a );
 		string line = config.substr( a, b == string::npos ? string::npos : b - a + 1 ), end = line.size() > 1 && line[line.size() - 2] == '\r' ? "\r\n" : "\n";
-		if ( !HudCvar( line, &name ) )
-			out += line;
+		auto ours = set && HudCvar( line, &name ) ? set->find( name ) : std::map< string, string >::const_iterator();
+		if ( !HudCvar( line, &name ) || ( set && ( ours == set->end() || !SameCvar( CvarValue( line ), ours->second ) ) ) )
+		{
+			if ( !HudCvar( line ) || done.insert( name ).second ) // (the player's: kept, once)
+				out += line;
+		}
 		else if ( was.count( name ) && done.insert( name ).second )
 			out += was[name] + end;
 		if ( b == string::npos )
@@ -828,6 +906,12 @@ static string MergeCvars( const string &config, const string &kept )
 			out += line + "\n";
 	return out;
 }
+static void NoteHudCfg()
+{
+	string cfg;
+	if ( !g_hudPath.empty() && ReadAll( g_hudPath + L"\\cfg\\hudeditor_colours.cfg", cfg ) )
+		NoteCvars( cfg ); // (the game runs it as it starts)
+}
 // As the editor's game starts or is joined: config.cfg's lines for them (one kept already stays: it's from before a
 // game the editor used, which hasn't been put back yet)
 static void KeepCvars()
@@ -836,6 +920,7 @@ static void KeepCvars()
 	g_cvarGameSeen = false;
 	if ( g_cvarKeep.empty() || IsFile( g_cvarKeep ) || !ReadAll( g_game + L"\\cfg\\config.cfg", config ) )
 		return;
+	WriteAll( CvarSetPath(), "" ); // (a new game: what the editor sets in it from now on)
 	for ( size_t a = 0, b; a < config.size(); a = b + 1 )
 	{
 		b = config.find( '\n', a );
@@ -846,6 +931,7 @@ static void KeepCvars()
 			break;
 	}
 	WriteAll( g_cvarKeep, kept );
+	NoteHudCfg();
 }
 // Every 3 s (WM_TIMER 6): once the game the editor used has quit, its settings go back (config.cfg as it was is kept
 // beside the editor's other files, as config.cfg.bak, just in case)
@@ -864,10 +950,14 @@ static void RestoreCvars()
 	wstring cfg = g_game + L"\\cfg\\config.cfg";
 	if ( g_game.empty() || !ReadAll( g_cvarKeep, kept ) || !ReadAll( cfg, config ) )
 		return; // (the game's folder not there, or the file busy: again in 3 s)
-	string merged = MergeCvars( config, kept );
+	string setText;
+	bool noted = ReadAll( CvarSetPath(), setText );
+	auto set = ReadCvarSet( setText );
+	string merged = MergeCvars( config, kept, noted ? &set : nullptr );
 	if ( merged != config && ( !WriteAll( g_cvarKeep.substr( 0, g_cvarKeep.rfind( L'\\' ) ) + L"\\config.cfg.bak", config ) || !WriteAll( cfg, merged ) ) )
 		return;
 	DeleteFileW( g_cvarKeep.c_str() );
+	DeleteFileW( CvarSetPath().c_str() );
 }
 
 // The plugin's .vdf is in addons only while the editor starts the game: a game started from Steam without -insecure
@@ -922,6 +1012,8 @@ static bool GameCommand( const wstring &cmd )
 	DWORD n = 0;
 	bool ok = WriteFile( h, s.data(), (DWORD)s.size(), &n, NULL );
 	CloseHandle( h );
+	if ( ok && IsFile( g_cvarKeep ) )
+		NoteCvars( s );
 	return ok;
 }
 
@@ -996,6 +1088,38 @@ static bool TooBigForHud( const wstring &dir )
 			return true;
 	}
 	return !!ec;
+}
+// Links in an archive (a symbolic link, a junction): unpacked as links, they would point the HUD (and the editor's own
+// copying and writing) at files elsewhere on the PC. Taken out, the links only: what they point at is left alone.
+static void DropLinks( const wstring &dir, int depth = 0 )
+{
+	WIN32_FIND_DATAW fd;
+	HANDLE h = depth > 16 ? INVALID_HANDLE_VALUE : FindFirstFileW( ( dir + L"\\*" ).c_str(), &fd );
+	if ( h == INVALID_HANDLE_VALUE )
+		return;
+	do
+	{
+		wstring name = fd.cFileName, p = dir + L"\\" + name;
+		if ( name == L"." || name == L".." )
+			continue;
+		if ( IsLink( fd ) )
+			( fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY ) ? RemoveDirectoryW( p.c_str() ) : DeleteFileW( p.c_str() );
+		else if ( fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY )
+			DropLinks( p, depth + 1 );
+	} while ( FindNextFileW( h, &fd ) );
+	FindClose( h );
+}
+// A dropped folder copied in, its files only: a link in it (symbolic, or a junction, which std::filesystem::copy
+// followed) is neither followed nor copied (see EachFile).
+static bool CopyTree( const wstring &from, const wstring &to )
+{
+	bool ok = true;
+	EachFile( from, L"", [&]( const wstring &rel ) {
+		wstring dst = to + L"\\" + rel;
+		SHCreateDirectoryExW( NULL, dst.substr( 0, dst.rfind( L'\\' ) ).c_str(), NULL );
+		ok = CopyFileW( ( from + L"\\" + rel ).c_str(), dst.c_str(), FALSE ) && ok;
+	} );
+	return ok;
 }
 // Files that came in read-only (a HUD copied from a CD, an archive that kept the flag) are made writable: the editor
 // writes into them
@@ -1444,11 +1568,11 @@ static void OnMessage( const wstring &msg )
 			fail( name + L" is too big to be a HUD (over 1 GB or 20,000 files), or couldn't be read: drop the HUD's own folder." );
 		else if ( std::filesystem::remove_all( dir, ec ), SHCreateDirectoryExW( NULL, x.c_str(), NULL ) != ERROR_SUCCESS )
 			fail( L"Couldn't make " + x );
-		else if ( folder ? ( std::filesystem::copy( from, x, std::filesystem::copy_options::recursive | std::filesystem::copy_options::skip_symlinks, ec ), !!ec ) : !WriteAll( file, Unbase64( body ) ) )
-			fail( folder ? L"Couldn't copy " + name + L": " + Widen( ec.message(), CP_ACP ) : L"Couldn't unpack it in " + dir );
+		else if ( folder ? !CopyTree( from, x ) : !WriteAll( file, Unbase64( body ) ) )
+			fail( folder ? L"Couldn't copy " + name + L": a file in it couldn't be read." : L"Couldn't unpack it in " + dir );
 		else if ( !folder && !Untar( file, x ) )
 			fail( L"Windows couldn't unpack " + name + L". Use a .zip, .rar or .7z (an installer isn't a HUD folder: run it yourself)." );
-		else if ( MakeWritable( x ), FindHuds( x, L"", huds ), huds.empty() )
+		else if ( DropLinks( x ), MakeWritable( x ), FindHuds( x, L"", huds ), huds.empty() )
 			fail( name + L" has no HUD in it: no folder with resource or scripts inside." );
 		else
 		{
@@ -1661,10 +1785,12 @@ static void OnMessage( const wstring &msg )
 		else
 			out = std::to_wstring( n ) + L"\t" + std::to_wstring( failed ) + L"\t" + std::to_wstring( lost );
 	}
-	else if ( op == L"mergecvars" ) // (the self-check's: what putting the player's settings back makes of a config.cfg; body = it, \x01, the lines kept)
+	else if ( op == L"mergecvars" ) // (the self-check's: what putting the player's settings back makes of a config.cfg; body = it, \x01, the lines kept, \x01, what the editor set)
 	{
-		size_t at = body.find( L'\x01' );
-		out = Widen( MergeCvars( Utf8( body.substr( 0, at ) ), at == wstring::npos ? "" : Utf8( body.substr( at + 1 ) ) ) );
+		size_t at = body.find( L'\x01' ), at2 = at == wstring::npos ? at : body.find( L'\x01', at + 1 );
+		string kept = at == wstring::npos ? "" : Utf8( body.substr( at + 1, at2 == wstring::npos ? wstring::npos : at2 - at - 1 ) );
+		auto set = ReadCvarSet( at2 == wstring::npos ? "" : Utf8( body.substr( at2 + 1 ) ) );
+		out = Widen( MergeCvars( Utf8( body.substr( 0, at ) ), kept, at2 == wstring::npos ? nullptr : &set ) );
 	}
 	else if ( op == L"savesome" ) // body = paths in the HUD, one a line (a folder ends in /): kept as they are now; answers "saved<tab>still unsaved"
 	{
@@ -1941,6 +2067,10 @@ static LRESULT CALLBACK CardProc( HWND h, UINT m, WPARAM w, LPARAM l )
 		if ( cw && cw->ctl )
 			cw->ctl->NotifyParentWindowPositionChanged();
 		return 0;
+	case WM_SETFOCUS: // (as the main window's: the keyboard to its page, not to the window round it)
+		if ( cw && cw->ctl )
+			cw->ctl->MoveFocus( COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC );
+		return 0;
 	case WM_DPICHANGED: // (to another screen: the size Windows suggests for it)
 	{
 		const RECT *r = (const RECT *)l;
@@ -2120,6 +2250,11 @@ static LRESULT CALLBACK WndProc( HWND h, UINT m, WPARAM w, LPARAM l )
 	case WM_MOVE: // WebView2 places its popups (colour pickers, drop-down lists) from where it thinks the window is
 		if ( g_ctl )
 			g_ctl->NotifyParentWindowPositionChanged();
+		return 0;
+	case WM_SETFOCUS: // the window brought back (alt-tab): Windows gives the keyboard to it, not to the page in it, so the
+		// first key (Enter over the preview, Ctrl+Z) went nowhere until a click
+		if ( g_ctl )
+			g_ctl->MoveFocus( COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC );
 		return 0;
 	case WM_CLOSE: // let the page ask about unsaved changes; a second click within 5 s closes anyway (a page that hangs),
 		// but not one within 1.5 s of the first: a double-click on the X would have thrown the unsaved changes away
