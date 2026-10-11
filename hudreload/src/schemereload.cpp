@@ -1776,6 +1776,12 @@ static void RunCommandFile()
 enum { TEXT_TIMER = 1, TEXT_SPEED = 2, TEXT_JHUD = 4, TEXT_TOPLEFT = 8, TEXT_CHAT = 16 };
 static ConVar schemereload_testtext( "schemereload_testtext", "0", 0,
 	"Sample server texts to keep on screen, added up: 1 timer box and right side, 2 speed (centre print), 4 jhud, 8 top left, 16 chat" );
+// A text sent the way a server plugin does, for comparing fonts with what players see: "channel x y interval hold r g b"
+// (seconds; x/y screen fractions, -1 centred), its words in schemereload_hudtest_text (\n for a new line). The game
+// draws every copy still held over the others (bhop-get-stats' speedometer: every 0.1 s held 0.2 s at 100 tick; its
+// jhud: each jump held 1.0 s; shavit's top-left records: every 1.0 s held 2.6 s, read 2026-10-11). Empty: none.
+static ConVar schemereload_hudtest( "schemereload_hudtest", "", 0, "A HudMsg sent like a server plugin's: channel x y interval hold r g b" );
+static ConVar schemereload_hudtest_text( "schemereload_hudtest_text", "AgQ5 Wy", 0, "The words schemereload_hudtest sends (\\n: a new line)" );
 static IServerGameDLL *g_pServerGame;
 static int g_msgTextMsg = -1, g_msgHintText = -1, g_msgKeyHintText = -1, g_msgHudMsg = -1, g_msgSayText = -1;
 
@@ -1825,19 +1831,21 @@ static void SendHints( CHostFilter &filter, const char *hint, const char *key )
 }
 
 // ShowHudText: x/y are screen fractions (-1 = centred). Held 0.12 s, so it goes away by itself once no longer sent.
-static void SendHudText( CHostFilter &filter, int channel, float x, float y, const char *text )
+static void SendHudText( CHostFilter &filter, int channel, float x, float y, const char *text, float hold = 0.12f, int r = 255, int g = 255, int b = 255 )
 {
 	bf_write *msg = g_pEngineServer->UserMessageBegin( &filter, g_msgHudMsg );
 	msg->WriteByte( channel );
 	msg->WriteFloat( x );
 	msg->WriteFloat( y );
-	for ( int i = 0; i < 8; ++i )
-		msg->WriteByte( 255 );	// colour 1 and 2: white
+	for ( int i = 0; i < 2; ++i ) // colour 1 and 2
+	{
+		msg->WriteByte( r ); msg->WriteByte( g ); msg->WriteByte( b ); msg->WriteByte( 255 );
+	}
 	msg->WriteByte( 0 );		// effect
 	msg->WriteFloat( 0.0f );	// fade in
 	msg->WriteFloat( 0.0f );	// fade out
-	msg->WriteFloat( 0.12f );	// hold: just over the 0.1 s resend. The game keeps every copy still held and draws each
-								// (NOTES "How the game draws text"): 0.5 s drew it 5 times, its edges rough
+	msg->WriteFloat( hold );	// (the samples' 0.12: just over the 0.1 s resend. The game keeps every copy still held and
+								// draws each (NOTES "How the game draws text"): 0.5 s drew it 5 times, its edges rough)
 	msg->WriteFloat( 0.0f );	// fx time
 	msg->WriteString( text );
 	g_pEngineServer->MessageEnd();
@@ -1851,6 +1859,29 @@ static void SendChat( CHostFilter &filter, const char *text )
 	msg->WriteString( text );
 	msg->WriteByte( 1 ); // chat, not a console-only line
 	g_pEngineServer->MessageEnd();
+}
+
+static void SendHudTest()
+{
+	int ch = 0, r = 255, g = 255, b = 255;
+	float x = -1, y = -1, every = 0, hold = 0;
+	if ( sscanf( schemereload_hudtest.GetString(), "%d %f %f %f %f %d %d %d", &ch, &x, &y, &every, &hold, &r, &g, &b ) < 5 || every <= 0 )
+		return;
+	if ( g_msgHudMsg < 0 )
+		FindUserMessages();
+	if ( g_msgHudMsg < 0 )
+		return;
+	char text[512];
+	const char *in = schemereload_hudtest_text.GetString();
+	int n = 0;
+	for ( ; *in && n < (int)sizeof( text ) - 1; ++in )
+		if ( in[0] == '\\' && in[1] == 'n' )
+			text[n++] = '\n', ++in;
+		else
+			text[n++] = *in;
+	text[n] = 0;
+	CHostFilter filter;
+	SendHudText( filter, ch, x, y, text, hold, r, g, b );
 }
 
 static void SendTestTexts()
@@ -2486,6 +2517,20 @@ void CSchemeReloadPlugin::GameFrame( bool simulating )
 		{
 			s_feedBroken = true;
 			Warning( "[schemereload] crashed while filling the kill feed - switched off until restart\n" );
+		}
+	}
+	// (the server-like text: on its own clock, as often as asked; a send late by a frame keeps the next on time)
+	static double s_nextHud;
+	static bool s_hudBroken;
+	if ( simulating && !s_hudBroken && *schemereload_hudtest.GetString() && now >= s_nextHud )
+	{
+		float every = 0;
+		sscanf( schemereload_hudtest.GetString(), "%*d %*f %*f %f", &every );
+		s_nextHud = every > 0 ? ( now - s_nextHud < every ? s_nextHud + every : now + every ) : now + 1.0;
+		if ( !SR_SafeCall( SendHudTest ) )
+		{
+			s_hudBroken = true;
+			Warning( "[schemereload] crashed while sending the test HudMsg - switched off until restart\n" );
 		}
 	}
 	if ( simulating && !s_textBroken && now >= s_nextText )

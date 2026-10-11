@@ -257,6 +257,7 @@
   .cpop footer .primary { margin-left: auto; }
   .cpop footer button:not(.primary) { background: transparent; }
   /* tick boxes in two columns: a border's sides, a font's effects */
+  .row.greyed { opacity: .45; } .row.greyed input { cursor: not-allowed; }
   .row.onlythis > .name::after { content: 'only this'; white-space: nowrap; margin-left: 6px; padding: 0 5px; border-radius: 4px; font-size: 10px; font-weight: 600; background: var(--soft); color: var(--accent); }
   .box.top span { bottom: auto; top: 0; }
   .row select.anchor { height: 24px; padding: 0 6px; font-size: 11.5px; color: var(--muted); background: var(--field); border: 1px solid var(--line); border-radius: 6px; }
@@ -4833,18 +4834,23 @@ function toggleRow(label, on, onChange, note = '', id = null, dflt = null, info 
 
 // Font entry settings besides name, size, weight and blur, as the game's scheme loader reads them: always shown, and
 // the rest, listed under + until the font has them. [key, label, kind, value when added, note]
-// What each does in game was checked on HUD numbers, window text, the chat, timer and speed texts (the visual sweep,
-// 10-04: SWEEP.md): underline and strike-through draw only without anti-aliasing (with it, only a mark in the spaces),
-// "rotary" is a line through the middle; Characters and Custom change nothing to see, so + doesn't offer them ('hide':
-// shown only when a font has them already, to be taken out).
-const FONT_FLAGS = [['outline', 'Outline', 'flag', '1', 'Turns Additive off'], ['dropshadow', 'Drop shadow', 'flag', '1', 'Turns Additive off'],
-  ['additive', 'Additive', 'flag', '1', 'Adds its light to what\'s behind (not a glow: Blur is)', '', 'Makes the text slightly see-through: its light is added to what\'s behind it instead of covering it, so it melts into a bright background (seen on the jhud text, CenterPrintText; the same on every text using this font)'],
+// What each does in game: every option tested 2026-10-12 on Arial, Segoe UI, Impact, Marlett and Wingdings, on a font
+// with a resolution range and one that grows with the screen, with and without anti-aliasing and additive, from
+// lossless game screenshots (SWEEP.md, vanilla/NOTES.md "Font options"). A font that grows with the screen (no yres) is
+// always anti-aliased, and its blur and scan lines grow with it; underline and strike-through draw only without
+// anti-aliasing (with it, only a mark in the spaces); outline and drop shadow show nothing on additive text.
+// Characters and Custom change nothing for HUD text, so + doesn't offer them ('hide': shown only when a font has them
+// already, to be taken out).
+const FONT_FLAGS = [['outline', 'Outline', 'flag', '1', 'A black 1-pixel edge round every letter. Turns Additive off (it would show nothing)'],
+  ['dropshadow', 'Drop shadow', 'flag', '1', 'A black 1-pixel shadow down and right; with Anti-aliasing on it only fills fully clear pixels, so it comes out patchy. Turns Additive off'],
+  ['additive', 'Additive', 'flag', '1', 'Adds its light to what\'s behind (not a glow: Blur is)', '', 'Makes the text slightly see-through: its light is added to what\'s behind it instead of covering it, so it melts into a bright background (the jhud and record times, CenterPrintText, are additive in the game\'s own HUD). A server text sent again while the last is still up (the jhud, the record times) is drawn once per copy, and on additive text the copies add up brighter, near white. Outline and Drop shadow show nothing on it'],
   ['antialias', 'Anti-aliasing', 'flag', '1', 'Smooth edges']];
-const FONT_EXTRA = [['italic', 'Italic', 'flag', '1'], ['underline', 'Underline', 'flag', '1', 'Turns Anti-aliasing off: it only draws without'],
-  ['strikeout', 'Strike-through', 'flag', '1', 'Turns Anti-aliasing off: it only draws without'],
-  ['scanlines', 'Scan lines', 'num', '2', 'Dark lines every this many pixels'], ['range', 'Characters', 'text', '0x0000 0x017F', 'Unicode range it covers (nothing changes to see)', 'hide'],
-  ['symbol', 'Symbol font', 'flag', '1', 'For icon fonts: letters become symbols'], ['rotary', 'Line through', 'flag', '1', 'Across the middle, smooth edges kept'],
-  ['custom', 'Custom', 'flag', '1', 'Does nothing in CS:S', 'hide']];
+const FONT_EXTRA = [['italic', 'Italic', 'flag', '1', 'Slanted letters; made slanted when the font has no italic'], ['underline', 'Underline', 'flag', '1', 'Draws only without Anti-aliasing (with it, only a mark in the spaces), so it turns that off'],
+  ['strikeout', 'Strike-through', 'flag', '1', 'Draws only without Anti-aliasing (with it, nothing), so it turns that off'],
+  ['scanlines', 'Scan lines', 'num', '2', 'Every this many rows a darker one (2 or more)'], ['range', 'Characters', 'text', '0x0000 0x017F', 'Unicode range it covers: changes nothing (even capitals only drew every letter, checked)', 'hide'],
+  ['symbol', 'Symbol font', 'flag', '1', 'Needed by symbol fonts (Marlett, Wingdings): without it they draw as a plain font. On a plain font it turns the letters into symbols'],
+  ['rotary', 'Line through', 'flag', '1', 'A grey line across the middle'],
+  ['custom', 'Custom', 'flag', '1', 'With Anti-aliasing, also smooths letters past Latin-1 (Ā), but letters outside the Windows character set (Cyrillic) turn into boxes', 'hide']];
 
 // Fonts as they are at this screen height, copied to every other height's entry (the footer's All resolutions): the
 // same face, weight and effects, the size scaled by height. An entry for a range of heights is sized for the screen
@@ -5002,6 +5008,12 @@ function fontRows(file, font) {
   // the game's own font of that name, its entry for this screen height (null: the game hasn't this font)
   const gv = gameOf(file) && fontVariants(gameOf(file), font), gp = gv && gv.size ? gv.get(activeVariant(gv, H)) : null, dv = (key, d = null) => gp ? gp[key] ?? d : null;
   const flags = {};
+  // (a font that grows with the screen: no resolution range, in a scheme that scales; the game smooths it whatever its
+  // Anti-aliasing says, and grows its blur and scan lines with it, checked 2026-10-12)
+  const grown = !p.yres && !fixedFont(file, font), grow = v => Math.floor(H / 480 * (+v || 0));
+  const GROWN_AA = 'Always on: this font grows with the screen (it has no resolution range), and the game smooths every font that does. Split into resolutions to choose';
+  const GROWN_LINE = 'Draws only without Anti-aliasing, which this font can\'t turn off (it grows with the screen): only a mark in the spaces. Split into resolutions first';
+  const grey = (row, why) => { if (!row) return; row.classList.add('greyed'); row.title = why; for (const i of row.querySelectorAll('input')) i.disabled = true; };
   // additive text adds light to what's behind it, so black outlines and shadows can't show: turn it off for them;
   // underline and strike-through only draw without anti-aliasing (checked in game): turn that off for them
   const needs = key => {
@@ -5009,7 +5021,8 @@ function fontRows(file, font) {
     if ((key === 'underline' || key === 'strikeout') && +(p.antialias ?? 0) > 0) { flags.antialias.set(false); put('antialias', '0'); p.antialias = '0'; }
   };
   const rowFor = ([key, label, kind = 'flag', , note = '', , info = '']) => kind !== 'flag'
-    ? inputRow(label, p[key] ?? '', val => put(key, val), { ...(kind === 'num' ? { type: 'number', step: 1, min: 0 } : {}), title: note, undoId: id(key), dflt: dv(key) })
+    ? inputRow(label, p[key] ?? '', val => put(key, val), { ...(kind === 'num' ? { type: 'number', step: 1, min: 0 } : {}), undoId: id(key), dflt: dv(key),
+      title: key === 'scanlines' && grown ? `${note}: it grows with the screen (${p[key] || 0} is every ${grow(p[key])} px at ${H}p)` : note })
     : flags[key] = toggleRow(label, +p[key] > 0, on => {
       put(key, on ? '1' : '0');
       if (on) needs(key);
@@ -5022,6 +5035,7 @@ function fontRows(file, font) {
   effects.append(el('div', { textContent: 'Effects' }), opts);
   effects.dataset.q = FONT_FLAGS.map(x => x[1]).join(' ').toLowerCase();
   const extras = FONT_EXTRA.filter(x => !isFlag(x) && x[0] in p).map(rowFor);
+  if (grown) { grey(flags.antialias, GROWN_AA); grey(flags.underline, GROWN_LINE); grey(flags.strikeout, GROWN_LINE); }
   let last = extras[extras.length - 1] || effects;
   const add = el('div', { className: 'row addkey' }), plus = el('button', { className: 'plus', textContent: '+', title: 'Add a font option' });
   plus.setAttribute('aria-label', 'Add a font option');
@@ -5032,6 +5046,7 @@ function fontRows(file, font) {
     put(x[0], x[3]);
     if (isFlag(x)) needs(x[0]);
     const r = rowFor(x);
+    if (grown && /^(underline|strikeout)$/.test(x[0])) grey(r, GROWN_LINE);
     if (isFlag(x)) opts.append(r); else { last.after(r); last = r; }
     fill();
     if (!menu.childElementCount) { menu.hidden = true; plus.disabled = true; }
@@ -5044,7 +5059,8 @@ function fontRows(file, font) {
   // the size: pixels for a range of heights, or (no range) 480-line units that grow with the screen
   // (its note says the size in pixels now: written again as the size changes)
   const sizeNote = () => { if (/^\d+$/.test(p.tall || '')) size.lastElementChild.textContent = p.yres ? `Pixels, for ${p.yres.trim().replace(/\s+/, 'p to ')}p`
-    : fixedFont(file, font) ? 'Pixels, the same at every resolution (menus don\'t scale it)' : `Scales with resolution: ${Math.round(entryPx(p, H, false, fontBase(file, font)))} px at ${H}p`; };
+    : fixedFont(file, font) ? 'Pixels, the same at every resolution (menus don\'t scale it)' : `Scales with resolution: ${Math.round(entryPx(p, H, false, fontBase(file, font)))} px at ${H}p`;
+    if (/^\d+$/.test(p.tall || '') && (p.yres || fixedFont(file, font) ? +p.tall : entryPx(p, H, false, fontBase(file, font))) > 255) size.lastElementChild.textContent += ' (the game draws 255 px at most)'; };
   const size = inputRow('Size', p.tall || '', val => { put('tall', val); p.tall = val; sizeNote(); }, { type: 'number', step: 1, undoId: id('tall'), dflt: dv('tall') });
   sizeNote();
   // one entry per resolution (see splitText), with a caution when screen sizes share one size in pixels
@@ -5057,8 +5073,10 @@ function fontRows(file, font) {
   return [
     pickRow('Face', p.name || '', () => fontFaces, val => put('name', val), { faces: true, id: id('name'), note: vars.size > 1 ? symbolic ? `Every screen height's entry (a symbol font); Size is ${H}p's` : `Entry "${v}", for ${H}p screens` : '', dflt: dv('name') }),
     size,
-    inputRow('Weight', p.weight || '400', val => put('weight', val), { type: 'number', step: 100, min: 0, slider: 1000, undoId: id('weight'), dflt: dv('weight', '400') }),
-    inputRow('Blur', p.blur || '0', val => put('blur', val), { type: 'number', step: 1, min: 0, undoId: id('blur'), dflt: dv('blur', '0') }),
+    inputRow('Weight', p.weight || '400', val => put('weight', val), { type: 'number', step: 100, min: 0, slider: 1000, undoId: id('weight'), dflt: dv('weight', '400'),
+      title: 'Only the weights the font has: Arial draws 400 or 700, Segoe UI 400, 600 or 700 (in between: the nearest)' }),
+    inputRow('Blur', p.blur || '0', val => put('blur', val), { type: 'number', step: 1, min: 0, undoId: id('blur'), dflt: dv('blur', '0'),
+      title: grown ? `A glow, this many units wide: it grows with the screen (${p.blur || 0} is ${grow(p.blur)} px at ${H}p)` : 'A glow round the letters, this many pixels wide' }),
     add, effects, ...extras,
     ...(text ? [split, ...(shared.length ? [noteRow(`⚠ Same size at ${sharedText(shared)}, so it looks smaller at the bigger one.`)] : [])] : [])];
 }
