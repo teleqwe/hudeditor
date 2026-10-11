@@ -94,6 +94,7 @@
   #video { display: block; max-width: 100%; max-height: 100cqh; }
   #empty { position: absolute; inset: 0; z-index: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 16px; color: var(--muted); text-align: center; pointer-events: none; } /* (above #boxes: its Launch game button is clicked; the rest lets clicks through) */
   #empty p { max-width: 420px; margin: 4px 0; }
+  #gamefront { position: absolute; left: 50%; top: 14px; z-index: 7; transform: translateX(-50%); width: max-content; max-width: calc(100% - 32px); padding: 10px 14px; border: 1px solid var(--accent); border-radius: 8px; background: var(--surface); color: var(--text); font-size: 13px; line-height: 1.45; box-shadow: 0 4px 18px rgba(0, 0, 0, .5); pointer-events: none; }
   #empty b { color: var(--text); font-weight: 550; }
   #empty button { pointer-events: auto; height: 34px; margin-top: 14px; padding: 0 22px; }
   .preview-footer { display: flex; align-items: center; justify-content: space-between; gap: 15px; min-height: 40px; padding: 9px 17px; background: var(--surface); border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
@@ -581,6 +582,7 @@
     </div>
   </div>
   <main id="preview">
+    <div id="gamefront" hidden><b>The game is in front.</b> In a map it keeps the mouse in its window: press <b>Alt+Tab</b> to come back to the editor (Esc in the game opens its menu, which lets the mouse go).</div>
     <div id="stage" class="schematic">
       <canvas id="video" hidden></canvas>
       <!-- (no game: what's going on, and Launch game while there's a HUD and no game starting) -->
@@ -6817,19 +6819,29 @@ function shifted(raw, d) {
 const movable = hit => hit.info.id === 'gamemenu' || hit.info.id === 'gamelogo' ? !!F(C)
   : hit.info.kind === 'hud' && !hit.control ? canHide(hit.info.id) && !isHidden(hit.info.id) && !hit.info.hud.noPos : !!UI_RES[hit.thing.key] && !!(hit.control || hit.node);
 const hitRect = hit => hit.control || hit.node || clickRects(hit.thing, hit.info, live.W, live.H)[0];
+// (a window's part that moveTarget can't place, no block of its own in the file read in: what's under it moves instead)
+const canMove = h => movable(h) && (h.info.kind === 'hud' && !h.control || !(h.control || h.node) || (f => !f || !!ownBlock({ ...h, res: f }))(F(resPath(h))));
+// the name over the mouse for a hit: an added part in a window as in the list ("Colour box 4"), a control in its window
+function hitName(h) {
+  const own = h.node && /^hudeditor_(pic|text|box)\d+$/i.test(h.node.name) && UI_RES[h.thing.key] && F(UI_RES[h.thing.key]);
+  return own ? `${h.info.name} › ${addedName(own, h.node.name)}` : h.control ? `${h.info.name} › ${controlIn(h.control, h.thing)[1]}` : h.info.name;
+}
 const sameSel = (a, b) => a && b && a.thing === b.thing && (a.control || null) === (b.control || null) && (a.node || null) === (b.node || null);
 
-let drag = null, dragEnded = 0;
+let drag = null, dragEnded = 0, lastClick = null; // (lastClick: where the last click in the preview was, screen pixels)
 const place = (el, r) => { const { W, H } = live; Object.assign(el.style, { left: `${r.x / W * 100}%`, top: `${r.y / H * 100}%`, width: `${r.w / W * 100}%`, height: `${r.h / H * 100}%` }); };
 $('boxes').onmousedown = e => {
   if (e.button !== 0 || !live || eatClick) return;
   // (no text selection: dragging selected text starts the browser's own drag, which keeps the mouse-up from us)
   e.preventDefault();
   document.activeElement?.blur(); // (what focus would have done: arrow keys nudge, not type)
-  // the selection moves when it's under the mouse, even under something else (picked by clicking again)
+  // what the name over the mouse says moves (a small part on a big selected one: the small one); the selection under
+  // something else moves from where it was picked by clicking again there, or where what's on top can't move
   // (or one of the parts Ctrl+clicked with it: they all move)
   const group = [selected, ...also].filter(Boolean).map(pickKey);
-  const hits = pickAll(...stagePoint(e)), mine = hits.find(h => movable(h) && group.includes(pickKey(h))), hit = mine || hits[0];
+  const hits = pickAll(...stagePoint(e)), mine = hits.find(h => movable(h) && group.includes(pickKey(h))), top = hits[0];
+  const pickedHere = !!lastClick && Math.hypot(e.clientX - lastClick[0], e.clientY - lastClick[1]) < 8;
+  const hit = mine && (!top || !canMove(top) || pickKey(top) === pickKey(mine) || pickedHere) ? mine : top;
   if (hit && movable(hit)) drag = { at: stagePoint(e), hit, rect: hitRect(hit), moved: false, target: undefined, others: [] };
   else if (zoom.z > 1) pan = { x: e.clientX - zoom.x, y: e.clientY - zoom.y, moved: false }; // zoomed in: the empty game moves the view
 };
@@ -6888,16 +6900,16 @@ $('boxes').onmousemove = e => {
   const r = live ? (hit.control || (hit.node ? clickRects(hit.thing, hit.info, W, H)[0] : hit.r)) : rectOf(layoutProps(F(L), hit.info.id), W, H, hit.info.hud.hit);
   Object.assign(hb.style, { left: `${r.x / W * 100}%`, top: `${r.y / H * 100}%`, width: `${r.w / W * 100}%`, height: `${r.h / H * 100}%` });
   hb.classList.toggle('top', atTop(r.y / H));
-  // (an added part in a window is named as in the list: "Colour box 4")
-  const own = hit.node && /^hudeditor_(pic|text|box)\d+$/i.test(hit.node.name) && UI_RES[hit.thing.key] && F(UI_RES[hit.thing.key]);
-  const name = own ? `${hit.info.name} › ${addedName(own, hit.node.name)}` : hit.control ? `${hit.info.name} › ${controlIn(hit.control, hit.thing)[1]}` : hit.info.name;
-  hb.firstChild.textContent = hits.length > 1 ? `${name}  ·  click again: ${hits.length - 1} more under it` : name;
+  const name = hitName(hit);
+  // (the selection under it, picked here by clicking again: what a drag from here moves)
+  const group = [selected, ...also].filter(Boolean).map(pickKey), mine = hits.find(h => movable(h) && group.includes(pickKey(h)));
+  const moves = mine && pickKey(mine) !== pickKey(hit) && (!canMove(hit) || (lastClick && Math.hypot(e.clientX - lastClick[0], e.clientY - lastClick[1]) < 8));
+  hb.firstChild.textContent = moves ? `${name}  ·  a drag here moves ${hitName(mine).split(' › ').pop()}` : hits.length > 1 ? `${name}  ·  click again: ${hits.length - 1} more under it` : name;
 };
 $('boxes').onmouseleave = () => { if ($('hoverbox') && !drag) $('hoverbox').hidden = true; };
 $('boxes').ondragstart = e => e.preventDefault();
 // a drag ends with a click too: that one mustn't pick something else. Ctrl+click adds a part to the selection (or takes
 // it out), to line them up or move them together.
-let lastClick = null; // where the last click in the preview was (screen pixels)
 $('boxes').onclick = async e => {
   if (eatClick) { eatClick = false; return; } // (it closed a pop-out)
   if (Date.now() - dragEnded < 300) return;
@@ -7067,7 +7079,11 @@ function lineUpRows() {
 let pendingRender = false, captured = false, autoTried = false, shownSize = ''; // (shownSize: the game's size the page last showed, see poll)
 
 let keepScores = false, scoresSent = 0, keepChat = false, chatSent = 0, joinedGame = false;
+let frontSince = 0;
 async function poll() {
+  // (the game in front for a second, not while a key held over the preview is sent to it, see the exe: the note)
+  if (live && host) call('gamefront').then(f => { frontSince = f === '1' ? frontSince || Date.now() : 0; $('gamefront').hidden = !frontSince || Date.now() - frontSince < 1000; }).catch(() => {});
+  else $('gamefront').hidden = true;
   if (live && live.local) keepTick();
   if (live && live.local && !textsSent) { textsSent = true; call('cmd', '', `schemereload_testtext ${texts}`).catch(() => {}); }
   // capture once the plugin answers (a game started from Steam: once the editor has joined it, see start)
@@ -8893,6 +8909,12 @@ if (host && location.hash === '#hosttest') (async () => {
     // (only where it is still what the editor set: one the player changed since, cl_showpos here, stays theirs)
     const merged = await call('mergecvars', '', 'name "x"\r\ncl_radaralpha "0"\r\nnet_graph "1"\r\ncl_showpos "1"\r\nsensitivity "2"\r\n\x01// kept\ncl_radaralpha "150"\ncl_showpos "0"\n\x01cl_radaralpha 0\nnet_graph 1\ncl_showpos 0\n');
     check(merged === 'name "x"\r\ncl_radaralpha "150"\r\ncl_showpos "1"\r\nsensitivity "2"\r\n', `the player's game settings put back (${JSON.stringify(merged)})`);
+    // (the game leaves a setting at its default out of config.cfg: gone after the editor set another value, the player put
+    // it back to the default, so it stays out; gone after the editor set the default itself, the player's line comes back)
+    const atDefault = await call('mergecvars', '', 'name "x"\r\n\x01net_graphheight "1"\ncl_radaralpha "150"\n\x01net_graphheight 100\ncl_radaralpha 200\n');
+    check(atDefault === 'name "x"\r\ncl_radaralpha "150"\n', `a setting the player put back to the game's default stays (${JSON.stringify(atDefault)})`);
+    const unset = await call('mergecvars', '', 'name "x"\r\n\x01cl_showpos "1"\n\x01cl_radaralpha 0\n');
+    check(unset === 'name "x"\r\n', `a setting the editor never set, put back to the default by the player, stays so (${JSON.stringify(unset)})`);
     // (lines kept by an older editor, which noted nothing it set: every one put back, as it did)
     const old = await call('mergecvars', '', 'cl_radaralpha "0"\r\ncl_showpos "1"\r\n\x01cl_radaralpha "150"\n');
     check(old === 'cl_radaralpha "150"\r\n', `an older editor's kept lines all put back (${JSON.stringify(old)})`);

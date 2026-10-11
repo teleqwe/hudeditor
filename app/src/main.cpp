@@ -814,6 +814,26 @@ static string CvarValue( const string &line )
 		v.pop_back();
 	return v;
 }
+// The game's own value of each: config.cfg leaves out a setting at it (net_graphheight 64 wasn't written, 2026-10-11).
+// "" where it isn't known here. (ponytail: the page's GAME_CVARS and SCOREBOARD_CVARS again, kept in step by hand)
+static string CvarDefault( const string &name )
+{
+	static const std::map< string, string > d = { { "cl_radaralpha", "200" }, { "net_graph", "0" }, { "net_graphpos", "1" },
+		{ "net_graphheight", "64" }, { "net_graphtext", "1" }, { "net_graphproportionalfont", "1" }, { "net_graphsolid", "1" },
+		{ "net_graphshowlatency", "1" }, { "net_graphshowinterp", "1" }, { "cl_showpos", "0" }, { "cl_showfps", "0" },
+		{ "hud_deathnotice_time", "6" }, { "hud_saytext_time", "12" }, { "cl_round_win_fade_time", "1.5" }, { "hud_fastswitch", "0" } };
+	auto it = d.find( name );
+	if ( it != d.end() )
+		return it->second;
+	static const struct { const char *who; int rgb[3]; } names[] = { { "ct", { 150, 200, 255 } }, { "t", { 240, 90, 90 } },
+		{ "dead", { 125, 125, 125 } }, { "clan_ct", { 150, 200, 255 } }, { "clan_t", { 240, 90, 90 } }, { "dead_clan", { 125, 125, 125 } } };
+	static const char *rgb[] = { "red", "green", "blue" };
+	for ( auto &n : names )
+		for ( int i = 0; i < 3; ++i )
+			if ( name == string( "cl_scoreboard_" ) + n.who + "_color_" + rgb[i] )
+				return std::to_string( n.rgb[i] );
+	return "";
+}
 static bool SameCvar( const string &a, const string &b )
 {
 	char *ea, *eb;
@@ -901,9 +921,16 @@ static string MergeCvars( const string &config, const string &kept, const std::m
 		if ( b == string::npos )
 			break;
 	}
+	// (one config.cfg doesn't have: the game left it out at its default. Put back unless that's the player's doing: the
+	// editor never set it, or set it to something else, so it went to the default since)
 	for ( auto &[k, line] : was )
 		if ( !done.count( k ) )
-			out += line + "\n";
+		{
+			auto ours = set ? set->find( k ) : std::map< string, string >::const_iterator();
+			string def = CvarDefault( k );
+			if ( !set || def.empty() || ( ours != set->end() && SameCvar( ours->second, def ) ) )
+				out += line + "\n";
+		}
 	return out;
 }
 static void NoteHudCfg()
@@ -1510,6 +1537,11 @@ static void OnMessage( const wstring &msg )
 			fail( L"The game isn't running." );
 		else if ( !PluginLoaded() && ( out = Attach() ).size() )
 			ok = false;
+	}
+	else if ( op == L"gamefront" ) // "1" while the game's window is in front (in a map it then keeps the mouse: the page says
+	{                              // so), not while a key held over the preview is sent to it (timer 3 brings the editor back)
+		HWND g = GameWindow();
+		out = g_selftestOut.empty() && g && GetForegroundWindow() == g && !( g_keyVk && ( GetAsyncKeyState( g_keyVk ) & 0x8000 ) ) ? L"1" : L"0";
 	}
 	else if ( op == L"gamestate" ) // "none", "plugin" (running with it), or "foreign <pid>" (running without it: the page joins it)
 	{
