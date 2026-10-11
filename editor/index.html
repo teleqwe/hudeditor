@@ -257,7 +257,6 @@
   .cpop footer .primary { margin-left: auto; }
   .cpop footer button:not(.primary) { background: transparent; }
   /* tick boxes in two columns: a border's sides, a font's effects */
-  .row.greyed { opacity: .45; } .row.greyed input { cursor: not-allowed; }
   .row.onlythis > .name::after { content: 'only this'; white-space: nowrap; margin-left: 6px; padding: 0 5px; border-radius: 4px; font-size: 10px; font-weight: 600; background: var(--soft); color: var(--accent); }
   .box.top span { bottom: auto; top: 0; }
   .row select.anchor { height: 24px; padding: 0 6px; font-size: 11.5px; color: var(--muted); background: var(--field); border: 1px solid var(--line); border-radius: 6px; }
@@ -5011,9 +5010,10 @@ function fontRows(file, font) {
   // (a font that grows with the screen: no resolution range, in a scheme that scales; the game smooths it whatever its
   // Anti-aliasing says, and grows its blur and scan lines with it, checked 2026-10-12)
   const grown = !p.yres && !fixedFont(file, font), grow = v => Math.floor(H / 480 * (+v || 0));
-  const GROWN_AA = 'Always on: this font grows with the screen (it has no resolution range), and the game smooths every font that does. Split into resolutions to choose';
-  const GROWN_LINE = 'Draws only without Anti-aliasing, which this font can\'t turn off (it grows with the screen): only a mark in the spaces. Split into resolutions first';
-  const grey = (row, why) => { if (!row) return; row.classList.add('greyed'); row.title = why; for (const i of row.querySelectorAll('input')) i.disabled = true; };
+  // (said under the row, not locked: ticking it does no harm, and the preview shows whether it changes anything)
+  const GROWN_AA = 'No effect on this font: it grows with the screen (no resolution range), so the game always smooths it. Split into resolutions to choose';
+  const GROWN_LINE = 'Little or no effect on this font: it draws only without Anti-aliasing, which a font that grows with the screen always has (only a mark in the spaces). Split into resolutions first';
+  const why = (row, text) => { if (!row) return; const m = row.querySelector('.meta'); if (m) m.textContent = text; row.title = text; };
   // additive text adds light to what's behind it, so black outlines and shadows can't show: turn it off for them;
   // underline and strike-through only draw without anti-aliasing (checked in game): turn that off for them
   const needs = key => {
@@ -5035,7 +5035,7 @@ function fontRows(file, font) {
   effects.append(el('div', { textContent: 'Effects' }), opts);
   effects.dataset.q = FONT_FLAGS.map(x => x[1]).join(' ').toLowerCase();
   const extras = FONT_EXTRA.filter(x => !isFlag(x) && x[0] in p).map(rowFor);
-  if (grown) { grey(flags.antialias, GROWN_AA); grey(flags.underline, GROWN_LINE); grey(flags.strikeout, GROWN_LINE); }
+  if (grown) { why(flags.antialias, GROWN_AA); why(flags.underline, GROWN_LINE); why(flags.strikeout, GROWN_LINE); }
   let last = extras[extras.length - 1] || effects;
   const add = el('div', { className: 'row addkey' }), plus = el('button', { className: 'plus', textContent: '+', title: 'Add a font option' });
   plus.setAttribute('aria-label', 'Add a font option');
@@ -5046,7 +5046,7 @@ function fontRows(file, font) {
     put(x[0], x[3]);
     if (isFlag(x)) needs(x[0]);
     const r = rowFor(x);
-    if (grown && /^(underline|strikeout)$/.test(x[0])) grey(r, GROWN_LINE);
+    if (grown && /^(underline|strikeout)$/.test(x[0])) why(r, GROWN_LINE);
     if (isFlag(x)) opts.append(r); else { last.after(r); last = r; }
     fill();
     if (!menu.childElementCount) { menu.hidden = true; plus.disabled = true; }
