@@ -21,6 +21,10 @@
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Graphics.Capture.h>
 #include <winrt/Windows.Graphics.DirectX.Direct3D11.h>
+#include <winrt/Windows.Web.Http.h>
+#include <winrt/Windows.Web.Http.Headers.h>
+#include <thread>
+#include <memory>
 #include <windows.graphics.capture.interop.h>
 #include <windows.graphics.directx.direct3d11.interop.h>
 #include "WebView2.h"
@@ -40,7 +44,7 @@ static wstring g_game;        // ...\Counter-Strike Source\cstrike
 static wstring g_custom;      // g_game\custom, or the --selftest folder
 static wstring g_hudPath;     // the HUD being edited
 #define APP_NAME L"Tele HUD Editor" // the window's title, with the version (also in app.rc)
-#define APP_VERSION L"0.10.1 beta"     // (also in app.rc)
+#define APP_VERSION L"0.10.2 beta"     // (also in app.rc)
 static wstring g_unsaved;     // saved versions of the files changed since the last save (see KeepSaved)
 static wstring g_settings;    // recent HUD folders, most recent first
 static wstring g_originals;   // each HUD as it was first made, imported or opened here (Back to how it was imported)
@@ -1286,7 +1290,56 @@ static HWND GameWindow()
 // shared with the page: 16 bytes (frame count, width, height), then RGBA pixels. A new size needs a new buffer,
 // made on the UI thread.
 namespace wgc = winrt::Windows::Graphics::Capture;
-static const UINT WM_CAPTURE_SIZE = WM_APP + 1, WM_CAPTURE_ENDED = WM_APP + 2;
+static const UINT WM_CAPTURE_SIZE = WM_APP + 1, WM_CAPTURE_ENDED = WM_APP + 2, WM_NEWER_VERSION = WM_APP + 3;
+
+// A version's numbers ("0.10.1 beta", "v0.10.2-beta": 0, 10, 2), compared in order.
+static std::vector< int > VersionParts( const std::wstring &s )
+{
+	std::vector< int > v;
+	for ( size_t i = 0; i < s.size(); )
+		if ( iswdigit( s[i] ) )
+		{
+			size_t n = 0;
+			v.push_back( std::stoi( s.substr( i ), &n ) );
+			i += n;
+		}
+		else if ( !v.empty() && s[i] != L'.' )
+			break;
+		else
+			++i;
+	return v;
+}
+// Once as the editor starts: the newest release on GitHub (pre-releases too, as every release so far is one). Newer
+// than this one, the title bar says so (WM_NEWER_VERSION); no pop-up (the user's ask, 2026-10-12). No network, GitHub
+// down, anything unexpected: nothing.
+static void CheckForNewer()
+{
+	std::thread( [] {
+		try
+		{
+			winrt::init_apartment();
+			winrt::Windows::Web::Http::HttpClient client;
+			client.DefaultRequestHeaders().UserAgent().TryParseAdd( L"TeleHudEditor" );
+			std::wstring body( client.GetStringAsync( winrt::Windows::Foundation::Uri( L"https://api.github.com/repos/teleqwe/hudeditor/releases?per_page=10" ) ).get() );
+			std::vector< int > best, mine = VersionParts( APP_VERSION );
+			std::wstring bestTag;
+			for ( size_t at = 0; ( at = body.find( L"\"tag_name\"", at ) ) != std::wstring::npos; at += 10 )
+			{
+				size_t q1 = body.find( L'"', body.find( L':', at ) + 1 ), q2 = q1 == std::wstring::npos ? q1 : body.find( L'"', q1 + 1 );
+				if ( q2 == std::wstring::npos )
+					break;
+				std::wstring tag = body.substr( q1 + 1, q2 - q1 - 1 );
+				if ( VersionParts( tag ) > best )
+					best = VersionParts( tag ), bestTag = tag;
+			}
+			if ( !best.empty() && best > mine )
+				PostMessageW( g_hwnd, WM_NEWER_VERSION, 0, (LPARAM) new std::wstring( bestTag ) );
+		}
+		catch ( ... )
+		{
+		}
+	} ).detach();
+}
 static struct
 {
 	ComPtr< ID3D11Device > dev;
@@ -2304,6 +2357,16 @@ static LRESULT CALLBACK WndProc( HWND h, UINT m, WPARAM w, LPARAM l )
 			}
 		}
 		break;
+	case WM_NEWER_VERSION: // (see CheckForNewer) the title: "Tele HUD Editor 0.10.1 beta · newer version available: 0.10.2 beta"
+	{
+		std::unique_ptr< std::wstring > tag( (std::wstring *)l );
+		std::wstring v = *tag;
+		if ( !v.empty() && ( v[0] == L'v' || v[0] == L'V' ) )
+			v.erase( 0, 1 );
+		std::replace( v.begin(), v.end(), L'-', L' ' );
+		SetWindowTextW( h, ( std::wstring( APP_NAME L" " APP_VERSION L"  \u00b7  newer version available: " ) + v ).c_str() );
+		return 0;
+	}
 	case WM_CAPTURE_SIZE:
 		MakeFrameBuffer();
 		return 0;
@@ -2424,7 +2487,7 @@ int WINAPI wWinMain( HINSTANCE inst, HINSTANCE, LPWSTR, int show )
 	g_hwnd = CreateWindowW( wc.lpszClassName, APP_NAME L" " APP_VERSION, WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, 1500, 900, NULL, NULL, inst, NULL );
 	DarkTitle( g_hwnd );
 	if ( g_selftestOut.empty() )
-		ShowWindow( g_hwnd, show ), SetTimer( g_hwnd, 6, 3000, NULL ); // (the player's settings: see RestoreCvars)
+		ShowWindow( g_hwnd, show ), SetTimer( g_hwnd, 6, 3000, NULL ), CheckForNewer(); // (the player's settings: see RestoreCvars)
 	else
 		SetTimer( g_hwnd, 1, 60000, NULL ); // (the page's checks take about half that)
 
